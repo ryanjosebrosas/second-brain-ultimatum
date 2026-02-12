@@ -1,15 +1,17 @@
 ```
 CLAUDE.md                              # Layer 1: Global rules (slim, @references)
+README.md                              # Public-facing project README with PIV Loop diagrams
 memory.md                              # Cross-session memory (optional, from MEMORY-TEMPLATE.md)
 .coderabbit.yaml                       # CodeRabbit config template (copy to project root)
 sections/                              # Auto-loaded rule sections (every session)
   01_core_principles.md                #   YAGNI, KISS, DRY, Limit AI Assumptions, ABP
-  02_piv_loop.md                       #   Plan, Implement, Validate methodology
+  02_piv_loop.md                       #   Plan, Implement, Validate methodology (slim)
   03_context_engineering.md            #   4 Pillars: Memory, RAG, Prompts, Tasks
   04_git_save_points.md                #   Commit plans before implementing
   05_decision_framework.md             #   When to proceed vs ask
-  15_archon_workflow.md                #   Archon task management & RAG workflow rules
+  15_archon_workflow.md                #   Archon integration pointer (slim — loads reference/archon-workflow.md)
 reference/                             # On-demand guides (loaded when needed)
+  archon-workflow.md                   #   Archon task management & RAG workflow (moved from sections/)
   layer1-guide.md                      #   How to build CLAUDE.md for real projects
   validation-strategy.md               #   5-level validation pyramid, linting, tests
   file-structure.md                    #   This file — project directory layout

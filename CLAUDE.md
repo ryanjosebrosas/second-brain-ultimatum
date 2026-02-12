@@ -48,6 +48,7 @@ A comprehensive AI-assisted development methodology combining systematic plannin
 | `reference/remote-system-overview.md` | Deploying or using the remote coding agent |
 | `reference/mcp-skills-overview.md` | Configuring MCP servers or creating skills |
 | `reference/subagents-overview.md` | Creating or debugging subagents |
+| `reference/archon-workflow.md` | Using Archon task management or RAG search |
 | `reference/git-worktrees-overview.md` | Parallel feature implementation with worktrees |
 
 > For deeper context, see additional reference guides in `reference/` (e.g., `system-foundations.md`, `piv-loop-practice.md`, `global-rules-optimization.md`).
