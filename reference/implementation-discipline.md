@@ -89,7 +89,7 @@ The command follows seven sections (see `.claude/commands/execute.md`):
 | Step | Purpose |
 |------|---------|
 | 1. Read & Understand | Parse entire plan, note dependencies and validation commands |
-| 1b. mem0 warnings (optional) | Check past gotchas before implementing |
+| 1b. memory.md warnings (optional) | Check past gotchas before implementing |
 | 1.5 Archon init (optional) | Create project and tasks for Kanban visibility |
 | 2. Execute tasks | Navigate→Implement→Verify per task, with Archon status updates |
 | 3. Testing strategy | Create test files, implement test cases from plan |
@@ -121,7 +121,7 @@ The structured plan outlines **what** tasks to knock out. The execute command sp
 | Workflow Integration | What It Does | Where in Execute |
 |---------------------|-------------|-----------------|
 | Archon MCP | Status updates per task (doing → review → done) | Steps 1.5, 2a.5, 5.5 |
-| mem0 warnings | Check past gotchas before implementing | Step 1b |
+| memory.md warnings | Check past gotchas before implementing | Step 1b |
 | Notion/Jira | Update external task boards | After each task completion |
 | Research per task | Run tool-specific research before implementing | Start of each task |
 | Progress tracking | Custom logging/reporting | Throughout |
@@ -490,7 +490,7 @@ rules, and templates.
 **That's the Implementation Discipline guide!** You now understand:
 - The execute command's two critical components (thoroughness + task handling)
 - Navigate → Implement → Verify per-task pattern
-- Custom workflow injection (Archon, mem0, task management)
+- Custom workflow injection (Archon, memory.md, task management)
 - Meta-reasoning: the 5-step system evolution technique
 - The WHERE-to-fix decision framework (5 locations)
 - Research validation — verify before building the plan

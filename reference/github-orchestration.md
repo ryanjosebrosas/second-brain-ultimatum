@@ -403,7 +403,7 @@ These patterns compose — a typical workflow uses permission check + variable s
 |-----------|--------|------------|
 | **No conversation** | Single-shot execution, can't iterate mid-task | Comment to trigger new run; the Remote Agentic System guide covers the conversational alternative |
 | **Limited visibility** | Must check Action logs, no real-time terminal | Add `echo` statements for key milestones |
-| **No mem0 in CI** | No cross-session memory in GitHub runners | Store learnings in `.github/LEARNINGS.md` |
+| **Limited memory.md in CI** | Runners can read memory.md but writes are lost | Commit updates via PR or store in `.github/LEARNINGS.md` |
 | **Cost** | GitHub Actions minutes + MAX subscription usage per run | Use deterministic approach, filter triggers, set timeouts |
 | **Security** | Exposed secrets, unauthorized triggers | Permission checks, branch protection, secrets management |
 
@@ -495,11 +495,11 @@ Manual → Commands → Chained → GitHub Actions → Remote System (see Remote
 
 **Long answer**: CodeRabbit provides the automated review side of the loop. Without it, you can still trigger Claude Code manually with `@claude-fix` on PRs, but you lose the automatic review → fix → re-review cycle. Alternatives: use GitHub's built-in code review with human reviewers, or configure another review bot. The key value is the **automated cycle**, not CodeRabbit specifically.
 
-### "What about mem0 in CI? How do I get cross-session memory?"
+### "What about memory.md in CI? How do I get cross-session memory?"
 
-**Short answer**: Not available — use repository-based learnings instead.
+**Short answer**: Partially available — runners can read memory.md but writes are lost.
 
-**Long answer**: GitHub Actions runners are ephemeral — they spin up fresh for each run with no access to your local mem0 instance. Workaround: create `.github/LEARNINGS.md` in your repo and reference it in prompt templates. The agent reads past learnings at the start of each run and appends new ones after completion. It's not as seamless as mem0 but provides basic cross-session knowledge accumulation.
+**Long answer**: GitHub Actions runners can read `memory.md` from the repo (it's a committed file), so past learnings are available during CI runs. However, any writes during the run are lost when the runner terminates. Workaround: the agent can commit memory.md updates as part of a PR, or you can maintain a separate `.github/LEARNINGS.md` for CI-specific context. The key advantage of file-based memory over MCP-based: it's automatically available in any environment that clones the repo.
 
 ---
 

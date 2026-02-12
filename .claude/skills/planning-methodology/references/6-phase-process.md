@@ -10,8 +10,8 @@ This reference provides detailed instructions for each phase of the planning met
 
 ### Process
 
-1. **Search mem0** (if available) for past decisions:
-   - Query: "{feature-description} decisions"
+1. **Read memory.md** (if it exists) for past decisions:
+   - Look for entries about this feature area under Key Decisions and Lessons Learned
    - Note any relevant context from past sessions
 2. **Parse the feature request** — identify scope, affected systems, user-facing changes
 3. **Clarify ambiguity** — if requirements are unclear, ask the user BEFORE continuing
@@ -126,10 +126,10 @@ If Archon RAG unavailable or returns no results, fall back to Phase 3 web search
 
 ### Memory Search (Phase 2c)
 
-Search mem0 for past experiences:
-- Query: "{feature-description} implementation"
-- Query: "{primary-systems-affected} gotchas problems"
-- Query: "{tech/component} patterns decisions"
+Read memory.md (if it exists) for past experiences:
+- Check Key Decisions for choices about this feature area
+- Check Gotchas & Pitfalls for warnings about affected systems
+- Check Architecture Patterns for relevant conventions
 
 ### Required Output Format
 
@@ -139,7 +139,7 @@ Search mem0 for past experiences:
   - Specific section: Section Name
   - Why: Required for implementing X
 
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 - Memory: {summary} — Relevance: {why this matters}
 ```
 

@@ -53,7 +53,7 @@ Every command should answer:
 **Parallel (requires proven worktree commands):**
 - `/parallel-e2e [feature A | feature B | ...]` — Parallel end-to-end: prime → plan all → worktrees → execute in parallel via `claude -p` → merge → commit → PR
 
-All core commands integrate with mem0 (if available) for cross-session memory. `/prime` and `/planning` retrieve, `/commit` stores.
+All core commands integrate with `memory.md` (if it exists) for cross-session memory. `/prime` and `/planning` read, `/commit` updates.
 
 ### Skills vs Commands
 

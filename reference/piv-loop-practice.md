@@ -34,7 +34,7 @@ This project becomes the running example for the rest of the system, providing c
 - When to invest in structured plans vs quick prompts
 
 **The 4 Pillars of Context Engineering**:
-- Memory (short-term conversation + long-term mem0)
+- Memory (short-term conversation + long-term memory.md)
 - RAG (external docs, library references, task specifications)
 - Prompt Engineering (be explicit, reduce AI assumptions)
 - Task Management (clear step-by-step execution)
@@ -281,23 +281,23 @@ These pillars ensure your structured plan has ALL the context AI needs for succe
 
 Use the ENTIRE vibe planning conversation as context for structured planning. Reference decisions made during exploration, cite specific options discussed and why you chose one.
 
-**Long-term**: mem0 for cross-session recall.
+**Long-term**: `memory.md` for cross-session recall.
 
-The `/planning` command integrates with mem0:
-- Searches for past decisions about this feature area
-- Searches for gotchas in affected systems
-- Searches for relevant patterns from past features
+The `/planning` command reads `memory.md`:
+- Checks for past decisions about this feature area
+- Reviews gotchas in affected systems
+- Looks for relevant patterns from past features
 
-The `/commit` command writes back to mem0:
-- Stores lessons learned
-- Records gotchas discovered
-- Documents decisions made
+The `/commit` command appends to `memory.md`:
+- Records lessons learned
+- Documents gotchas discovered
+- Captures key decisions made
 
 This creates a natural accumulation loop: lessons from past sessions inform future planning.
 
 **How to apply**:
 - Always do vibe planning in the same session before structured planning
-- Search mem0 for relevant past experiences
+- Read `memory.md` for relevant past experiences
 - Reference specific decisions in your structured plan
 
 ### Pillar 2: RAG (Retrieval Augmented Generation)

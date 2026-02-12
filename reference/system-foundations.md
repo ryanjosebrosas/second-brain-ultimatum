@@ -280,7 +280,7 @@ The **capability** (structured planning -> implementation -> validation) works e
 When you read this template:
 - "PIV Loop" is a capability (applies to all tools)
 - "Claude Code commands" are tactics (apply to this tool)
-- "mem0 integration" is a bonus (tool-specific, not essential)
+- "memory.md integration" is a pattern (file-based, portable to any tool)
 - "Trust progression" is a capability (applies everywhere)
 
 This distinction matters because you'll evolve your system as tools improve. By learning capabilities, you're future-proofing your skills.

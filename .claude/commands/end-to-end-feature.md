@@ -22,7 +22,7 @@ Build comprehensive understanding by:
 2. Reading core documentation (CLAUDE.md, README)
 3. Identifying key files (entry points, configs, schemas)
 4. Understanding current state (branch, recent commits)
-5. Recall project memory from mem0 (if available)
+5. Read project memory from memory.md (if it exists)
 
 Provide a brief summary before proceeding.
 
@@ -34,7 +34,7 @@ Create a detailed implementation plan for the feature: **$ARGUMENTS**
 
 1. Analyze existing codebase patterns
 2. Research external documentation if needed
-3. Search mem0 for related past experiences (if available)
+3. Check memory.md for related past experiences (if it exists)
 4. Design implementation approach
 5. Break down into step-by-step tasks
 6. Save plan to `requests/[feature-name]-plan.md`
@@ -48,7 +48,7 @@ Create a detailed implementation plan for the feature: **$ARGUMENTS**
 Implement the feature from the plan document created in Step 2.
 
 1. Read the ENTIRE plan
-2. Check mem0 for warnings about affected files (if available)
+2. Check memory.md for warnings about affected files (if it exists)
 3. Execute every task in order
 4. Create all tests specified
 5. Run all validation commands
@@ -64,7 +64,7 @@ Create a git commit for all changes:
 2. Analyze changes for commit type
 3. Create conventional commit message
 4. Stage and commit
-5. Store lessons learned to mem0 (if available)
+5. Update memory.md with lessons learned (if it exists)
 
 ---
 
@@ -144,4 +144,4 @@ After completing all 5 steps, provide:
 - Claude Code will auto-fix any issues (via claude-fix-coderabbit.yml)
 - Review and merge when ready
 
-**Note**: This command maximizes mem0 usage — every step reads or writes memories, creating a compounding knowledge loop across sessions.
+**Note**: This command maximizes memory.md usage — every step reads or writes the memory file, creating a compounding knowledge loop across sessions.

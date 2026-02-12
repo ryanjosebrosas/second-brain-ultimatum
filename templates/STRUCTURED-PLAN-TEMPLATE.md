@@ -61,13 +61,13 @@ As a {user type}, I want to {action}, so that {benefit}.
 - `path/to/new_file` — {purpose description}
 - `path/to/new_file` — {purpose description}
 
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 
-> Past experiences and lessons relevant to this feature. Populated by `/planning` from mem0 search.
+> Past experiences and lessons relevant to this feature. Populated by `/planning` from memory.md.
 
 - Memory: {summary} — Relevance: {why this matters}
 - Memory: {summary} — Relevance: {why this matters}
-- (If no relevant memories found, write "No relevant memories found in mem0")
+- (If no relevant memories found, write "No relevant memories found in memory.md")
 
 ### Relevant Documentation
 

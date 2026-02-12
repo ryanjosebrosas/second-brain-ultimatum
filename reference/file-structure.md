@@ -1,5 +1,6 @@
 ```
 CLAUDE.md                              # Layer 1: Global rules (slim, @references)
+memory.md                              # Cross-session memory (optional, from MEMORY-TEMPLATE.md)
 .coderabbit.yaml                       # CodeRabbit config template (copy to project root)
 sections/                              # Auto-loaded rule sections (every session)
   01_core_principles.md                #   YAGNI, KISS, DRY, Limit AI Assumptions, ABP
@@ -52,6 +53,7 @@ templates/
   VALIDATION-PROMPT.md                 # Reusable prompt for validation phase
   NEW-PROJECT-CHECKLIST.md             # Step-by-step guide for new projects
   CREATE-REFERENCE-GUIDE-PROMPT.md     # Prompt to generate on-demand reference guides
+  MEMORY-TEMPLATE.md                   # Template for project memory (cross-session context)
   COMMAND-TEMPLATE.md                  # How to design new slash commands
   AGENT-TEMPLATE.md                    # How to design new subagents
   GITHUB-SETUP-CHECKLIST.md            # Step-by-step GitHub Actions setup

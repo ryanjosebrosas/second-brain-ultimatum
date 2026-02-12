@@ -1,7 +1,7 @@
 ---
 description: Parallel end-to-end development for multiple features using worktrees
 argument-hint: feature A | feature B | feature C (pipe-separated, 2-10 features)
-allowed-tools: Bash(git:*), Bash(claude:*), Bash(jq:*), Bash(cd:*), Bash(cp:*), Bash(mkdir:*), Bash(wait:*), Bash(kill:*), Bash(cat:*), Bash(sleep:*), Bash(uv:*), Bash(curl:*), Bash(echo:*), Bash(wc:*), Bash(gh:*), Read, Task, AskUserQuestion, mcp__mem0__search_memories, mcp__mem0__add_memory, mcp__archon-local__manage_project, mcp__archon-local__manage_task, mcp__archon-local__find_tasks, mcp__archon-local__find_projects
+allowed-tools: Bash(git:*), Bash(claude:*), Bash(jq:*), Bash(cd:*), Bash(cp:*), Bash(mkdir:*), Bash(wait:*), Bash(kill:*), Bash(cat:*), Bash(sleep:*), Bash(uv:*), Bash(curl:*), Bash(echo:*), Bash(wc:*), Bash(gh:*), Read, Task, AskUserQuestion, mcp__archon-local__manage_project, mcp__archon-local__manage_task, mcp__archon-local__find_tasks, mcp__archon-local__find_projects
 ---
 
 # Parallel End-to-End Feature Development
@@ -50,7 +50,7 @@ Build comprehensive understanding by:
 2. Reading core documentation (CLAUDE.md, README)
 3. Identifying key files (entry points, configs, schemas)
 4. Understanding current state (branch, recent commits)
-5. Search mem0 for project memories (if available)
+5. Read memory.md for project context (if it exists)
 6. Search Archon RAG for relevant documentation (if available)
 
 Provide a brief summary before proceeding.
@@ -342,7 +342,7 @@ git branch -D integration-{first}-to-{last}
    ...
    ```
 
-3. Store lessons to mem0 (if available):
+3. Update memory.md with lessons learned (if it exists):
    - What worked well in parallel execution
    - Any gotchas encountered
    - Feature isolation observations
@@ -453,6 +453,6 @@ After displaying summary, use AskUserQuestion to ask about worktree cleanup:
 
 - **Vertical Slice Requirement**: Features MUST be isolated for safe parallel execution. If features share significant code paths, implement them sequentially with `/end-to-end-feature`.
 
-- **MCP in `claude -p`**: Archon/mem0 are NOT included in the `claude -p` execution prompt. MCP tools may not be available in subprocess mode. The main conversation handles all MCP integration before and after parallel execution.
+- **MCP in `claude -p`**: Archon is NOT included in the `claude -p` execution prompt. MCP tools may not be available in subprocess mode. The main conversation handles all MCP integration before and after parallel execution. memory.md is available since it's a repo file.
 
 - **Resource Usage**: Each `claude -p` process runs independently. Monitor system resources when running 5+ parallel processes. Reduce parallel count if hitting memory or rate limits.

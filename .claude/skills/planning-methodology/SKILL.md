@@ -20,7 +20,7 @@ This skill provides the methodology for transforming feature requests into compr
 **Goal**: Define WHAT we're building and WHY.
 - Parse requirements, create user story, define problem/solution
 - Fill: Feature Description, User Story, Problem Statement, Solution Statement, Feature Metadata
-- Search mem0 (if available) for past decisions about this feature area
+- Check memory.md (if it exists) for past decisions about this feature area
 
 ### Phase 2: Codebase Intelligence (Parallel — Research Agents)
 **Goal**: Understand the existing codebase patterns.

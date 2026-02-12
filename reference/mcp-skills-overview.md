@@ -74,7 +74,7 @@ MCP and Skills integrate at every phase — not just implementation.
 
 **Commit phase:**
 - MCP: Mark feature complete in Archon (Step 7 in `/commit` command)
-- mem0: Store cross-session lessons (Step 6 in `/commit` command)
+- memory.md: Store cross-session lessons (Step 6 in `/commit` command)
 - Both systems coexist — different purposes (task tracking vs pattern learning)
 
 When integrating MCP into commands, use conditional checks ("If Archon available, use it") for backward compatibility — not everyone has MCP servers configured.
@@ -93,24 +93,24 @@ Monitor usage with `/context` command. Skills have negligible upfront cost (~100
 
 **Note**: Token costs in this section refer to context window consumption, not billing. With MAX subscription (recommended), you pay a flat monthly fee — these token counts affect how much context is available per session, not your bill. With API billing, tokens directly affect cost.
 
-### Token Cost Analysis: mem0 + Archon Integration
+### Token Cost Analysis: Archon Integration
 
 | Configuration | Upfront Cost | Per-Feature Cost | Total Overhead |
 |--------------|--------------|------------------|----------------|
-| mem0 only | 0 | ~100-200 tokens | ~0.1-0.2% |
+| memory.md only | 0 | 0 (file read) | ~0% MCP overhead |
 | Archon only (with Tool Search) | ~5,000-7,000 | ~200-500 tokens | ~5-7% upfront + 0.2-0.5% per feature |
-| mem0 + Archon | ~5,000-7,000 | ~300-700 tokens | ~5-7% upfront + 0.3-0.7% per feature |
+| memory.md + Archon | ~5,000-7,000 | ~200-500 tokens | ~5-7% upfront + 0.2-0.5% per feature |
 | Archon + 3 MCPs (Tool Search ON) | ~10,000-15,000 | ~500-1,000 tokens | ~10-15% upfront + 0.5-1% per feature |
 
-**Recommendation**: Use both mem0 + Archon together — they solve different problems:
-- **mem0**: Cross-session learning (past gotchas, decisions, patterns)
+**Recommendation**: Use Archon for task management and RAG. Use `memory.md` for cross-session learning:
+- **memory.md**: Cross-session learning (past gotchas, decisions, patterns) — zero MCP overhead
 - **Archon RAG**: Curated documentation search (better than generic web)
 - **Archon Tasks**: Real-time progress visibility (shared Kanban board)
 
 **Token Optimization Rules**:
 1. Ensure Tool Search is active when using 3+ MCP servers (`claude mcp list` shows Tool Search status)
 2. Keep RAG queries SHORT (2-5 keywords maximum)
-3. Keep mem0 queries focused (2-3 keywords per search)
+3. Keep memory.md entries concise (1-2 lines each)
 4. Create tasks upfront in Archon (no mid-implementation task creation overhead)
 
 ### Skills + Commands Integration Example

@@ -62,9 +62,9 @@ Combined: ~1,762 lines loaded upfront every session. As skills, only ~500 tokens
 - `.claude/skills/github-automation/references/setup-workflow.md` — Step-by-step setup process
 - `.claude/skills/github-automation/references/workflow-templates.md` — Template customization guide
 
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 
-No relevant memories found in mem0
+No relevant memories found in memory.md
 
 ### Relevant Documentation
 

@@ -50,9 +50,9 @@ Four command-layer issues were identified:
 
 - `.claude/commands/agents.md` — Command to generate subagent definition files
 
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 
-No relevant memories found in mem0
+No relevant memories found in memory.md
 
 ### Relevant Documentation
 

@@ -117,30 +117,27 @@ Commit successfully created! Next actions:
 - Push to remote: `git push`
 - Or continue development with next feature
 
-### 6. Store Lessons to Memory (if mem0 available)
+### 6. Update Project Memory (if memory.md exists)
 
-After a successful commit, automatically extract and store lessons learned.
+If `memory.md` exists at project root, append brief entries from this commit:
 
-**Analyze the diff and store memories for each category that applies:**
+Under **Session Notes**:
+- [today's date] Implemented {feature}: {1-line summary}
 
-1. **Decisions made** — any non-obvious choices (architecture, library usage, approach)
-   - Store with metadata: `{"type": "decision", "feature": "{feature}"}`
+Under **Lessons Learned** (if any lessons emerged):
+- **{context}**: {lesson} — {impact}
 
-2. **Gotchas encountered** — anything that was tricky, broke unexpectedly, or took multiple attempts
-   - Store with metadata: `{"type": "gotcha", "feature": "{feature}"}`
+Under **Gotchas & Pitfalls** (if any new gotchas discovered):
+- **{area}**: {what went wrong} — {how to avoid}
 
-3. **Patterns established** — new conventions, reusable approaches, or templates created
-   - Store with metadata: `{"type": "pattern", "feature": "{feature}"}`
-
-4. **Lessons learned** — what worked well, what to do differently next time
-   - Store with metadata: `{"type": "lesson", "feature": "{feature}"}`
+Under **Key Decisions** (if any non-obvious choices were made):
+- [today's date] {decision} — {reason}
 
 **Rules:**
-- Each memory should be a single, clear sentence (max 2 sentences)
+- Keep entries concise (1-2 lines each)
 - Only store genuinely useful information — not obvious things
-- Include file paths when relevant for future searchability
-- Aim for 2-5 memories per commit (more for large features, fewer for small fixes)
-- If mem0 is unavailable, skip this step gracefully
+- Don't repeat information already in memory.md
+- If memory.md doesn't exist, skip this step
 
 ### 7. Report Feature Completion (if Archon available)
 
@@ -150,7 +147,7 @@ After successful commit, update project status:
 - `manage_project("update", project_id="{project_id}", description="Feature complete, committed: {commit_hash}")`
 
 **If Archon unavailable:**
-- Skip (mem0 storage from Step 6 still provides cross-session learning)
+- Skip (memory.md from Step 6 still provides cross-session learning)
 
 **Outcome**: Project marked complete on Kanban. Human sees feature in "Done" column.
 

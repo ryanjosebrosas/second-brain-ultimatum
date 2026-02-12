@@ -334,7 +334,7 @@ This means:
 - Your `/planning` command's 6-phase methodology? Ignored.
 - Your `CLAUDE.md` global rules? Partially loaded at best.
 - Your project-specific validation strategy? Not available.
-- Your mem0 cross-session memory? Not connected.
+- Your memory.md cross-session context? Available but writes are lost.
 
 ### The Future Direction
 

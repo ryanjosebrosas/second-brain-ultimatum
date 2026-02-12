@@ -199,7 +199,7 @@ Already used by `/planning` command:
 
 - Explore agent → codebase structure and patterns
 - General-purpose agent → external documentation and research
-- mem0 search → past decisions and lessons
+- memory.md reading → past decisions and lessons
 
 Results feed into plan creation. This pattern gives 40-50% speed improvement.
 

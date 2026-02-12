@@ -83,8 +83,7 @@ Using context from Phase 0 discovery (if conducted), proceed to scope the featur
 
 **Process**:
 
-1. Before scoping, search mem0 (if available) for any past decisions about this feature area:
-   - Query: "{feature-description} decisions"
+1. Before scoping, check memory.md (if it exists) for past decisions about this feature area
 2. Parse the feature request thoroughly
 3. If requirements are unclear, ask the user to clarify BEFORE continuing
 4. Create User Story: `As a [user], I want [goal], so that [benefit]`
@@ -259,24 +258,20 @@ The research agent must:
   - Why: Required for implementing X
 ```
 
-### Phase 2c: Memory Search → mem0 (if available)
+### Phase 2c: Memory Search (if memory.md exists)
 
-Search mem0 for past experiences relevant to this feature:
-
-1. Search for similar past features:
-   - Query: "{feature-description} implementation"
-2. Search for gotchas in affected systems:
-   - Query: "{primary-systems-affected} gotchas problems"
-3. Search for relevant patterns:
-   - Query: "{tech/component} patterns decisions"
+Read memory.md for past experiences relevant to this feature:
+- Decisions that affect this feature area
+- Gotchas in the affected systems
+- Patterns established for similar work
 
 **Required output format**:
 ```
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 - Memory: {summary} — Relevance: {why this matters for current feature}
 ```
 
-If mem0 is not available or returns no results, note "No relevant memories found" and continue.
+If memory.md doesn't exist or has no relevant entries, note "No relevant memories found" and continue.
 
 ---
 

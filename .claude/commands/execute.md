@@ -1,7 +1,7 @@
 ---
 description: Execute an implementation plan
 argument-hint: [path-to-plan]
-allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon-local__manage_project, mcp__archon-local__manage_task, mcp__archon-local__find_tasks, mcp__archon-local__find_projects, mcp__mem0__search_memories
+allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon-local__manage_project, mcp__archon-local__manage_task, mcp__archon-local__find_tasks, mcp__archon-local__find_projects
 ---
 
 <!-- CUSTOMIZE: Replace the allowed-tools in the frontmatter above for your tech stack:
@@ -9,7 +9,7 @@ allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv
   Node.js: Read, Write, Edit, Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(jest:*), Bash(tsc:*)
   Go:      Read, Write, Edit, Bash(go:*), Bash(make:*)
   Rust:    Read, Write, Edit, Bash(cargo:*)
-  Add MCP tools (mcp__archon-local__*, mcp__mem0__*) as needed for your integrations.
+  Add MCP tools (mcp__archon-local__*) as needed for your integrations.
 -->
 
 # Execute: Implement from Plan
@@ -27,13 +27,13 @@ Read plan file: `$ARGUMENTS`
 - Note the validation commands to run
 - Review the testing strategy
 
-#### 1b. Check Memory for Warnings (if mem0 available)
+#### 1b. Check Memory for Warnings (if memory.md exists)
 
-Before implementing, search mem0 for relevant warnings:
-- Query: "{feature-name} gotchas warnings"
-- Query: file names from the plan's "Relevant Codebase Files" section
+Before implementing, read `memory.md` at the project root for relevant warnings:
+- Look for gotchas related to the feature area
+- Check for lessons learned about affected files or systems
 
-If relevant memories found, note them as additional context for implementation. If mem0 is unavailable, continue without.
+If relevant entries found, note them as additional context for implementation. If memory.md doesn't exist, continue without.
 
 ### 1.5. Initialize Archon Task Management (if available)
 

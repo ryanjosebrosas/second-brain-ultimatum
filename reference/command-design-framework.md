@@ -593,7 +593,7 @@ Commands improve through use:
 - **V1 (Basic)**: Commands from templates, generic patterns
 - **V2 (Project-specific)**: Add your tech stack, conventions, file paths
 - **V3 (Optimized)**: Refine output formats based on what you actually review
-- **V4 (Integrated)**: Add tool integrations (Archon tasks, mem0 memory, MCP servers)
+- **V4 (Integrated)**: Add tool integrations (Archon tasks, memory.md, MCP servers)
 
 ### Tips for Success
 

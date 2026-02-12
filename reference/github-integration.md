@@ -145,7 +145,7 @@ Manual Prompts → Reusable Commands → Chained Commands → Remote Automation
 
 - **No easy conversation**: Each GitHub Action run is a single-shot execution. You can't easily iterate with the agent mid-task. For a custom system that solves this with real-time conversation, multi-platform support, and persistent sessions, see `reference/remote-system-overview.md`.
 - **Limited visibility**: You must check Action logs to see what the agent is doing. No real-time terminal output.
-- **No mem0 in CI**: GitHub Actions runners don't have access to your local mem0 instance. Cross-session memory is unavailable in remote workflows.
+- **Limited memory.md in CI**: GitHub Actions runners can read `memory.md` from the repo but any writes are lost when the runner terminates. To persist learnings, the agent can commit memory.md updates via PR.
 - **Cost**: Each Action run consumes GitHub Actions minutes and your MAX/Pro subscription usage (or API credits if using `ANTHROPIC_API_KEY`).
 - **CodeRabbit free tier**: After the 14-day Pro trial, private repos on the free tier only get PR summaries — not full line-by-line reviews. The automated fix loop requires full reviews (Lite plan or higher for private repos). Open source repos get full reviews on all tiers.
 

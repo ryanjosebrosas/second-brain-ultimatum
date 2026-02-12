@@ -49,9 +49,9 @@ The reference guides describe specific formats and frameworks (baseline assessme
 - `templates/META-REASONING-CHECKLIST.md` — 5-step process + WHERE-to-fix decision framework
 - `.coderabbit.yaml` — CodeRabbit configuration template for automated PR reviews
 
-### Related Memories (from mem0)
+### Related Memories (from memory.md)
 
-No relevant memories found in mem0
+No relevant memories found in memory.md
 
 ### Relevant Documentation
 

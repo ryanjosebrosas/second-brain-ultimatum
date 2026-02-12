@@ -38,18 +38,15 @@ Check recent activity:
 Check current branch and status:
 !`git status`
 
-### 5. Recall Project Memory (if mem0 available)
+### 5. Read Project Memory (if memory.md exists)
 
-Search mem0 for project-relevant memories to carry forward:
+If `memory.md` exists at project root, read it and include relevant entries in the output report:
+- Key decisions that affect current work
+- Known gotchas for the project's tech stack
+- Architecture patterns established in past sessions
+- Recent session notes for continuity
 
-1. Search for recent decisions and lessons:
-   - Query: "{project-name} decisions lessons"
-2. Search for architecture patterns and gotchas:
-   - Query: "{project-name} patterns gotchas"
-3. Search for recent session context:
-   - Query: "{project-name} recent changes"
-
-Include up to 10 most relevant memories in the output report. If mem0 is not available or returns no results, skip this section gracefully.
+If memory.md doesn't exist, note "No memory.md found — consider creating one from `templates/MEMORY-TEMPLATE.md`"
 
 ### 5b. Search Archon Knowledge Base (if available)
 
@@ -93,11 +90,11 @@ Provide a concise summary covering:
 - Recent changes or development focus
 - Any immediate observations or concerns
 
-### Memory Context (from mem0)
+### Memory Context (from memory.md)
 - Key decisions from past sessions
 - Known gotchas and lessons
 - Relevant patterns established
-- (If no memories found, note "No mem0 memories found — this is a fresh project or mem0 is unavailable")
+- (If no memory.md found, note "No memory.md found — this is a fresh project or memory.md hasn't been created yet")
 
 ### Knowledge Base Context (from Archon RAG)
 - Relevant documentation sources found

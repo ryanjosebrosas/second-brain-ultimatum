@@ -15,7 +15,7 @@ This guide maps each section of `templates/STRUCTURED-PLAN-TEMPLATE.md` to the p
 | Feature Metadata | Phase 1 | Type, complexity, systems, deps |
 | Relevant Codebase Files | Phase 2 | Explore agent findings |
 | New Files to Create | Phase 2 | Explore agent + Phase 4 design |
-| Related Memories | Phase 2c | mem0 search results |
+| Related Memories | Phase 2c | memory.md entries |
 | Relevant Documentation | Phase 3 | External research agent findings |
 | Patterns to Follow | Phase 2 | Explore agent code extractions |
 | Implementation Plan | Phase 4 | Synthesis of all research |

@@ -20,7 +20,7 @@ With MCP and Skills, the PIV Loop gains access to external tools (databases, bro
 - **MCP vs Skills** — when to use each, how they complement each other
 - **Archon MCP** — curated knowledge base (RAG) and shared task management (Kanban)
 - **PIV Loop integration** — how MCP and Skills plug into planning, execution, validation, and commit phases
-- **Token cost optimization** — budgeting context across mem0, Archon, and multiple MCP servers
+- **Token cost optimization** — budgeting context across memory.md, Archon, and multiple MCP servers
 - **Practical examples** — Supabase, Playwright, AST-Grep, and the Skills + Commands conversion pattern
 
 ### The Core Insight
@@ -275,12 +275,12 @@ Skills loaded during execution: implementation patterns, coding standards, deplo
 
 ### Validate & Commit Phases
 
-| Phase | MCP Integration | mem0 Integration |
-|-------|----------------|-----------------|
+| Phase | MCP Integration | memory.md Integration |
+|-------|----------------|----------------------|
 | **Validate** | Optional: update task status during `/code-review` | N/A |
-| **Commit** | Step 7: report feature completion in Archon | Step 6: store cross-session lessons |
+| **Commit** | Step 7: report feature completion in Archon | Step 6: append cross-session lessons |
 
-Both systems coexist — Archon tracks tasks and provides documentation, mem0 stores learning and pattern recognition.
+Both systems coexist — Archon tracks tasks and provides documentation, memory.md stores learning and pattern recognition.
 
 ### Backward Compatibility
 
@@ -322,20 +322,20 @@ Best for teams with 10+ commands where upfront token cost matters.
 
 ## 8. Token Cost Analysis & Optimization
 
-### Combined Token Budget (mem0 + Archon)
+### Combined Token Budget (memory.md + Archon)
 
 | Configuration | Upfront Cost | Per-Feature Cost | Total Overhead |
 |--------------|--------------|------------------|----------------|
-| mem0 only | 0 | ~100-200 tokens | ~0.1-0.2% |
+| memory.md only | 0 | 0 (file read) | ~0% MCP overhead |
 | Archon only (Tool Search) | ~5,000-7,000 | ~200-500 tokens | ~5-7% upfront |
-| mem0 + Archon | ~5,000-7,000 | ~300-700 tokens | ~5-7% upfront |
+| memory.md + Archon | ~5,000-7,000 | ~200-500 tokens | ~5-7% upfront + 0.2-0.5% per feature |
 | Archon + 3 MCPs (Tool Search ON) | ~10,000-15,000 | ~500-1,000 tokens | ~10-15% upfront |
 
 ### Recommendation: Use Both Together
 
-mem0 and Archon solve **different problems** and complement each other:
+memory.md and Archon solve **different problems** and complement each other:
 
-- **mem0**: Cross-session learning — past gotchas, decisions, patterns. Private to you.
+- **memory.md**: Cross-session learning — past gotchas, decisions, patterns. Zero MCP overhead.
 - **Archon RAG**: Curated documentation search — better than generic web. Shared across team.
 - **Archon Tasks**: Real-time progress visibility — shared Kanban board. Human-AI collaboration.
 
@@ -343,7 +343,7 @@ mem0 and Archon solve **different problems** and complement each other:
 
 1. **Tool Search for 3+ servers**: Verify active with `claude mcp list`. If context usage from tools exceeds 20%, Tool Search may not be working
 2. **Short RAG queries**: 2-5 keywords maximum. Extract core technical terms, omit filler words
-3. **Focused mem0 queries**: 2-3 keywords per search. One concept per query
+3. **Concise memory.md entries**: Keep entries to 1-2 lines each. Under 100 lines total.
 4. **Create tasks upfront**: Extract ALL tasks from the plan in Step 1.5. Avoid mid-implementation task creation overhead
 
 ---
@@ -496,7 +496,7 @@ mem0 and Archon solve **different problems** and complement each other:
 - ✅ MCP vs Skills — when to use each, how they complement each other
 - ✅ Archon — curated knowledge base (RAG) + shared task management (Kanban)
 - ✅ PIV Loop integration — how MCP and Skills plug into every phase
-- ✅ Token cost optimization — budgeting context across mem0, Archon, and multiple servers
+- ✅ Token cost optimization — budgeting context across memory.md, Archon, and multiple servers
 - ✅ Practical patterns — Supabase, Playwright, AST-Grep, Skills+Commands conversion
 - ✅ The five key principles — progressive loading, curated knowledge, visibility, conciseness, focus
 

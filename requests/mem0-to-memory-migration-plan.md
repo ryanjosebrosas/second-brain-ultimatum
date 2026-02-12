@@ -369,26 +369,26 @@ powershell -Command "@('.claude/commands/prime.md','.claude/commands/planning.md
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] Zero instances of "mem0" across the entire project (`Select-String -Recurse` returns nothing)
-- [ ] MEMORY-TEMPLATE.md created with clear structure (Decisions, Patterns, Gotchas, Lessons, Session Notes)
-- [ ] /prime reads memory.md (conditional)
-- [ ] /planning reads memory.md (conditional)
-- [ ] /commit appends to memory.md (conditional)
-- [ ] All sections updated (02, 03, 12)
-- [ ] All references updated (piv-loop-practice, mcp-skills-archon)
-- [ ] STRUCTURED-PLAN-TEMPLATE.md updated
-- [ ] reference/file-structure.md updated
+- [x] Zero instances of "mem0" across the entire project (`Select-String -Recurse` returns nothing)
+- [x] MEMORY-TEMPLATE.md created with clear structure (Decisions, Patterns, Gotchas, Lessons, Session Notes)
+- [x] /prime reads memory.md (conditional)
+- [x] /planning reads memory.md (conditional)
+- [x] /commit appends to memory.md (conditional)
+- [x] All sections updated (02, 03, 12)
+- [x] All references updated (piv-loop-practice, mcp-skills-archon)
+- [x] STRUCTURED-PLAN-TEMPLATE.md updated
+- [x] reference/file-structure.md updated
 
 ---
 
 ## COMPLETION CHECKLIST
 
-- [ ] All tasks completed in order
-- [ ] Each task validation passed
-- [ ] Zero mem0 references in entire project
-- [ ] Commands handle missing memory.md gracefully
-- [ ] Conceptual framework (Memory pillar) still coherent
-- [ ] Acceptance criteria all met
+- [x] All tasks completed in order
+- [x] Each task validation passed
+- [x] Zero mem0 references in entire project
+- [x] Commands handle missing memory.md gracefully
+- [x] Conceptual framework (Memory pillar) still coherent
+- [x] Acceptance criteria all met
 
 ---
 
