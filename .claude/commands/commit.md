@@ -156,7 +156,4 @@ After successful commit, update project status:
 - If there are no changes to commit, report this clearly
 - If commit fails (e.g., pre-commit hooks), report the error
 - Follow the project's commit message conventions
-- Include co-author if appropriate:
-  ```
-  Co-authored-by: Claude <noreply@anthropic.com>
-  ```
+- Do NOT include Co-Authored-By lines in commits
