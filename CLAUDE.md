@@ -36,20 +36,18 @@ A comprehensive AI-assisted development methodology combining systematic plannin
 
 ## On-Demand Guides
 
-> These guides are NOT auto-loaded. Read them when the task requires it.
+> All guides in `reference/`. Load when the task requires it.
 
-| Guide | Load when... |
-|-------|-------------|
-| `reference/layer1-guide.md` | Setting up CLAUDE.md for a new project |
-| `reference/validation-strategy.md` | Planning or running validation |
-| `reference/file-structure.md` | Looking up where files belong |
-| `reference/command-design-overview.md` | Designing or modifying slash commands |
-| `reference/github-integration.md` | Setting up GitHub Actions or CodeRabbit |
-| `reference/remote-system-overview.md` | Deploying or using the remote coding agent |
-| `reference/mcp-skills-overview.md` | Configuring MCP servers or creating skills |
-| `reference/subagents-overview.md` | Creating or debugging subagents |
-| `reference/archon-workflow.md` | Using Archon task management or RAG search |
-| `reference/git-worktrees-overview.md` | Parallel feature implementation with worktrees |
-| `reference/agent-teams-overview.md` | Using Agent Teams, `/team` command, contract-first spawning |
-
-> For deeper context, see additional reference guides in `reference/` (e.g., `system-foundations.md`, `piv-loop-practice.md`, `global-rules-optimization.md`).
+| Guide | When |
+|-------|------|
+| `layer1-guide` | New project CLAUDE.md setup |
+| `validation-strategy` | Validation planning |
+| `file-structure` | File location lookup |
+| `command-design-overview` | Slash command design |
+| `github-integration` | GitHub Actions / CodeRabbit |
+| `remote-system-overview` | Remote coding agent |
+| `mcp-skills-overview` | MCP servers / skills |
+| `subagents-overview` | Subagent creation |
+| `archon-workflow` | Archon tasks / RAG |
+| `git-worktrees-overview` | Parallel worktree implementation |
+| `agent-teams-overview` | Agent Teams / `/team` |
