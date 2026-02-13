@@ -2,7 +2,7 @@
 name: code-review-security
 description: Reviews code for security vulnerabilities including SQL injection, XSS, exposed secrets, and insecure data handling
 model: haiku
-# instance: cz  # Optional: your cost-optimized account alias
+instance: cz
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---
 

@@ -2,7 +2,7 @@
 name: research-external
 description: Use this agent for documentation search, best practices research, version compatibility checks, and external knowledge gathering. Finds authoritative docs, migration guides, and known gotchas. Uses Sonnet for synthesis quality.
 model: sonnet
-# instance: cz  # Optional: your cost-optimized account alias
+instance: cz
 tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
 ---
 

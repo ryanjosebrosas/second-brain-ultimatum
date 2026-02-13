@@ -2,7 +2,7 @@
 name: code-review-performance
 description: Reviews code for performance issues including N+1 queries, inefficient algorithms, memory leaks, and unnecessary computations
 model: haiku
-# instance: cz  # Optional: your cost-optimized account alias
+instance: cz
 tools: ["Read", "Glob", "Grep"]
 ---
 
