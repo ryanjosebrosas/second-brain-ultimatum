@@ -1,4 +1,8 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "ENABLE_TOOL_SEARCH": "true"
+  },
   "permissions": {
     "allow": [
       "Bash(git stash:*)",
@@ -123,11 +127,25 @@
       "Bash(for f in \".claude/skills/agent-teams/references/tmux-wsl-setup.md\" \"reference/agent-teams-overview.md\" \".claude/skills/agent-teams/SKILL.md\" \".claude/skills/agent-teams/references/contract-first-spawning.md\")",
       "Bash(for f in \".claude/skills/agent-teams/references/tmux-wsl-setup.md\" \"reference/agent-teams-overview.md\" \".claude/skills/agent-teams/SKILL.md\" \".claude/skills/agent-teams/references/contract-first-spawning.md\" \".claude/commands/team.md\" \"templates/TEAM-SPAWN-PROMPTS.md\")",
       "Bash(do)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(/mnt/c/Program Files/GitHub CLI/gh.exe --version)",
+      "Bash(\"/mnt/c/Program Files/GitHub CLI/gh.exe\" repo create ryanjosebrosas/my-coding-system-claude --private --source=. --push)",
+      "Bash(git remote set-url:*)",
+      "Bash(tmux:*)",
+      "WebFetch(domain:alexop.dev)",
+      "Bash(compgen:*)",
+      "Bash(claude --list:*)",
+      "Bash(git branch:*)",
+      "Skill(team)",
+      "Bash(for agent in team-cmd routing-guide teams-overview spawn-prompts readme memory)",
+      "Bash(do cp requests/team-multi-instance-routing-plan.md \"worktrees/team-multi-instance-routing/$agent/\")",
+      "WebFetch(domain:scottspence.com)",
+      "WebFetch(domain:claudefa.st)",
+      "WebFetch(domain:tylerfolkman.substack.com)",
+      "WebFetch(domain:www.humanlayer.dev)",
+      "Bash(git worktree:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(git -C \"/mnt/c/Users/Utopia/Desktop/My Coding System\" worktree list)"
     ]
-  },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "ENABLE_TOOL_SEARCH": "true"
   }
 }
