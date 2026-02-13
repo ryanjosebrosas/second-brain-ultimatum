@@ -1,6 +1,7 @@
 # Multi-Instance Routing Guide
 
 > **Load when**: You have multiple Claude accounts and want to route different tasks to different instances for cost optimization, load distribution, or team collaboration
+> **Status (2026-02-13)**: ACTIVE — Multi-instance routing is configured via `~/llm-functions.sh` (sourced in `.bashrc`). All 5 instances are authenticated. Run `claude-list` in an interactive terminal to see available instances.
 
 ---
 
@@ -20,16 +21,19 @@ Instead of using different models (Haiku/Sonnet/Opus), you use **different Claud
 
 ## Your Available Instances
 
-Based on your `claude-list` output:
+Configured in `~/llm-functions.sh`, sourced via `.bashrc` at shell startup:
 
-| Instance | Account | Best For |
-|----------|---------|----------|
-| `claude1` | Main Account | **Planning, PIV Loop, main orchestration** |
-| `claude2` | design@brainforge.ai | **Vital Sonnet work** (load balanced with claude3) |
-| `claude3` | Ryan.Brosas@brainforge.ai | **Vital Sonnet work** (load balanced with claude2) |
-| `claude-zai` | Z.AI GLM (Cheap Tasks) | **Spammable, non-critical tasks** |
+| Instance | Alias | Account | Config Dir | Best For |
+|----------|-------|---------|-----------|----------|
+| `claude1` | `c1` | Main Account (MAX 20x) | `~/.claude-main` | **Planning, PIV Loop, main orchestration** |
+| `claude2` | `c2` | design@brainforge.ai (Pro) | `~/.claude-design` | **Burn first: parallel execution** |
+| `claude3` | `c3` | Ryan.Brosas@brainforge.ai (Pro) | `~/.claude-ryan` | **Burn first: parallel execution** |
+| `claude-kimi` | `ck` | Kimi | `~/.claude-kimi` | **Fallback 1: overflow when c2/c3 rate-limited** |
+| `claude-zai` | `cz` | Z.AI GLM | `~/.claude-zai` | **Fallback 2: cheapest, non-critical tasks** |
 
-**Key insight**: `claude2` and `claude3` distribute vital Sonnet-level work to avoid hitting rate limits on a single account.
+**Burn order**: c2/c3 → kimi → zai | **Orchestrator**: c1
+**Planning shortcut**: `cplan` = `claude1 --model opus`
+**Utilities**: `claude-list` (show instances), `claude-which` (show active), `claude-health` (check auth)
 
 ---
 
@@ -178,6 +182,8 @@ tools: ["Read", "Glob", "Grep", "Bash"]
 ```
 
 **Workaround**: Use Method 2 (Command Prefix) or Method 4 (Wrapper Scripts) instead. These are the working alternatives for instance routing today.
+
+**Practical workaround**: The `instance` field in agent frontmatter is aspirational documentation — it indicates which instance the agent SHOULD be routed to when running manually. When using `/code-review` or `/planning`, the user starts the session with the desired instance (e.g., `cz` for cheap review work). The agents inherit the session's account.
 
 ### Method 4: Wrapper Scripts
 

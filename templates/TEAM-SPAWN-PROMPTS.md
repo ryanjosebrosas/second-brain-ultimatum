@@ -197,3 +197,25 @@ Avoid these mistakes based on real-world testing:
 3. **"Skip contract verification"** — The lead MUST check every contract for completeness before forwarding. Missing fields, ambiguous types, and inconsistent naming cause integration failures late in implementation.
 
 4. **"Let agents figure out file boundaries"** — Every spawn prompt MUST explicitly state files owned and files NOT to touch. Without clear ownership, agents overwrite each other's work.
+
+---
+
+## Model Routing
+
+### Known Issue: Task Tool Model Parameter (February 2026)
+
+The Task tool's `model` parameter has a known bug (GitHub Issue #18873) that may cause 404 errors or default to the parent session's model regardless of the specified value.
+
+**Workaround**: When spawning teammates via Agent Teams (TeamCreate + Task tool with `team_name`), specify the desired model in the spawn prompt itself rather than relying on the `model` parameter:
+
+```
+You are the Backend agent. Use efficient, focused implementation.
+Model guidance: This task is suitable for Sonnet-level implementation.
+```
+
+**Current recommendation**:
+- Lead: Opus (for reasoning during contract verification and coordination)
+- Implementation teammates: Sonnet (balanced capability/cost)
+- Review/testing teammates: Haiku (pattern matching, cheaper)
+
+Monitor Issue #18873 for resolution. When fixed, switch to using the `model` parameter directly.

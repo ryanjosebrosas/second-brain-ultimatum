@@ -16,6 +16,8 @@
 - [2026-02-12] Moved Archon workflow to on-demand reference — Auto-loaded pointer is 5 lines, full guide at `reference/archon-workflow.md`
 - [2026-02-13] Integrated Agent Teams with contract-first spawning — Upstream agents publish contracts before downstream agents start; lead relays and verifies
 - [2026-02-13] Agent Teams for implementation only, subagents for research — 2-4x token savings vs using Agent Teams for everything
+- [2026-02-13] Activated 8 subagents from _examples/ to .claude/agents/ — Parallel Research Mode and Parallel Review Mode now operational
+- [2026-02-13] System Enhancement v2: gap analysis identified 4 areas (subagents, priming, Archon lifecycle, Agent Teams polish) — all fixed
 
 ## Architecture Patterns
 <!-- Format: - **Pattern name**: Description. Used in: location -->
@@ -33,6 +35,9 @@
 - **Archon queries**: Long RAG queries return poor results — Keep to 2-5 keywords
 - **Archon tasks**: Only ONE task in "doing" status at a time — Update status before starting next
 - **Context bloat**: Loading all reference guides wastes tokens — Only load on-demand guides when needed
+- **Agent `instance` field**: NOT a valid frontmatter field — silently ignored by Claude Code. Remove from all agents.
+- **Task tool `model` param**: Known bug (Issue #18873) — may default to parent model. Specify model guidance in spawn prompts as workaround.
+- **Multi-instance routing**: ACTIVE via `~/llm-functions.sh` — 5 instances (c1/c2/c3/ck/cz), all authenticated. Instance = session-level routing, not agent-level.
 
 ## Lessons Learned
 <!-- Format: - **Context**: Lesson — Impact on future work -->
@@ -46,6 +51,7 @@
 - [2026-02-12] Implemented plan decomposition & execution routing — 2 templates, 2 commands updated, 4 reference docs updated
 - [2026-02-12] Token efficiency: compressed 5 commands (43-59%), slimmed auto-loaded context (66%), added README.md with Mermaid diagrams
 - [2026-02-13] Implemented Agent Teams integration: /team command, reference guide, skill, spawn templates, contract-first spawning guide
+- [2026-02-13] System Enhancement v2: activated subagents, enhanced /prime + /commit + /team Archon integration, documented Agent Teams model workaround
 
 ---
 

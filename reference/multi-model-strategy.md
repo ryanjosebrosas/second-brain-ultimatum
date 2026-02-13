@@ -317,6 +317,7 @@ Use Opus for:
 - Opus for complex debugging (escalation pattern: Sonnet → Opus when stuck)
 - Explicit cost tracking per task
 - `opusplan` mode for Claude Code's built-in plan mode (uses Opus for `/plan`, Sonnet for execution — note: this is different from our `/planning` slash command)
+- Agent Teams model routing: Task tool `model` parameter has a known bug (Issue #18873). Specify model guidance in spawn prompts as workaround. See `templates/TEAM-SPAWN-PROMPTS.md` → "Model Routing" section.
 
 ---
 
