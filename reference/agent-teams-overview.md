@@ -152,6 +152,13 @@ Agent Teams uses **2-4x more tokens** than single sessions. Each teammate is a s
 - Only use Agent Teams when coordination adds real value (shared interfaces)
 - Use Sonnet for implementation teammates (balanced cost/capability)
 
+**Multi-instance routing** (recommended):
+- Run `/planning` on c1 (Opus) for deep reasoning
+- Run `/team` on c2/c3 (Sonnet) for burn-account execution
+- Burn order: c2 → c3 → ck → cz — switch when rate-limited
+- All coordination features (SendMessage, contracts, task list) work on any account
+- See `reference/multi-instance-routing.md` → Strategy 6
+
 ### Trust Progression
 
 ```
