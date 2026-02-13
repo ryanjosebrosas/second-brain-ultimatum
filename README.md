@@ -96,7 +96,28 @@ Start with `/prime` to understand the system, then try `/planning` on a small fe
 | `/end-to-end-feature` | Full autonomous pipeline | Trusted, simple features |
 | `/new-worktree` | Create parallel branch | Multi-feature work |
 | `/parallel-e2e` | Parallel multi-feature | Advanced parallel builds |
+| `/team [plan]` | Multi-agent coordinated build | Complex features needing coordination |
 | `/init-c` | Generate CLAUDE.md for new project | New projects |
+
+---
+
+## Agent Teams & Multi-Instance
+
+For complex features, Agent Teams coordinates multiple Claude instances with contract-first spawning — upstream agents publish interfaces before downstream agents start building.
+
+**Cost optimization**: Run planning on your main account (Opus), team execution on burn accounts (Sonnet):
+
+```bash
+cplan                                    # Planning: c1, Opus
+> /planning my-feature
+
+c2                                       # Execution: c2, Sonnet (burn first)
+> /team requests/my-feature-plan.md
+```
+
+Burn order: `c2 → c3 → ck → cz`. All coordination features work on any account.
+
+See `reference/agent-teams-overview.md` for the full architecture guide.
 
 ---
 
@@ -112,7 +133,7 @@ My-Coding-System/
 ├── requests/              # Feature plans (per PIV loop)
 ├── .claude/commands/      # Slash commands (20 commands)
 ├── .claude/skills/        # Cloud skills (4 skills)
-└── .claude/agents/        # Subagent examples (6 agents)
+└── .claude/agents/        # Active subagents (8 agents)
 ```
 
 ---
