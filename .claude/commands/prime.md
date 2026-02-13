@@ -4,31 +4,37 @@ description: Prime agent with codebase understanding
 
 # Prime: Load Project Context
 
-## Objective
-
-Build comprehensive understanding of the codebase by analyzing structure, documentation, and key files.
-
 ## Process
 
 ### 1. Analyze Project Structure
 
-List all tracked files:
-!`git ls-files`
+Scan the project using Glob patterns, NOT `git ls-files`:
+- `**/*.{py,ts,js,tsx,jsx,go,rs}` — source code entry points
+- `**/package.json`, `**/pyproject.toml`, `**/Cargo.toml` — config files
+- `**/README.md` — documentation
+
+For each match, note the file but do NOT read it yet. Build a mental map of the project.
 
 ### 2. Read Core Documentation
 
-- Read project rules: @CLAUDE.md
-- If `sections/` directory exists, read the section files referenced in CLAUDE.md
-- Read README files at project root and major directories
-- Read any architecture documentation
+> CLAUDE.md and sections/ are ALREADY auto-loaded. Do NOT re-read them.
+
+Read ONLY files that are NOT auto-loaded:
+- `memory.md` (if exists) — cross-session context
+- Main entry points identified in Step 1 (main.py, index.ts, etc.)
+- Core config files (package.json, pyproject.toml, etc.)
+
+Skip: README.md (use git log + file structure to understand the project instead)
+Skip: AGENTS.md (loaded by Claude Code separately)
 
 ### 3. Identify Key Files
 
-Based on the structure, identify and read:
-- Main entry points (main.py, index.ts, app.py, etc.)
-- Core configuration files (pyproject.toml, package.json, tsconfig.json)
+Based on the structure, identify (but only read if NOT auto-loaded):
+- Main entry points
+- Core configuration files
 - Key model/schema definitions
-- Important service or controller files
+
+Limit: Read at most 5 files total. Prioritize by importance.
 
 ### 4. Understand Current State
 
@@ -38,95 +44,34 @@ Check recent activity:
 Check current branch and status:
 !`git status`
 
-### 5. Read Project Memory (if memory.md exists)
+### 5. Surface Active Tasks (if Archon available)
 
-If `memory.md` exists at project root, read it and include relevant entries in the output report:
-- Key decisions that affect current work
-- Known gotchas for the project's tech stack
-- Architecture patterns established in past sessions
-- Recent session notes for continuity
+Query for in-progress tasks ONLY:
+1. `find_tasks(filter_by="status", filter_value="doing")`
+2. Display as compact list: `[project] task title (status)`
 
-If memory.md doesn't exist, note "No memory.md found — consider creating one from `templates/MEMORY-TEMPLATE.md`"
-
-### 5b. Search Archon Knowledge Base (if available)
-
-If Archon RAG is available, search for project-relevant documentation:
-
-1. Get available sources: `rag_get_available_sources()`
-2. Search for project setup and architecture docs:
-   - Query: "{project-name} setup"
-   - Query: "{primary-framework} best practices"
-3. Include top 3-5 relevant results in the output report
-
-If Archon RAG is not available, skip this section gracefully.
-
-### 5c. Surface Active Tasks (if Archon available)
-
-Query Archon for in-progress and upcoming tasks:
-
-1. Search for tasks with status "doing": `find_tasks(filter_by="status", filter_value="doing")`
-2. Search for tasks with status "todo": `find_tasks(filter_by="status", filter_value="todo")`
-3. Display as compact list: `[project] task title (status)`
-
-If no active tasks, note "No active Archon tasks."
-If Archon unavailable, skip this section gracefully.
-
-### 5d. Memory Health Check
-
-After reading `memory.md`, check the Session Notes section for the most recent date entry. If the most recent entry is older than 7 days from today, flag:
-
-"⚠ Memory may be stale — last session note is from [date]. Consider updating or archiving."
-
-This costs zero extra tokens — it's a check on content already read.
+Skip: todo tasks (user knows their backlog)
+Skip: Archon RAG source listing (not needed for priming)
+Skip: Archon RAG search queries (save for /planning)
 
 ## Output Report
 
-Provide a concise summary covering:
+Provide a CONCISE summary (aim for 20-30 lines max):
 
 ### Project Overview
-- Purpose and type of application
-- Primary technologies and frameworks
-- Current version/state
+- Type, tech stack, current state (3-5 bullets)
 
 ### Architecture
-- Overall structure and organization
-- Key architectural patterns identified
-- Important directories and their purposes
-
-### Tech Stack
-- Languages and versions
-- Frameworks and major libraries
-- Build tools and package managers
-- Testing frameworks
-
-### Core Principles
-- Code style and conventions observed
-- Documentation standards
-- Testing approach
+- Key directories and patterns (3-5 bullets)
 
 ### Current State
-- Active branch
-- Recent changes or development focus
-- Any immediate observations or concerns
+- Branch, recent commits, git status summary
 
-### Memory Context (from memory.md)
-- Key decisions from past sessions
-- Known gotchas and lessons
-- Relevant patterns established
-- (If no memory.md found, note "No memory.md found — this is a fresh project or memory.md hasn't been created yet")
+### Memory Context
+- Key decisions and gotchas from memory.md (3-5 bullets)
+- Memory health: last session date + staleness warning if >7 days
 
-### Active Tasks (from Archon)
-- [Project Name] Task title — status
-- (If no active tasks, note "No active tasks in Archon")
-- (If Archon unavailable, note "Archon not available")
+### Active Tasks
+- Archon doing tasks (or "No active tasks")
 
-### Memory Health
-- Last session note date: [date]
-- Status: Current / ⚠ Stale (older than 7 days)
-
-### Knowledge Base Context (from Archon RAG)
-- Relevant documentation sources found
-- Key articles or guides applicable to this project
-- (If Archon RAG unavailable, note "No Archon RAG available — skip knowledge base search")
-
-**Make this summary easy to scan - use bullet points and clear headers.**
+**Keep it SHORT. The user will ask for details if needed.**
