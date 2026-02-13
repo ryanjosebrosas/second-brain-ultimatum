@@ -140,6 +140,34 @@ claude1 --model sonnet  # Note: Sonnet, not Opus
 > /execute requests/{feature}-plan-03-integration.md
 ```
 
+### Strategy 6: Agent Teams Session Routing
+
+Route entire `/team` sessions to burn accounts. Planning stays on c1 (Opus), team execution goes to c2/c3 (Sonnet).
+
+```
+Planning (claude1, Opus)
+  → /planning my-feature
+  → Produces: requests/my-feature-plan.md
+
+Team Execution (claude2 or claude3, Sonnet)
+  → /team requests/my-feature-plan.md
+  → Lead + all teammates on same burn account
+  → Full coordination: SendMessage, contracts, shared task list
+  → Burn order: c2 → c3 → ck → cz
+```
+
+**Why session-level**: Agent Teams teammates are in-process subagents — they inherit the parent session's account and model. There's no mechanism to route individual teammates to different accounts. The Task tool has no `instance` parameter, and agent frontmatter has no `instance` field.
+
+**What's preserved**: Everything. SendMessage, contract-first spawning, shared task list, lead coordination, auto-worktrees — all work identically on any account. The account only affects billing and rate limits.
+
+**What changes**: Token costs go to the burn account instead of c1. When c2 hits rate limits, start a new session on c3. The plan file is portable — same plan works on any account.
+
+**Rate limit recovery**:
+- If c2 rate-limited mid-session: Session may slow down. Complete current team run, then switch to c3 for next `/team` session.
+- If mid-team rate limit is severe: Ask user whether to continue (slower) or abort and restart on c3.
+
+**Use case**: Any `/team` session. This should be the default routing for team execution.
+
 ---
 
 ## How to Configure Agents for Specific Instances
@@ -239,6 +267,7 @@ Then use: `./claude/scripts/cheap-review.sh`
 - ✅ `/execute` for standard plans (overflow from claude1)
 - ✅ Any Sonnet implementation work
 - ✅ Integration testing and validation
+- ✅ `/team` sessions — full Agent Teams with contract-first spawning
 
 ---
 
