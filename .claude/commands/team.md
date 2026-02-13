@@ -21,6 +21,32 @@ Orchestrates a coordinated team of Claude Code instances for parallel implementa
 
 ---
 
+## Cost Optimization — Multi-Instance Routing
+
+Agent Teams preserves all coordination features (SendMessage, contracts, shared task list) regardless of which account you start on. Use burn accounts for execution to save your main account for planning.
+
+**Recommended workflow**:
+```
+# Session 1: Planning (c1, Opus) — deep thinking
+cplan
+> /planning my-feature
+
+# Session 2: Team execution (c2, Sonnet) — burn account
+c2
+> /team requests/my-feature-plan.md
+```
+
+**Burn order for /team sessions**: `c2 → c3 → ck → cz`
+When one account hits rate limits, start the next `/team` session on the next account.
+
+**Why this works**: All teammates are in-process subagents — they inherit the session's account. Starting on c2 means the lead AND all teammates run on c2. Coordination (SendMessage, contract relay, task list) works identically regardless of which account hosts the session.
+
+**Model note**: The lead and teammates all use the session's default model. For c2/c3 (Pro accounts), this is typically Sonnet — which is sufficient for implementation coordination. Reserve Opus (via `cplan`) for the planning phase where deep reasoning matters most.
+
+See `reference/multi-instance-routing.md` → Strategy 6 for the full routing pattern.
+
+---
+
 ## Display Configuration
 
 - **Split-pane mode** (recommended): Requires tmux. Each teammate gets its own pane. Run Claude Code inside a tmux session.
