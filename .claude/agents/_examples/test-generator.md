@@ -2,6 +2,7 @@
 name: test-generator
 description: Use this agent to analyze changed code and suggest test cases following the project's existing test patterns. Identifies untested functions, edge cases, and missing coverage. Cost-optimized with Haiku for fast analysis.
 model: haiku
+# instance: secondary  # Optional: your cost-optimized account alias
 tools: ["Read", "Glob", "Grep"]
 ---
 

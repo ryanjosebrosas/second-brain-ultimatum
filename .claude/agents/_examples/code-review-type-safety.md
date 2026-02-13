@@ -2,6 +2,7 @@
 name: code-review-type-safety
 description: Reviews code for type safety violations, missing type hints, and type checking errors
 model: haiku
+# instance: secondary  # Optional: your cost-optimized account alias
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---
 
