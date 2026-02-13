@@ -18,6 +18,7 @@
 - [2026-02-13] Agent Teams for implementation only, subagents for research — 2-4x token savings vs using Agent Teams for everything
 - [2026-02-13] Activated 8 subagents from _examples/ to .claude/agents/ — Parallel Research Mode and Parallel Review Mode now operational
 - [2026-02-13] System Enhancement v2: gap analysis identified 4 areas (subagents, priming, Archon lifecycle, Agent Teams polish) — all fixed
+- [2026-02-13] Agent Teams session-level routing: planning on c1 (Opus), /team on c2/c3 (Sonnet burn accounts) — preserves all coordination while distributing cost
 
 ## Architecture Patterns
 <!-- Format: - **Pattern name**: Description. Used in: location -->
@@ -28,6 +29,7 @@
 - **Plan decomposition**: Overview + N sub-plans for High-complexity features. Trigger: Phase 4.5 in `/planning`. Used in: `planning.md`, `execute.md`
 - **Contract-First Spawning**: Upstream agents first → lead verifies contract → relays to downstream. Used in: `/team` command
 - **Auto-Worktree per Teammate**: Implementation teammates get isolated worktrees. Branch: `team/{feature}/{agent}`. Used in: `/team` Step 2
+- **Session-Level Instance Routing**: Planning on c1 (Opus), execution on c2/c3 (Sonnet). Burn order: c2 → c3 → ck → cz. Used in: `/team`, `/execute`
 
 ## Gotchas & Pitfalls
 <!-- Format: - **Area**: What goes wrong — How to avoid -->
@@ -52,6 +54,7 @@
 - [2026-02-12] Token efficiency: compressed 5 commands (43-59%), slimmed auto-loaded context (66%), added README.md with Mermaid diagrams
 - [2026-02-13] Implemented Agent Teams integration: /team command, reference guide, skill, spawn templates, contract-first spawning guide
 - [2026-02-13] System Enhancement v2: activated subagents, enhanced /prime + /commit + /team Archon integration, documented Agent Teams model workaround
+- [2026-02-13] Added multi-instance routing for Agent Teams: Strategy 6 in routing guide, cost optimization in /team command, README section
 
 ---
 
