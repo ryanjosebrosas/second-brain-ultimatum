@@ -1,5 +1,7 @@
 # Example Agents
 
+> **Note**: These agents have been activated and are live in `.claude/agents/`. This `_examples/` directory is kept as a reference for the original templates, including the `instance` field documentation. The active agents in `.claude/agents/` have `instance` removed since it's not a valid Claude Code frontmatter field.
+
 This directory contains **8 example agents** demonstrating different subagent patterns. Copy agents to `.claude/agents/` in your project to activate them.
 
 ---
