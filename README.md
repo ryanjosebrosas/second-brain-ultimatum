@@ -14,9 +14,7 @@ AI coding tools are powerful, but without structure they produce inconsistent re
 
 Most developers use AI like a magic 8-ball: ask a question, hope for a good answer, and manually clean up when it isn't.
 
-**This system fixes that.**
-
-It manages context automatically, enforces a plan-first workflow, and gives you quality gates at every stage. The result: AI that produces production-grade code on the first try, not the fifth.
+**This system fixes that.** It manages context automatically, enforces a plan-first workflow, and gives you quality gates at every stage.
 
 ---
 
@@ -26,13 +24,20 @@ This is **not** an application. There's no source code, no build system, no runt
 
 This is a **development methodology** — a structured collection of slash commands, templates, reference guides, and automation that wraps around Claude Code and turns it into a reliable development workflow. You clone this system, then build your applications inside it (or copy it into existing projects).
 
-**What you get:**
-- 21 slash commands that automate every phase of development
-- 19 templates for plans, PRDs, agents, and validation reports
-- 26 reference guides loaded on-demand (not wasting context tokens)
-- 12 pre-built AI subagents for research, code review, and specialist tasks
-- 5 cloud skills for parallel implementation and GitHub automation
-- 3 GitHub Action workflows for AI-assisted issue resolution
+### Who Is This For?
+
+- **Solo developers using Claude Code** who want consistent, production-grade output instead of trial-and-error prompting
+- **Teams adopting AI workflows** who need a repeatable methodology, not ad-hoc prompting
+- **Anyone tired of AI inconsistency** — the difference between 30% and 88% code acceptance is context clarity, not AI intelligence
+
+### What You Get
+
+- 21 slash commands that automate every phase of development — from planning to commit
+- 19 templates for plans, PRDs, agents, and validation reports — enforcing consistency across features
+- 26 reference guides loaded on-demand — deep knowledge without wasting context tokens
+- 12 pre-built AI subagents for parallel research, code review, and specialist tasks — 4x faster reviews
+- 5 cloud skills for parallel implementation and GitHub automation — scale beyond single-agent workflows
+- 3 GitHub Action workflows for AI-assisted issue resolution — 24/7 automation
 - A token-conscious architecture that keeps <10K tokens of system context, leaving the rest for your actual work
 
 ---
@@ -45,10 +50,10 @@ Every feature follows the same cycle: **Plan**, **Implement**, **Validate**, the
 graph LR
     subgraph "PIV Loop"
         direction LR
-        P["🎯 PLAN<br/>/planning<br/><i>Opus recommended</i>"]
-        I["⚡ IMPLEMENT<br/>/execute<br/><i>Sonnet recommended</i>"]
-        V["✅ VALIDATE<br/>/code-review<br/><i>4 Haiku agents</i>"]
-        C["📦 COMMIT<br/>/commit"]
+        P["PLAN<br/>/planning<br/><i>Opus recommended</i>"]
+        I["IMPLEMENT<br/>/execute<br/><i>Sonnet recommended</i>"]
+        V["VALIDATE<br/>/code-review<br/><i>4 Haiku agents</i>"]
+        C["COMMIT<br/>/commit"]
 
         P --> I --> V
         V -->|"Issues found"| FIX["/code-review-fix"]
@@ -56,8 +61,8 @@ graph LR
         V -->|"All clear"| C
     end
 
-    VIBE["💬 Vibe Planning<br/>conversation"] -->|"distill"| P
-    P -->|"produces"| PLAN["📄 requests/<br/>feature-plan.md"]
+    VIBE["Vibe Planning<br/>conversation"] -->|"distill"| P
+    P -->|"produces"| PLAN["requests/<br/>feature-plan.md"]
     PLAN -->|"fresh session"| I
     C -->|"iterate"| NEXT["Next PIV Loop"]
 
@@ -67,13 +72,51 @@ graph LR
     style C fill:#27ae60,color:#fff
 ```
 
-**Plan** — Start with a vibe planning conversation, then distill it into a structured plan document (500-700 lines of context-rich implementation instructions). The plan captures everything the AI needs: architecture decisions, file paths, code patterns, gotchas, and step-by-step tasks.
+**Why fresh sessions matter.** Planning creates exploration context — options considered, tradeoffs weighed, research gathered. Execution needs clean context, not exploration baggage. The plan distills exploration into execution instructions. A fresh session with only the plan means the AI focuses on building, not rediscovering. *Vibe planning is good, vibe coding is not.*
 
-**Implement** — Execute the plan in a fresh conversation. Clean context means better output. The AI follows the plan task-by-task instead of improvising.
+**Multiple small loops.** Don't build entire features in one pass. Each PIV loop covers one feature slice, built completely before moving on. Complex features (15+ tasks, 4+ phases) auto-decompose into sub-plans via `/planning`, each getting their own loop.
 
-**Validate** — Code review, testing, and human review. Issues loop back to planning. A 5-level validation pyramid catches problems from syntax errors to architectural violations.
+**The handoff.** The plan is the bridge between thinking and building — 500-700 lines capturing architecture decisions, file paths, code patterns, gotchas, and atomic tasks. Each task has 7 fields (ACTION, TARGET, IMPLEMENT, PATTERN, IMPORTS, GOTCHA, VALIDATE) so the execution agent has zero ambiguity.
 
-The key insight: **multiple small PIV loops** — one feature slice per loop, built completely before moving on. Complex features auto-decompose into sub-plans.
+---
+
+## Context Engineering: How the AI Gets It Right
+
+The difference between 30% and 88% code acceptance isn't AI intelligence — it's context clarity. Every structured plan is built on four pillars that ensure the AI has exactly what it needs.
+
+```mermaid
+graph TD
+    subgraph "4 Pillars of Context"
+        MEM["Memory<br/>memory.md + vibe planning"]
+        RAG["RAG<br/>docs + codebase patterns"]
+        PE["Prompt Engineering<br/>explicit decisions"]
+        TM["Task Management<br/>7-field atomic tasks"]
+    end
+    MEM --> PLAN["Structured Plan<br/>500-700 lines"]
+    RAG --> PLAN
+    PE --> PLAN
+    TM --> PLAN
+    PLAN --> EXEC["Fresh Session<br/>/execute"]
+    EXEC --> CODE["Production Code"]
+
+    style MEM fill:#4a90d9,color:#fff
+    style RAG fill:#7b68ee,color:#fff
+    style PE fill:#e67e22,color:#fff
+    style TM fill:#27ae60,color:#fff
+    style PLAN fill:#8e44ad,color:#fff
+    style EXEC fill:#2c3e50,color:#fff
+    style CODE fill:#27ae60,color:#fff
+```
+
+**Memory** — Past decisions prevent repeated mistakes. `memory.md` persists across sessions: read at `/prime`, appended at `/commit`. Vibe planning conversations add short-term memory within a session.
+
+**RAG** — External docs and codebase patterns ensure the AI doesn't reinvent existing code. Archon MCP adds curated knowledge base search (optional). Always cite specific sections, not just "see the docs."
+
+**Prompt Engineering** — Explicit solution statements and decisions from vibe planning eliminate guesswork. Bad context: "Add authentication." Good context: "Add JWT auth following the pattern in `src/auth/jwt.py:45-62`, storing tokens in HttpOnly cookies with 24-hour expiration."
+
+**Task Management** — 7-field atomic tasks (ACTION, TARGET, IMPLEMENT, PATTERN, IMPORTS, GOTCHA, VALIDATE) ensure zero ambiguity. Top-to-bottom execution, no backtracking.
+
+**The template is the control mechanism.** The structured plan template (`templates/STRUCTURED-PLAN-TEMPLATE.md`) maps each pillar to specific sections, so nothing gets missed. Memory maps to Related Memories. RAG maps to Relevant Documentation. Prompt Engineering maps to Solution Statement. Task Management maps to Step-by-Step Tasks.
 
 ---
 
@@ -84,24 +127,24 @@ Context is organized in layers. Auto-loaded context stays minimal so the AI has 
 ```mermaid
 graph TD
     subgraph "Auto-Loaded Context (~2K tokens)"
-        CLAUDE["📋 CLAUDE.md"] --> S["sections/<br/>6 core rules"]
+        CLAUDE["CLAUDE.md"] --> S["sections/<br/>6 core rules"]
     end
 
     subgraph "On-Demand Context (loaded when needed)"
-        R["📚 reference/<br/>26 deep guides"]
-        T["📝 templates/<br/>19 templates"]
+        R["reference/<br/>26 deep guides"]
+        T["templates/<br/>19 templates"]
     end
 
     subgraph "Automation Layer"
-        CMD["⚙️ .claude/commands/<br/>21 slash commands"]
-        AG["🤖 .claude/agents/<br/>12 subagents"]
-        SK["☁️ .claude/skills/<br/>5 cloud skills"]
+        CMD[".claude/commands/<br/>21 slash commands"]
+        AG[".claude/agents/<br/>12 subagents"]
+        SK[".claude/skills/<br/>5 cloud skills"]
     end
 
     subgraph "External Integrations"
-        MEM["🧠 memory.md<br/>cross-session context"]
-        ARCHON["🗄️ Archon MCP<br/>(optional)<br/>tasks + RAG"]
-        GH["🔄 GitHub Actions<br/>3 workflows<br/>8 prompt templates"]
+        MEM["memory.md<br/>cross-session context"]
+        ARCHON["Archon MCP<br/>(optional)<br/>tasks + RAG"]
+        GH["GitHub Actions<br/>3 workflows<br/>8 prompt templates"]
     end
 
     CLAUDE -.->|"on-demand"| R
@@ -111,10 +154,10 @@ graph TD
     SK -.->|"loads"| R
     MEM -.-> CMD
     ARCHON -.-> CMD
-    CMD -->|"produces"| REQ["📄 requests/<br/>feature plans"]
-    REQ -->|"/execute"| IMPL["⚡ Implementation"]
+    CMD -->|"produces"| REQ["requests/<br/>feature plans"]
+    REQ -->|"/execute"| IMPL["Implementation"]
     IMPL -->|"/code-review"| AG
-    IMPL -->|"/commit"| GIT["📦 Git Save Points"]
+    IMPL -->|"/commit"| GIT["Git Save Points"]
     GIT -->|"push"| GH
 
     style CLAUDE fill:#4a90d9,color:#fff
@@ -125,7 +168,7 @@ graph TD
 
 ### Token Budget
 
-The system manages context tokens carefully:
+Auto-loading everything would waste 20-30K tokens before any real work begins. The system keeps core rules always available (~2K tokens) and loads deep guides only when a command needs them.
 
 | Layer | Token Cost | Loading |
 |-------|-----------|---------|
@@ -134,6 +177,143 @@ The system manages context tokens carefully:
 | Reference guides (26) | varies | On-demand only |
 | Templates (19) | varies | On-demand only |
 | **Typical session total** | **<10K tokens** | Leaves ~100K+ for implementation |
+
+### How Context Flows
+
+```mermaid
+graph LR
+    PRIME["/prime<br/>memory + structure<br/>~2K baseline"] --> PLANNING["/planning<br/>templates + research<br/>heavy context"]
+    PLANNING --> EXECUTE["/execute<br/>plan file only<br/>clean context"]
+    EXECUTE --> COMMIT["/commit<br/>lessons to memory<br/>persistence"]
+    COMMIT -->|"next feature"| PRIME
+
+    style PRIME fill:#4a90d9,color:#fff
+    style PLANNING fill:#8e44ad,color:#fff
+    style EXECUTE fill:#7b68ee,color:#fff
+    style COMMIT fill:#27ae60,color:#fff
+```
+
+Each command loads only what it needs. `/prime` establishes baseline context. `/planning` pulls in templates, spawns research agents, and references external docs — heavy context, but isolated to the planning session. `/execute` starts fresh with only the plan file — clean context for focused implementation. `/commit` appends lessons learned to `memory.md` for cross-session persistence.
+
+---
+
+## Model Strategy
+
+The system separates thinking from doing. Use the right model for each phase:
+
+```mermaid
+graph LR
+    PLAN["Planning<br/>Opus"] --> EXEC["Execution<br/>Sonnet"]
+    EXEC --> REV["Code Review<br/>4x Haiku agents"]
+    REV --> COM["Commit<br/>Sonnet"]
+
+    style PLAN fill:#4a90d9,color:#fff
+    style EXEC fill:#7b68ee,color:#fff
+    style REV fill:#e67e22,color:#fff
+    style COM fill:#27ae60,color:#fff
+```
+
+**Why this separation matters.** Planning is the highest-leverage phase — a bad plan guarantees bad implementation. Opus's deeper reasoning produces better feature scoping, more thorough codebase analysis, and higher-confidence implementation plans. The ~3x usage increase pays for itself by reducing implementation retries. Code review uses 4 parallel Haiku agents — pattern matching at ~40% the cost of one Sonnet review.
+
+| Phase | Recommended Model | Why |
+|-------|-------------------|-----|
+| `/planning` | **Opus** (`claude --model opus`) | Deep reasoning produces better plans |
+| `/execute` | **Sonnet** (`claude` default) | Balanced — follows plans well at lower cost |
+| `/code-review` | **Haiku** (via subagents) | Pattern matching at a fraction of the cost |
+| `/commit`, `/prime` | **Sonnet** (`claude` default) | General-purpose tasks |
+
+```bash
+# Planning session (Opus for deep reasoning)
+claude --model opus
+> /planning my-feature
+
+# Execution session (Sonnet for focused implementation)
+claude
+> /execute requests/my-feature-plan.md
+```
+
+See `reference/multi-model-strategy.md` for the full cost optimization guide.
+
+---
+
+## Learning Path: Trust Progression
+
+Don't try everything at once. The system unlocks capabilities progressively — each tier amplifies both good patterns and bad ones.
+
+```mermaid
+graph TD
+    M["Manual Prompts<br/><i>Start here</i>"] --> CMD["Slash Commands<br/>/prime, /planning, /execute"]
+    CMD --> CHAIN["Chained Workflows<br/>/end-to-end-feature"]
+    CHAIN --> SUB["Subagents<br/>Parallel research + review"]
+    SUB --> TEAM["Agent Teams<br/>Coordinated multi-agent"]
+    TEAM --> WT["Worktrees + Parallel<br/>Multi-branch development"]
+    WT --> REMOTE["Remote Automation<br/>GitHub Actions"]
+
+    style M fill:#85c1e9,color:#000
+    style CMD fill:#5dade2,color:#fff
+    style CHAIN fill:#3498db,color:#fff
+    style SUB fill:#2e86c1,color:#fff
+    style TEAM fill:#2874a6,color:#fff
+    style WT fill:#21618c,color:#fff
+    style REMOTE fill:#1b4f72,color:#fff
+```
+
+- **Manual Prompts** — Use Claude Code with good prompts. Understand the base tool before adding structure.
+- **Slash Commands** — Structured reusable prompts. Master the core cycle: `/prime` → `/planning` → `/execute` → `/commit`.
+- **Chained Workflows** — `/end-to-end-feature` chains the full PIV Loop autonomously. Only use after individual commands are trusted.
+- **Subagents** — Parallel research (5-10 agents) and code review (4 agents). Results flow one-way back to the main agent.
+- **Agent Teams** — Two-way communication between Claude instances. Contract-first spawning ensures parallel agents build against verified interfaces.
+- **Worktrees + Parallel** — Git isolation for independent features across multiple instances. `/parallel-e2e` runs multiple features simultaneously.
+- **Remote Automation** — GitHub Actions with AI-assisted issue resolution. `@claude-fix` on any issue triggers autonomous investigation and fix.
+
+**When to move up:** Prove the current tier works reliably across 5+ features before advancing. See `reference/system-foundations.md` for the full trust model.
+
+---
+
+## Validation: The 5-Level Pyramid
+
+Validation isn't an afterthought — it's the third pillar of the PIV Loop. A 5-level gated pyramid catches problems from syntax errors to architectural violations.
+
+```mermaid
+graph TD
+    L1["Level 1: Syntax & Style<br/><i>Linting, formatting</i>"] --> L2["Level 2: Type Safety<br/><i>Type checking</i>"]
+    L2 --> L3["Level 3: Unit Tests<br/><i>Isolated logic</i>"]
+    L3 --> L4["Level 4: Integration Tests<br/><i>System behavior</i>"]
+    L4 --> L5["Level 5: Human Review<br/><i>Alignment with intent</i>"]
+
+    style L1 fill:#27ae60,color:#fff
+    style L2 fill:#2ecc71,color:#fff
+    style L3 fill:#f39c12,color:#fff
+    style L4 fill:#e67e22,color:#fff
+    style L5 fill:#e74c3c,color:#fff
+```
+
+**Each level gates the next.** Don't run expensive integration tests when a linting error would catch the issue in seconds. Don't request human review until automated checks pass clean.
+
+**Parallel Code Review.** `/code-review` launches 4 specialized Haiku agents simultaneously — type safety, security, architecture, and performance — each focused on one concern with its entire context window:
+
+```mermaid
+graph LR
+    MAIN["Main Agent"] --> TS["Type Safety"]
+    MAIN --> SEC["Security"]
+    MAIN --> ARCH["Architecture"]
+    MAIN --> PERF["Performance"]
+    TS --> REPORT["Unified Report"]
+    SEC --> REPORT
+    ARCH --> REPORT
+    PERF --> REPORT
+
+    style MAIN fill:#7b68ee,color:#fff
+    style TS fill:#3498db,color:#fff
+    style SEC fill:#e74c3c,color:#fff
+    style ARCH fill:#f39c12,color:#fff
+    style PERF fill:#e67e22,color:#fff
+    style REPORT fill:#27ae60,color:#fff
+```
+
+40-50% faster than sequential review at ~40% the cost of a single Sonnet agent. Each agent catches issues a general reviewer might miss.
+
+**System evolution insight.** When validation catches an issue, don't just fix the code — fix the system that allowed the bug. Update the command, template, or rule that let it through. One-off fixes solve today; system updates solve forever. See `reference/validation-discipline.md` for the full methodology.
 
 ---
 
@@ -178,6 +358,10 @@ The system manages context tokens carefully:
    > /commit
    ```
 
+### What Happens Next?
+
+Each feature gets its own PIV loop. Small loops, built completely before moving on. Plan, implement, validate, iterate — then start the next feature. The system compounds: lessons from each loop feed into `memory.md`, informing future plans.
+
 ### First Time?
 Start with `/prime` to load context, then try `/planning` on a small feature. Read `reference/file-structure.md` for a full map of everything included.
 
@@ -205,36 +389,11 @@ Then run `/init-c` to customize `CLAUDE.md` for your project's tech stack.
 
 ---
 
-## Model Strategy
-
-The system separates thinking from doing. Use the right model for each phase:
-
-| Phase | Recommended Model | Why |
-|-------|-------------------|-----|
-| `/planning` | **Opus** (`claude --model opus`) | Deep reasoning produces better plans |
-| `/execute` | **Sonnet** (`claude` default) | Balanced — follows plans well at lower cost |
-| `/code-review` | **Haiku** (via subagents) | Pattern matching at a fraction of the cost |
-| `/commit`, `/prime` | **Sonnet** (`claude` default) | General-purpose tasks |
-
-```bash
-# Planning session (Opus for deep reasoning)
-claude --model opus
-> /planning my-feature
-
-# Execution session (Sonnet for focused implementation)
-claude
-> /execute requests/my-feature-plan.md
-```
-
-See `reference/multi-model-strategy.md` for the full cost optimization guide.
-
----
-
 ## All 21 Slash Commands
 
-### Core Workflow
+21 slash commands automate every phase. The core 6 cover 90% of daily development — expand below for advanced workflows and utilities.
 
-These six commands cover 90% of daily development:
+### Core Workflow
 
 | Command | What It Does | When to Use |
 |---------|-------------|-------------|
@@ -245,9 +404,8 @@ These six commands cover 90% of daily development:
 | `/code-review` | Runs 4 parallel review agents (type safety, security, architecture, performance) | After implementation |
 | `/code-review-fix` | Applies fixes from code review findings | After code review surfaces issues |
 
-### Advanced Workflows
-
-For parallel development, multi-agent builds, and automation:
+<details>
+<summary>Advanced Workflows (5 commands)</summary>
 
 | Command | What It Does | When to Use |
 |---------|-------------|-------------|
@@ -257,7 +415,10 @@ For parallel development, multi-agent builds, and automation:
 | `/merge-worktrees` | Merges worktree branches back with validation gates | After parallel implementation |
 | `/parallel-e2e` | Runs multiple end-to-end features in parallel via worktrees | Batch feature development |
 
-### Utilities
+</details>
+
+<details>
+<summary>Utilities (10 commands)</summary>
 
 | Command | What It Does | When to Use |
 |---------|-------------|-------------|
@@ -272,11 +433,18 @@ For parallel development, multi-agent builds, and automation:
 | `/setup-github-automation` | Full GitHub Actions and secrets configuration | First-time GitHub automation setup |
 | `/quick-github-setup` | Streamlined GitHub automation using existing scripts | Fast GitHub setup |
 
+</details>
+
 ---
 
 ## 12 Subagents
 
-Pre-installed in `.claude/agents/`, organized by purpose. Each agent runs in isolation with its own context window, so expensive research doesn't pollute your implementation context.
+12 subagents run in isolation with their own context windows. Research agents explore in parallel. Code review agents check 4 dimensions simultaneously. Specialist agents bring domain expertise.
+
+Each agent is a markdown file with a system prompt in `.claude/agents/`. The main agent delegates via the Task tool, and agents return structured results without polluting your implementation context.
+
+<details>
+<summary>All 12 agents — Research, Code Review, Utility, Specialist</summary>
 
 ### Research Agents
 
@@ -305,8 +473,6 @@ These four run in parallel during `/code-review`, each checking a different dime
 
 ### Specialist Agents
 
-Deeper expertise for domain-specific tasks:
-
 | Agent | Model | Purpose |
 |-------|-------|---------|
 | `specialist-devops` | Sonnet | CI/CD pipelines, Docker, IaC, monitoring, deployments |
@@ -314,13 +480,16 @@ Deeper expertise for domain-specific tasks:
 | `specialist-copywriter` | Sonnet | UI copy, microcopy, error messages, UX writing |
 | `specialist-tech-writer` | Sonnet | API docs, READMEs, changelogs, architecture documentation |
 
+</details>
+
 See `reference/subagents-overview.md` for creating your own agents.
 
 ---
 
-## 5 Cloud Skills
+## System Components
 
-Cloud skills extend the system with MCP-powered capabilities:
+<details>
+<summary>5 Cloud Skills</summary>
 
 | Skill | Purpose |
 |-------|---------|
@@ -330,11 +499,10 @@ Cloud skills extend the system with MCP-powered capabilities:
 | `parallel-implementation` | End-to-end parallel development via worktrees and headless instances |
 | `github-automation` | GitHub Actions setup, CodeRabbit integration, workflow configuration |
 
----
+</details>
 
-## 19 Templates
-
-Reusable templates for every artifact the system produces:
+<details>
+<summary>19 Templates</summary>
 
 ### Planning & Requirements
 | Template | Purpose |
@@ -371,11 +539,10 @@ Reusable templates for every artifact the system produces:
 | `IMPLEMENTATION-PROMPT.md` | Implementation work prompt |
 | `TEAM-SPAWN-PROMPTS.md` | Agent Teams coordination prompts |
 
----
+</details>
 
-## 26 Reference Guides
-
-Deep documentation loaded on-demand — never wasting context tokens until you need them:
+<details>
+<summary>26 Reference Guides</summary>
 
 ### Core Methodology
 | Guide | What It Covers |
@@ -423,11 +590,13 @@ Deep documentation loaded on-demand — never wasting context tokens until you n
 | `remote-system-guide.md` | Remote system setup and deployment |
 | `remote-agentic-system.md` | Remote AI coding system design |
 
+</details>
+
 ---
 
 ## Agent Teams
 
-For features too complex for a single Claude instance, Agent Teams coordinates multiple instances with **contract-first spawning** — upstream agents publish interfaces before downstream agents start building.
+For features too complex for a single Claude instance, Agent Teams coordinates multiple instances with **contract-first spawning** — upstream agents publish interfaces before downstream agents start building, ensuring parallel agents build against verified contracts instead of assumptions.
 
 ```bash
 # Plan the feature (Opus recommended for deep reasoning)
@@ -452,11 +621,14 @@ The system handles team sizing, task decomposition, spawn prompts, and WSL+tmux 
 | `coderabbit-approval-notify.yml` | CodeRabbit approves a PR | Notifies when automated review passes |
 | `coderabbit-auto-merge.yml` | CodeRabbit submits review | Auto-merges PRs that pass automated review |
 
-### 8 Workflow Prompt Templates
+<details>
+<summary>8 Workflow Prompt Templates</summary>
 
 Pre-built prompts in `.github/workflows/prompts/` that give GitHub Actions Claude instances the same structured methodology:
 
 `prime-github.md` | `plan-feature-github.md` | `execute-github.md` | `rca-github.md` | `implement-fix-github.md` | `bug-fix-github.md` | `code-review-github.md` | `end-to-end-feature-github.md`
+
+</details>
 
 ### Setup
 
@@ -466,33 +638,6 @@ Pre-built prompts in `.github/workflows/prompts/` that give GitHub Actions Claud
 4. Optionally configure `.coderabbit.yaml` for automated PR reviews
 
 See `reference/github-integration.md` for the full setup guide, or run `/setup-github-automation` for automated configuration.
-
----
-
-## Context Engineering: The 4 Pillars
-
-Every structured plan is built on four pillars that ensure the AI has exactly what it needs:
-
-| Pillar | What It Provides | Plan Section |
-|--------|-----------------|-------------|
-| **Memory** | Past decisions and gotchas from `memory.md` | Related Memories |
-| **RAG** | External docs, library references, codebase patterns | Relevant Documentation, Patterns to Follow |
-| **Prompt Engineering** | Explicit decisions, step-by-step detail, reduced ambiguity | Solution Statement, Implementation Plan |
-| **Task Management** | Atomic tasks with files, actions, and validation criteria | Step-by-Step Tasks |
-
-The balance matters. Too little context and the AI guesses wrong. Too much and it loses focus. The structured plan template (`templates/STRUCTURED-PLAN-TEMPLATE.md`) enforces this balance by mapping each pillar to specific sections.
-
----
-
-## Core Principles
-
-| Principle | What It Means |
-|-----------|-------------|
-| **YAGNI** | Only implement what's needed right now. No speculative features. |
-| **KISS** | Prefer simple, readable solutions over clever abstractions. |
-| **DRY** | Extract common patterns, but don't over-abstract. |
-| **Limit AI Assumptions** | Be explicit in plans and prompts. Less guessing = better output. |
-| **Always Be Priming (ABP)** | Start every session with `/prime`. Context is everything. |
 
 ---
 
