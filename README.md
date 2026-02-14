@@ -322,6 +322,20 @@ My-Coding-System/
 
 ---
 
+## Recent Changes: System Integrity Audit
+
+A 4-phase system integrity audit was completed to fix structural inconsistencies, dead references, and documentation gaps across the entire system. All changes are tracked in `requests/system-integrity-audit-plan-*.md`.
+
+**Phase 1 — Critical Fixes**: Removed dead `_examples/` references from agents and commands, fixed broken cross-references in `file-structure.md` and auto-memory, corrected the agents directory listing.
+
+**Phase 2 — Structural Alignment**: Renumbered `sections/15_archon_workflow.md` to `sections/06_archon_workflow.md` for continuous numbering (01-06), updated all cross-references, expanded the CLAUDE.md on-demand guide table from 11 to 15 entries, and added the `/init-c` alignment note clarifying methodology sections (01-06) vs application sections (01-10).
+
+**Phase 3 — Template & Agent Fixes**: Linked 3 orphaned templates (`SKILL-TEMPLATE`, `BASELINE-ASSESSMENT-TEMPLATE`, `META-REASONING-CHECKLIST`) from their relevant reference guides, added acceptance criteria to `SUB-PLAN-TEMPLATE`, created bidirectional links between `VALIDATION-PROMPT` and `VALIDATION-REPORT-TEMPLATE`, replaced hard-coded line numbers in the agents README with section references, and added tool access and cost context notes.
+
+**Phase 4 — Documentation Polish**: Operationalized the 4 Context Engineering pillars with a concrete pillar-to-plan-section mapping table, reconciled Archon language to conditional ("when available") throughout, added the 5-level validation pyramid reference to the PIV Loop section, clarified `memory.md` update timing to include mid-planning decisions, and linked section 02 back to section 03 for pillar details.
+
+---
+
 ## Token Budget
 
 The system manages tokens carefully to maximize context window for actual work:
