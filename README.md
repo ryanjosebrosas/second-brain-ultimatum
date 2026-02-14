@@ -73,7 +73,7 @@ graph TD
 
 1. **Clone** this repo into your project (or fork it):
    ```bash
-   git clone https://github.com/your-username/my-coding-system.git
+   git clone https://github.com/ryanjosebrosas/my-coding-system-claude.git
    cd my-coding-system
    ```
 
@@ -215,14 +215,7 @@ See `reference/agent-teams-overview.md` for the full architecture guide.
 
 ## Subagents
 
-8 example subagents are included in `.claude/agents/_examples/`. Copy them to `.claude/agents/` to activate:
-
-```bash
-# Activate all example agents
-cp .claude/agents/_examples/*.md .claude/agents/
-# Remove the README (not an agent)
-rm .claude/agents/README.md
-```
+12 agents are pre-installed in `.claude/agents/` across 4 categories:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
@@ -234,6 +227,10 @@ rm .claude/agents/README.md
 | code-review-performance | Haiku | Performance issue detection |
 | plan-validator | Haiku | Plan structure validation |
 | test-generator | Haiku | Test case suggestions |
+| specialist-devops | Sonnet | CI/CD, Docker, IaC, deployments |
+| specialist-data | Sonnet | DB design, migrations, queries |
+| specialist-copywriter | Sonnet | UI copy, error messages, UX writing |
+| specialist-tech-writer | Sonnet | API docs, READMEs, changelogs |
 
 See `reference/subagents-overview.md` for creating your own agents.
 
@@ -286,7 +283,7 @@ My-Coding-System/
 ├── requests/              # Feature plans (gitignored, per PIV loop)
 ├── .claude/commands/      # Slash commands (21 commands)
 ├── .claude/skills/        # Cloud skills (5 skills)
-├── .claude/agents/        # Custom subagents (8 examples included)
+├── .claude/agents/        # Custom subagents (12 agents, pre-installed)
 └── .github/workflows/     # GitHub Action workflows
 ```
 
@@ -307,7 +304,11 @@ My-Coding-System/
 | Guide | Load when... |
 |-------|-------------|
 | `reference/layer1-guide.md` | Setting up CLAUDE.md for a new project |
+| `reference/system-foundations.md` | Learning system mental models |
+| `reference/piv-loop-practice.md` | PIV Loop practical application |
+| `reference/planning-methodology-guide.md` | 6-phase planning methodology |
 | `reference/validation-strategy.md` | Planning or running validation |
+| `reference/validation-discipline.md` | 5-level validation pyramid |
 | `reference/file-structure.md` | Looking up where files belong |
 | `reference/command-design-overview.md` | Designing or modifying slash commands |
 | `reference/github-integration.md` | Setting up GitHub Actions or CodeRabbit |
