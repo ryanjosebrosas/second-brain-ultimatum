@@ -44,16 +44,27 @@ Every feature follows the same cycle: **Plan**, **Implement**, **Validate**, the
 ```mermaid
 graph LR
     subgraph "PIV Loop"
-        P["PLAN<br/>/planning"] --> I["IMPLEMENT<br/>/execute"]
-        I --> V["VALIDATE<br/>/code-review"]
-        V -->|"Issues?"| P
-        V -->|"Pass"| C["/commit"]
+        direction LR
+        P["🎯 PLAN<br/>/planning<br/><i>Opus recommended</i>"]
+        I["⚡ IMPLEMENT<br/>/execute<br/><i>Sonnet recommended</i>"]
+        V["✅ VALIDATE<br/>/code-review<br/><i>4 Haiku agents</i>"]
+        C["📦 COMMIT<br/>/commit"]
+
+        P --> I --> V
+        V -->|"Issues found"| FIX["/code-review-fix"]
+        FIX --> V
+        V -->|"All clear"| C
     end
 
-    P -.->|"produces"| PLAN["requests/feature-plan.md"]
-    PLAN -.->|"feeds"| I
-    V -.->|"if issues"| FIX["/code-review-fix"]
-    FIX -.-> V
+    VIBE["💬 Vibe Planning<br/>conversation"] -->|"distill"| P
+    P -->|"produces"| PLAN["📄 requests/<br/>feature-plan.md"]
+    PLAN -->|"fresh session"| I
+    C -->|"iterate"| NEXT["Next PIV Loop"]
+
+    style P fill:#4a90d9,color:#fff
+    style I fill:#7b68ee,color:#fff
+    style V fill:#e67e22,color:#fff
+    style C fill:#27ae60,color:#fff
 ```
 
 **Plan** — Start with a vibe planning conversation, then distill it into a structured plan document (500-700 lines of context-rich implementation instructions). The plan captures everything the AI needs: architecture decisions, file paths, code patterns, gotchas, and step-by-step tasks.
@@ -72,20 +83,44 @@ Context is organized in layers. Auto-loaded context stays minimal so the AI has 
 
 ```mermaid
 graph TD
-    CLAUDE["CLAUDE.md<br/>~2K tokens auto-loaded"] --> S["sections/<br/>6 core rules"]
-    CLAUDE -.->|"on-demand"| R["reference/<br/>26 deep guides"]
-    CLAUDE -.->|"on-demand"| T["templates/<br/>19 templates"]
+    subgraph "Auto-Loaded Context (~2K tokens)"
+        CLAUDE["📋 CLAUDE.md"] --> S["sections/<br/>6 core rules"]
+    end
 
-    CMD[".claude/commands/<br/>21 slash commands"] -->|"reads"| T
-    CMD -->|"produces"| REQ["requests/<br/>feature plans"]
+    subgraph "On-Demand Context (loaded when needed)"
+        R["📚 reference/<br/>26 deep guides"]
+        T["📝 templates/<br/>19 templates"]
+    end
 
-    SK[".claude/skills/<br/>5 cloud skills"] -.->|"loads"| R
+    subgraph "Automation Layer"
+        CMD["⚙️ .claude/commands/<br/>21 slash commands"]
+        AG["🤖 .claude/agents/<br/>12 subagents"]
+        SK["☁️ .claude/skills/<br/>5 cloud skills"]
+    end
 
-    MEM["memory.md<br/>cross-session context"] -.-> CMD
-    ARCHON["Archon MCP<br/>(optional) task mgmt + RAG"] -.-> CMD
+    subgraph "External Integrations"
+        MEM["🧠 memory.md<br/>cross-session context"]
+        ARCHON["🗄️ Archon MCP<br/>(optional)<br/>tasks + RAG"]
+        GH["🔄 GitHub Actions<br/>3 workflows<br/>8 prompt templates"]
+    end
 
-    REQ -->|"/execute"| IMPL["Implementation"]
-    IMPL -->|"/commit"| GIT["Git Save Points"]
+    CLAUDE -.->|"on-demand"| R
+    CLAUDE -.->|"on-demand"| T
+    CMD -->|"reads"| T
+    CMD -->|"spawns"| AG
+    SK -.->|"loads"| R
+    MEM -.-> CMD
+    ARCHON -.-> CMD
+    CMD -->|"produces"| REQ["📄 requests/<br/>feature plans"]
+    REQ -->|"/execute"| IMPL["⚡ Implementation"]
+    IMPL -->|"/code-review"| AG
+    IMPL -->|"/commit"| GIT["📦 Git Save Points"]
+    GIT -->|"push"| GH
+
+    style CLAUDE fill:#4a90d9,color:#fff
+    style CMD fill:#7b68ee,color:#fff
+    style AG fill:#e67e22,color:#fff
+    style IMPL fill:#27ae60,color:#fff
 ```
 
 ### Token Budget
