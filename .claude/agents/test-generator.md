@@ -1,7 +1,7 @@
 ---
 name: test-generator
-description: Use this agent to analyze changed code and suggest test cases following the project's existing test patterns. Identifies untested functions, edge cases, and missing coverage. Cost-optimized with Haiku for fast analysis.
-model: haiku
+description: Use this agent to analyze changed code and suggest test cases following the project's existing test patterns. Identifies untested functions, edge cases, and missing coverage.
+model: sonnet
 instance: cz
 tools: ["Read", "Glob", "Grep"]
 ---

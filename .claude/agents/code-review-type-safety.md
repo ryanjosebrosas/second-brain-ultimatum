@@ -1,7 +1,7 @@
 ---
 name: code-review-type-safety
 description: Reviews code for type safety violations, missing type hints, and type checking errors
-model: haiku
+model: sonnet
 instance: cz
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---

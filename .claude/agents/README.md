@@ -12,13 +12,13 @@ These agents handle **parallel research** — exploring your codebase and extern
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| **research-codebase** | Haiku | Read, Glob, Grep | File discovery, pattern extraction, codebase exploration |
+| **research-codebase** | Sonnet | Read, Glob, Grep | File discovery, pattern extraction, codebase exploration |
 | **research-external** | Sonnet | Read, Glob, Grep, WebSearch, WebFetch | Documentation search, best practices, version compatibility |
 
 ### When to Use
 
-- **research-codebase** (Haiku): Parallel codebase exploration during planning, finding files and patterns, extracting code examples with line numbers. Read-only tools keep it safe. Cost-optimized for high-volume exploration.
-- **research-external** (Sonnet): Documentation search, best practices research, version compatibility checks, migration guides. Higher quality model for synthesis tasks that require judgment.
+- **research-codebase** (Sonnet): Parallel codebase exploration during planning, finding files and patterns, extracting code examples with line numbers. Read-only tools keep it safe.
+- **research-external** (Sonnet): Documentation search, best practices research, version compatibility checks, migration guides.
 
 ### Usage Examples
 
@@ -30,16 +30,9 @@ Use the research-codebase agent to find all authentication-related files and pat
 Use the research-external agent to find the React 19 migration guide and breaking changes.
 ```
 
-### Cost Optimization
+### Model Selection
 
-Research agents use **cost-optimized model selection**:
-
-| Agent | Model | Why |
-|-------|-------|-----|
-| **research-codebase** | Haiku | Non-critical: Phase 3b validation catches errors |
-| **research-external** | Sonnet | Synthesis quality needed; validation catches errors |
-
-**Philosophy**: Research is non-critical — wrong results get caught by Phase 3b research validation. Haiku handles codebase exploration (pattern matching), Sonnet handles external research (synthesis).
+Both research agents use **Sonnet** for consistent quality across codebase and external research.
 
 ### Parallel Research in /planning
 
@@ -47,9 +40,9 @@ When custom research agents are activated, the `/planning` command can launch **
 
 ```text
 Main Agent (Sonnet)
-  |-> research-codebase #1 (Haiku) --- "auth patterns middleware"
-  |-> research-codebase #2 (Haiku) --- "session model schema"
-  |-> research-codebase #3 (Haiku) --- "auth test fixtures"
+  |-> research-codebase #1 (Sonnet) --- "auth patterns middleware"
+  |-> research-codebase #2 (Sonnet) --- "session model schema"
+  |-> research-codebase #3 (Sonnet) --- "auth test fixtures"
   |-> research-external #1 (Sonnet) -- "JWT token refresh"
   |-> research-external #2 (Sonnet) -- "bcrypt password hashing"
   |-> research-external #3 (Sonnet) -- "OAuth2 PKCE flow"
@@ -58,7 +51,6 @@ Main Agent combines findings into unified research report
 ```
 
 **Speed improvement**: 3-5x faster than 2-agent standard mode for complex features.
-**Cost optimization**: Haiku model for codebase exploration = maximum savings.
 
 **Scale guideline**:
 - Simple features (Low complexity): 2-4 agents total
@@ -104,20 +96,7 @@ Instead of one agent reviewing everything sequentially, these four agents work *
 
 ## Model Selection
 
-These agents use **smart model selection** based on task type:
-
-| Agent | Model | Why |
-|-------|-------|-----|
-| **Type Safety** | Haiku | Pattern matching — type checks follow known rules |
-| **Security** | Haiku | Pattern matching — OWASP checks, secret scanning patterns |
-| **Architecture** | Haiku | Pattern matching — convention compliance, layer checks |
-| **Performance** | Haiku | Pattern matching — N+1 detection, complexity analysis |
-
-**Philosophy**:
-All review agents use Haiku. Code review is fundamentally pattern matching
-against documented standards — Haiku benchmarks at 90%+ quality for this task type
-(Qodo: 6.55/10 vs Sonnet 6.20/10). The cost savings are significant: 4 Haiku agents
-cost ~40% of 1 Sonnet doing sequential review.
+All code review agents use **Sonnet** for higher quality analysis across all review dimensions.
 
 ## How to Use
 
@@ -237,8 +216,8 @@ and suggesting test cases for changed code.
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| **plan-validator** | Haiku | Read, Glob, Grep | Validates plan structure before /execute |
-| **test-generator** | Haiku | Read, Glob, Grep | Suggests test cases from changed code |
+| **plan-validator** | Sonnet | Read, Glob, Grep | Validates plan structure before /execute |
+| **test-generator** | Sonnet | Read, Glob, Grep | Suggests test cases from changed code |
 
 ### When to Use
 
@@ -257,10 +236,7 @@ Use the test-generator agent to suggest tests for the files changed in the last 
 
 ### Model Selection
 
-| Agent | Model | Why |
-|-------|-------|-----|
-| **plan-validator** | Haiku | Advisory — structural validation is pattern matching |
-| **test-generator** | Haiku | Advisory — test suggestions follow existing patterns |
+Both utility agents use **Sonnet** for consistent quality.
 
 ### Activation
 
@@ -302,7 +278,7 @@ Default to research mode when intent is ambiguous (safest).
 
 ### Model Selection
 
-All specialist agents use **Sonnet** (not Haiku). Multi-modal operation requires synthesis and judgment — these agents must understand methodology context AND apply domain expertise simultaneously. Unlike code review agents (pattern matching → Haiku), specialist agents make nuanced decisions about approach and priorities.
+All specialist agents use **Sonnet**. Multi-modal operation requires synthesis and judgment — these agents must understand methodology context AND apply domain expertise simultaneously.
 
 ### Usage Examples
 
@@ -315,15 +291,9 @@ Use the specialist-tech-writer agent to review the README for completeness.
 
 ---
 
-## Model Cost Comparison
+## Model Summary
 
-| Agent Type | Count | Model | Approx. Cost per Run |
-|-----------|-------|-------|---------------------|
-| Code review (4 agents parallel) | 4 | Haiku | ~$0.16 total |
-| Research (2 agents parallel) | 2 | Haiku + Sonnet | ~$0.44 total |
-| Utility (1-2 agents) | 2 | Haiku | ~$0.08 total |
-| Specialist (4 agents) | 4 | Sonnet | ~$1.20 total |
-| **Total (all 12)** | **12** | **7 Haiku + 5 Sonnet** | **~$1.88** |
+All 12 agents use **Sonnet** for consistent, high-quality output across all categories.
 
 > **Typical usage**: Running all 12 agents simultaneously is rare. Most sessions use
-> 2-4 agents per command (~$0.08-0.44). Full parallel review is ~$0.16.
+> 2-4 agents per command.

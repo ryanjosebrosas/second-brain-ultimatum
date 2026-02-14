@@ -1,7 +1,7 @@
 ---
 name: code-review-security
 description: Reviews code for security vulnerabilities including SQL injection, XSS, exposed secrets, and insecure data handling
-model: haiku
+model: sonnet
 instance: cz
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---
