@@ -162,7 +162,7 @@ gh pr create \
 - Manual verification complete
 
 See \`docs/rca/issue-$ISSUE_NUMBER.md\` for detailed analysis." \
-  --base main \
+  --base master \
   --head $BRANCH_NAME
 ```
 

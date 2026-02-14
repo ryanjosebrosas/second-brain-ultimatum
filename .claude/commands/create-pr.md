@@ -74,7 +74,7 @@ Create a PR following this structure:
 Closes #<issue-number> (if applicable)
 Fixes #<issue-number> (if applicable)
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
 ### Step 3: Push Branch (if needed)

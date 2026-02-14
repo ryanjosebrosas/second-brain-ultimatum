@@ -200,7 +200,7 @@ Fixes #$ISSUE_NUMBER
 See \`docs/rca/issue-$ISSUE_NUMBER.md\` for detailed analysis.
 EOF
 )" \
-  --base main \
+  --base master \
   --head $BRANCH_NAME
 ```
 

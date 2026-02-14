@@ -1,7 +1,7 @@
 ---
 description: Parallel end-to-end development for multiple features using worktrees
 argument-hint: feature A | feature B | feature C (pipe-separated, 2-10 features)
-allowed-tools: Bash(git:*), Bash(claude:*), Bash(jq:*), Bash(cd:*), Bash(cp:*), Bash(mkdir:*), Bash(wait:*), Bash(kill:*), Bash(cat:*), Bash(sleep:*), Bash(uv:*), Bash(curl:*), Bash(echo:*), Bash(wc:*), Bash(gh:*), Read, Task, AskUserQuestion, mcp__archon-local__manage_project, mcp__archon-local__manage_task, mcp__archon-local__find_tasks, mcp__archon-local__find_projects
+allowed-tools: Bash(git:*), Bash(claude:*), Bash(jq:*), Bash(cd:*), Bash(cp:*), Bash(mkdir:*), Bash(wait:*), Bash(kill:*), Bash(cat:*), Bash(sleep:*), Bash(uv:*), Bash(curl:*), Bash(echo:*), Bash(wc:*), Bash(gh:*), Read, Task, AskUserQuestion, mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects
 ---
 
 # Parallel End-to-End Feature Development

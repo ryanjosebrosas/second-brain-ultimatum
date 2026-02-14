@@ -113,7 +113,7 @@ reviews:
     - "!**/*.md"  # Skip markdown files
 ```
 
-For the full template, see `templates/.coderabbit.yaml` or copy the existing `.coderabbit.yaml` from this project.
+For the full template, copy the `.coderabbit.yaml` from the project root.
 
 ---
 

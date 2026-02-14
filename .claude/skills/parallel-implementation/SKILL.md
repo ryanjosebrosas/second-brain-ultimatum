@@ -7,6 +7,7 @@ description: >-
   Use when developing multiple independent features simultaneously, especially
   with vertical slice architecture. Requires proven /end-to-end-feature,
   /new-worktree, and /merge-worktrees commands.
+allowed-tools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit", "Task"]
 ---
 
 # Parallel Implementation — End-to-End Pipeline

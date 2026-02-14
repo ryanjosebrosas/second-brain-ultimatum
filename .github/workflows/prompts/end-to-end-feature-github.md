@@ -162,7 +162,7 @@ See \`.agents/plans/{feature-name}.md\` for detailed implementation plan.
 Closes #$ISSUE_NUMBER
 EOF
 )" \
-  --base main \
+  --base master \
   --head $BRANCH_NAME
 ```
 

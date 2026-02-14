@@ -154,7 +154,8 @@ if [ ! -f .coderabbit.yaml ]; then
   echo "📝 Creating .coderabbit.yaml configuration..."
 
   # Copy from template
-  cp templates/.coderabbit.yaml .coderabbit.yaml
+  # .coderabbit.yaml should already exist in the project root from /init-c setup.
+  # If missing, create one manually — see .coderabbit.yaml in My Coding System repo for reference.
 
   git add .coderabbit.yaml
   git commit -m "chore: add CodeRabbit configuration"

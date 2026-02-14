@@ -6,6 +6,7 @@ description: >-
   multiple Claude Code instances, and safely merging with validation gates. Use when
   implementing multiple features simultaneously or when the user mentions worktrees,
   parallel implementation, or multi-branch development.
+allowed-tools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit", "Task"]
 ---
 
 # Worktree Management — Parallel Feature Implementation

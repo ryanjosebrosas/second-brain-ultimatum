@@ -6,6 +6,7 @@ description: >-
   review-fix loops, and prompt template adaptation. Use when setting up GitHub
   automation for a new project, configuring CodeRabbit, or creating GitHub
   Action workflows for Claude Code.
+allowed-tools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"]
 ---
 
 # GitHub Automation — AI-Assisted Development Workflows
