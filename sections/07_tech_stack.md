@@ -1,0 +1,14 @@
+- **Language**: Python 3.11+ (type hints, `str | None` syntax)
+- **Framework**: Pydantic AI (agent framework with typed deps + structured output)
+- **Memory**: Mem0 (`mem0ai`) — semantic memory with auto fact extraction
+  - Cloud: `MemoryClient` (primary), Local: `Memory.from_config` (fallback)
+  - Requires `OPENAI_API_KEY` for embeddings (`text-embedding-3-small`)
+- **Storage**: Supabase (`supabase-py`) — structured data + pgvector
+- **LLM Primary**: Anthropic Claude via `pydantic-ai[anthropic]`
+- **LLM Fallback**: Ollama via `OpenAIChatModel` + `OllamaProvider`
+- **MCP Server**: FastMCP (`fastmcp`) — expose agents as Claude Code tools
+- **CLI**: Click — command-line interface
+- **Config**: Pydantic Settings — `.env` file loading
+- **Testing**: pytest + pytest-asyncio (`asyncio_mode = "auto"`)
+- **Package Manager**: pip with `pyproject.toml` (PEP 621)
+- **Build**: setuptools with `src/` layout
