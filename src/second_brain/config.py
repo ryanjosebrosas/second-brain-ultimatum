@@ -1,6 +1,4 @@
 from pathlib import Path
-from typing import Optional
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -28,7 +26,7 @@ class BrainConfig(BaseSettings):
     )
 
     # Mem0
-    mem0_api_key: Optional[str] = Field(
+    mem0_api_key: str | None = Field(
         default=None,
         description="Mem0 Cloud API key (None = use local)",
     )
