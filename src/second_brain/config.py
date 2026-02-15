@@ -54,6 +54,21 @@ class BrainConfig(BaseSettings):
         repr=False,
     )
 
+    # Graphiti (independent of Mem0 graph)
+    graphiti_enabled: bool = Field(
+        default=False,
+        description="Enable Graphiti knowledge graph (runs alongside Mem0 graph)",
+    )
+    falkordb_url: str | None = Field(
+        default=None,
+        description="FalkorDB connection URL (e.g., falkor://localhost:6379). Used as Graphiti fallback.",
+    )
+    falkordb_password: str | None = Field(
+        default=None,
+        description="FalkorDB password",
+        repr=False,
+    )
+
     # Supabase
     supabase_url: str = Field(..., description="Supabase project URL")
     supabase_key: str = Field(..., description="Supabase anon key", repr=False)
@@ -132,6 +147,13 @@ class BrainConfig(BaseSettings):
             if missing:
                 raise ValueError(
                     f"graph_provider='graphiti' requires: {', '.join(missing)}"
+                )
+        # Graphiti independent validation
+        if self.graphiti_enabled:
+            if not self.neo4j_url and not self.falkordb_url:
+                raise ValueError(
+                    "graphiti_enabled=True requires at least one of: "
+                    "NEO4J_URL or FALKORDB_URL"
                 )
         return self
 

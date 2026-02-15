@@ -43,7 +43,17 @@ def create_deps(config: BrainConfig | None = None) -> BrainDeps:
         config = BrainConfig()
 
     graphiti = None
-    if config.graph_provider == "graphiti":
+    # New path: graphiti_enabled flag (independent of Mem0 graph)
+    if config.graphiti_enabled:
+        try:
+            from second_brain.services.graphiti import GraphitiService
+            graphiti = GraphitiService(config)
+        except ImportError:
+            logger.warning(
+                "graphiti-core not installed. Install with: pip install -e '.[graphiti]'"
+            )
+    # Legacy path: graph_provider="graphiti" (backwards compat)
+    elif config.graph_provider == "graphiti":
         try:
             from second_brain.services.graphiti import GraphitiService
             graphiti = GraphitiService(config)
