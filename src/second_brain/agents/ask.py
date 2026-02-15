@@ -42,11 +42,23 @@ async def load_brain_context(ctx: RunContext[BrainDeps]) -> str:
 async def find_relevant_patterns(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
-    """Find patterns relevant to the current question."""
+    """Find patterns relevant to the current question using semantic search."""
+    # Semantic memory search (general)
     result = await ctx.deps.memory_service.search(query)
-    patterns = await ctx.deps.storage_service.get_patterns()
 
-    # Collect relations
+    # Semantic pattern search (filtered to patterns)
+    pattern_memories = []
+    try:
+        pattern_result = await ctx.deps.memory_service.search_with_filters(
+            query,
+            metadata_filters={"category": "pattern"},
+            limit=10,
+        )
+        pattern_memories = pattern_result.memories
+    except Exception:
+        logger.debug("Semantic pattern search failed in ask_agent")
+
+    # Collect graph relations
     relations = result.relations
     if ctx.deps.graphiti_service:
         try:
@@ -60,6 +72,13 @@ async def find_relevant_patterns(
         memory = r.get("memory", r.get("result", ""))
         formatted.append(f"- {memory}")
 
+    if pattern_memories:
+        formatted.append("\n## Semantically Matched Patterns")
+        for m in pattern_memories:
+            memory = m.get("memory", m.get("result", ""))
+            score = m.get("score", 0)
+            formatted.append(f"- [{score:.2f}] {memory}")
+
     if relations:
         formatted.append("\n## Graph Relationships")
         for rel in relations:
@@ -67,11 +86,16 @@ async def find_relevant_patterns(
                 f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
             )
 
-    formatted.append("\n## Pattern Registry")
-    for p in patterns[:10]:
-        formatted.append(
-            f"- [{p['confidence']}] **{p['name']}**: {p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
-        )
+    # Still include top Supabase patterns as reference
+    patterns = await ctx.deps.storage_service.get_patterns()
+    if patterns:
+        formatted.append("\n## Pattern Registry (Top 10)")
+        for p in patterns[:10]:
+            formatted.append(
+                f"- [{p['confidence']}] **{p['name']}**: "
+                f"{p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
+            )
+
     return "\n".join(formatted)
 
 

@@ -68,13 +68,36 @@ async def find_applicable_patterns(
     ctx: RunContext[BrainDeps], topic: str, content_type: str = ""
 ) -> str:
     """Find brain patterns and semantic memories relevant to the content topic.
-    When content_type is provided, prioritizes patterns linked to that type."""
-    patterns = await ctx.deps.storage_service.get_patterns()
+    When content_type is provided, uses filtered semantic search for that type."""
+    # Semantic search for general memories about the topic
     result = await ctx.deps.memory_service.search(topic)
 
-    # Filter patterns by content type if provided
+    # Semantic search for patterns (optionally filtered by content type)
+    pattern_memories = []
+    try:
+        if content_type:
+            filters = {
+                "AND": [
+                    {"category": "pattern"},
+                    {"applicable_content_types": {"contains": content_type}},
+                ]
+            }
+        else:
+            filters = {"category": "pattern"}
+        pattern_result = await ctx.deps.memory_service.search_with_filters(
+            topic,
+            metadata_filters=filters,
+            limit=10,
+        )
+        pattern_memories = pattern_result.memories
+    except Exception:
+        logger.debug("Semantic pattern search failed in create_agent")
+
+    # Fall back to Supabase patterns (structured data)
+    patterns = await ctx.deps.storage_service.get_patterns()
+
+    # Filter patterns by content type if provided (Supabase fallback)
     if content_type and patterns:
-        # Separate: type-specific patterns first, then universal patterns
         type_specific = [
             p for p in patterns
             if p.get("applicable_content_types")
@@ -87,6 +110,14 @@ async def find_applicable_patterns(
         patterns = type_specific + universal
 
     sections = []
+
+    if pattern_memories:
+        mem_lines = ["## Semantically Matched Patterns"]
+        for m in pattern_memories:
+            memory = m.get("memory", m.get("result", ""))
+            score = m.get("score", 0)
+            mem_lines.append(f"- [{score:.2f}] {memory}")
+        sections.append("\n".join(mem_lines))
 
     if patterns:
         pattern_lines = ["## Pattern Registry"]

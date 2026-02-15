@@ -123,6 +123,23 @@ async def store_pattern(
             })
         except Exception:
             logger.debug("Failed to record growth event for pattern '%s'", name)
+        # Dual-write: sync pattern to Mem0 for semantic discovery
+        try:
+            mem0_content = f"Pattern: {name} — {pattern_text}"
+            if context:
+                mem0_content += f". Context: {context}"
+            await ctx.deps.memory_service.add_with_metadata(
+                content=mem0_content,
+                metadata={
+                    "category": "pattern",
+                    "pattern_name": name,
+                    "topic": topic,
+                    "confidence": confidence,
+                    "applicable_content_types": applicable_content_types,
+                },
+            )
+        except Exception:
+            logger.debug("Failed to sync pattern '%s' to Mem0", name)
     except Exception as e:
         logger.exception("Failed to insert pattern '%s'", name)
         return f"Error storing pattern '{name}': {e}"
@@ -186,6 +203,24 @@ async def reinforce_existing_pattern(
             })
     except Exception:
         logger.debug("Failed to record growth/confidence events for '%s'", pattern_name)
+    # Dual-write: update pattern in Mem0 with new confidence
+    try:
+        mem0_content = (
+            f"Pattern reinforced: {pattern_name} — "
+            f"now at use_count {updated.get('use_count', 0)}, "
+            f"confidence {updated.get('confidence', 'LOW')}"
+        )
+        await ctx.deps.memory_service.add_with_metadata(
+            content=mem0_content,
+            metadata={
+                "category": "pattern_reinforcement",
+                "pattern_name": pattern_name,
+                "topic": pattern.get("topic", ""),
+                "confidence": updated.get("confidence", "LOW"),
+            },
+        )
+    except Exception:
+        logger.debug("Failed to sync reinforcement for '%s' to Mem0", pattern_name)
     return (
         f"Reinforced pattern '{pattern_name}' → "
         f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"

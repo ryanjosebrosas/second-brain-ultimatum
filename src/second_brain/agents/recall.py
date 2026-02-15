@@ -63,15 +63,45 @@ async def search_semantic_memory(
 async def search_patterns(
     ctx: RunContext[BrainDeps], topic: str | None = None
 ) -> str:
-    """Search the pattern registry in Supabase."""
-    patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
-    if not patterns:
-        return "No patterns found in registry."
-    formatted = []
-    for p in patterns:
-        formatted.append(
-            f"- [{p['confidence']}] {p['name']}: {p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
+    """Search the pattern registry using semantic search and Supabase."""
+    # Try semantic search first (Mem0 with pattern filter)
+    semantic_results = []
+    try:
+        filters = {"category": "pattern"}
+        if topic:
+            filters = {"AND": [{"category": "pattern"}, {"topic": topic}]}
+        result = await ctx.deps.memory_service.search_with_filters(
+            topic or "patterns",
+            metadata_filters=filters,
+            limit=10,
         )
+        semantic_results = result.memories
+    except Exception:
+        logger.debug("Semantic pattern search failed, falling back to Supabase")
+
+    # Always include Supabase patterns (source of truth)
+    patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
+
+    if not patterns and not semantic_results:
+        return "No patterns found in registry."
+
+    formatted = []
+    if semantic_results:
+        formatted.append("## Semantic Matches")
+        for m in semantic_results:
+            memory = m.get("memory", m.get("result", ""))
+            score = m.get("score", 0)
+            formatted.append(f"- [{score:.2f}] {memory}")
+        formatted.append("")
+
+    if patterns:
+        formatted.append("## Pattern Registry")
+        for p in patterns:
+            formatted.append(
+                f"- [{p['confidence']}] {p['name']}: "
+                f"{p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
+            )
+
     return "\n".join(formatted)
 
 

@@ -722,3 +722,86 @@ class TestDynamicContentTypes:
         )
         assert universal.applicable_content_types is None  # universal
         assert specific.applicable_content_types == ["email"]  # specific
+
+
+class TestSemanticPatternSync:
+    """Test dual-write from learn_agent to Mem0."""
+
+    async def test_store_pattern_syncs_to_mem0(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Hook First",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(
+            mock_ctx, name="Hook First", topic="Content",
+            pattern_text="Start with a compelling hook",
+            applicable_content_types=["linkedin"],
+        )
+
+        assert "Stored new pattern" in result
+        # Verify Mem0 dual-write was called
+        mock_deps.memory_service.add_with_metadata.assert_called_once()
+        call_kwargs = mock_deps.memory_service.add_with_metadata.call_args[1]
+        assert "Hook First" in call_kwargs["content"]
+        assert call_kwargs["metadata"]["category"] == "pattern"
+        assert call_kwargs["metadata"]["pattern_name"] == "Hook First"
+        assert call_kwargs["metadata"]["topic"] == "Content"
+
+    async def test_store_pattern_succeeds_if_mem0_fails(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Test",
+        })
+        mock_deps.memory_service.add_with_metadata = AsyncMock(
+            side_effect=Exception("Mem0 unavailable")
+        )
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(
+            mock_ctx, name="Test", topic="T", pattern_text="text",
+        )
+
+        # Pattern should still be stored despite Mem0 failure
+        assert "Stored new pattern" in result
+        mock_deps.storage_service.insert_pattern.assert_called_once()
+
+    async def test_reinforce_syncs_to_mem0(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Test", "topic": "Content",
+            "use_count": 2, "confidence": "MEDIUM",
+        })
+        mock_deps.storage_service.reinforce_pattern = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Test",
+            "use_count": 3, "confidence": "MEDIUM",
+        })
+        tool_fn = learn_agent._function_toolset.tools["reinforce_existing_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(mock_ctx, pattern_name="Test")
+
+        assert "Reinforced" in result
+        mock_deps.memory_service.add_with_metadata.assert_called_once()
+        call_kwargs = mock_deps.memory_service.add_with_metadata.call_args[1]
+        assert call_kwargs["metadata"]["category"] == "pattern_reinforcement"
+        assert call_kwargs["metadata"]["pattern_name"] == "Test"
+
+    async def test_recall_search_patterns_uses_semantic_search(self, mock_deps):
+        from second_brain.agents.recall import recall_agent
+        tool_fn = recall_agent._function_toolset.tools["search_patterns"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(mock_ctx, topic="Content")
+
+        # Should call search_with_filters for semantic search
+        mock_deps.memory_service.search_with_filters.assert_called_once()
