@@ -105,6 +105,11 @@ class PatternExtract(BaseModel):
         default="",
         description="Name of existing pattern being reinforced, if is_reinforcement is True",
     )
+    applicable_content_types: list[str] | None = Field(
+        default=None,
+        description="Content type slugs this pattern applies to (e.g., ['linkedin', 'email']). "
+        "None means the pattern is universal and applies to all content types.",
+    )
 
 
 class LearnResult(BaseModel):
@@ -152,6 +157,14 @@ class ContentTypeConfig(BaseModel):
     example_type: str
     max_words: int = 0
     description: str = ""
+    review_dimensions: list[ReviewDimensionConfig] | None = Field(
+        default=None,
+        description="Per-dimension review config. None = all dimensions with equal weight.",
+    )
+    is_builtin: bool = Field(
+        default=False,
+        description="True for seed types that ship with the system.",
+    )
 
 
 class CreateResult(BaseModel):
@@ -187,6 +200,14 @@ class DimensionScore(BaseModel):
     strengths: list[str] = Field(default_factory=list, description="What's done well")
     suggestions: list[str] = Field(default_factory=list, description="Improvement suggestions")
     issues: list[str] = Field(default_factory=list, description="Must-fix problems")
+
+
+class ReviewDimensionConfig(BaseModel):
+    """Per-content-type configuration for a review dimension."""
+
+    name: str = Field(description="Dimension name matching REVIEW_DIMENSIONS (e.g., 'Messaging')")
+    weight: float = Field(default=1.0, description="Relative weight for scoring (0.5=half, 1.0=normal, 1.5=extra)")
+    enabled: bool = Field(default=True, description="Whether this dimension applies to this content type")
 
 
 class ReviewResult(BaseModel):
@@ -314,8 +335,15 @@ REVIEW_DIMENSIONS: list[dict[str, str]] = [
     },
 ]
 
+# Default review dimension configs (all enabled, weight 1.0)
+# Used when a content type has review_dimensions=None
+DEFAULT_REVIEW_DIMENSIONS: list[ReviewDimensionConfig] = [
+    ReviewDimensionConfig(name=dim["name"], weight=1.0, enabled=True)
+    for dim in REVIEW_DIMENSIONS
+]
 
-CONTENT_TYPES: dict[str, ContentTypeConfig] = {
+
+DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
     "linkedin": ContentTypeConfig(
         name="LinkedIn Post",
         default_mode="casual",
@@ -323,6 +351,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="linkedin",
         max_words=300,
         description="LinkedIn feed post",
+        is_builtin=True,
     ),
     "email": ContentTypeConfig(
         name="Professional Email",
@@ -331,6 +360,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="email",
         max_words=500,
         description="Client or prospect email",
+        is_builtin=True,
     ),
     "landing-page": ContentTypeConfig(
         name="Landing Page",
@@ -339,6 +369,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="landing-page",
         max_words=1000,
         description="Homepage or landing page copy",
+        is_builtin=True,
     ),
     "comment": ContentTypeConfig(
         name="Comment/Reply",
@@ -347,6 +378,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="comment",
         max_words=150,
         description="Social media comment or reply",
+        is_builtin=True,
     ),
     "case-study": ContentTypeConfig(
         name="Case Study",
@@ -355,6 +387,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="case-study",
         max_words=1500,
         description="Client success story with measurable results",
+        is_builtin=True,
     ),
     "proposal": ContentTypeConfig(
         name="Sales Proposal",
@@ -363,6 +396,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="proposal",
         max_words=2000,
         description="Sales or project proposal with scope and pricing",
+        is_builtin=True,
     ),
     "one-pager": ContentTypeConfig(
         name="One-Pager",
@@ -371,6 +405,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="one-pager",
         max_words=500,
         description="Compact executive summary or overview document",
+        is_builtin=True,
     ),
     "presentation": ContentTypeConfig(
         name="Presentation Script",
@@ -379,6 +414,7 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="presentation",
         max_words=800,
         description="Presentation talking points and script (not slide text)",
+        is_builtin=True,
     ),
     "instagram": ContentTypeConfig(
         name="Instagram Post",
@@ -387,5 +423,28 @@ CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         example_type="instagram",
         max_words=200,
         description="Instagram caption with hook, story, and hashtags",
+        is_builtin=True,
     ),
 }
+
+# Backwards-compatible alias — existing code can still import CONTENT_TYPES.
+# New code should use DEFAULT_CONTENT_TYPES or load from DB via StorageService.
+CONTENT_TYPES = DEFAULT_CONTENT_TYPES
+
+
+def content_type_from_row(row: dict) -> ContentTypeConfig:
+    """Convert a Supabase content_types row to a ContentTypeConfig."""
+    dims = row.get("review_dimensions")
+    review_dims = None
+    if dims and isinstance(dims, list):
+        review_dims = [ReviewDimensionConfig(**d) for d in dims]
+    return ContentTypeConfig(
+        name=row["name"],
+        default_mode=row.get("default_mode", "professional"),
+        structure_hint=row.get("structure_hint", ""),
+        example_type=row.get("example_type", row.get("slug", "")),
+        max_words=row.get("max_words", 0),
+        description=row.get("description", ""),
+        review_dimensions=review_dims,
+        is_builtin=row.get("is_builtin", False),
+    )
