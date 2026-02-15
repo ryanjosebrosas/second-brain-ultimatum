@@ -1,22 +1,9 @@
 """Unit tests for MemoryService and StorageService."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from second_brain.config import BrainConfig
 from second_brain.services.memory import MemoryService
 from second_brain.services.storage import StorageService
-
-
-@pytest.fixture
-def mock_config():
-    return BrainConfig(
-        anthropic_api_key="test-key",
-        openai_api_key="test-key",
-        supabase_url="https://test.supabase.co",
-        supabase_key="test-key",
-        brain_data_path="/tmp/test-brain",
-    )
 
 
 class TestMemoryService:

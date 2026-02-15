@@ -1,0 +1,135 @@
+"""MCP Server for AI Second Brain.
+
+Exposes recall and ask agents as tools callable from Claude Code.
+Run: python -m second_brain.mcp_server
+"""
+
+import logging
+
+from fastmcp import FastMCP
+
+from second_brain.config import BrainConfig
+from second_brain.deps import BrainDeps
+from second_brain.models import get_model
+from second_brain.services.memory import MemoryService
+from second_brain.services.storage import StorageService
+from second_brain.agents.recall import recall_agent
+from second_brain.agents.ask import ask_agent
+
+logger = logging.getLogger(__name__)
+
+# Initialize server
+server = FastMCP("Second Brain")
+
+# Lazy-init deps (created on first tool call)
+_deps: BrainDeps | None = None
+_model = None
+
+
+def _get_deps() -> BrainDeps:
+    global _deps, _model
+    if _deps is None:
+        config = BrainConfig()
+        _deps = BrainDeps(
+            config=config,
+            memory_service=MemoryService(config),
+            storage_service=StorageService(config),
+        )
+        _model = get_model(config)
+    return _deps
+
+
+def _get_model():
+    _get_deps()  # ensure initialized
+    return _model
+
+
+@server.tool()
+async def recall(query: str) -> str:
+    """Search your Second Brain's memory for relevant context, patterns,
+    and past experiences. Returns ranked results with sources.
+
+    Args:
+        query: What to search for (e.g., "content writing patterns",
+               "enterprise objection handling", "past LinkedIn work")
+    """
+    deps = _get_deps()
+    model = _get_model()
+    result = await recall_agent.run(
+        f"Search memory for: {query}",
+        deps=deps,
+        model=model,
+    )
+    output = result.output
+
+    # Format as readable text for Claude Code
+    parts = [f"# Recall: {output.query}\n"]
+    if output.matches:
+        parts.append("## Matches\n")
+        for m in output.matches:
+            parts.append(f"- [{m.relevance}] {m.content}")
+            if m.source:
+                parts.append(f"  Source: {m.source}")
+    if output.patterns:
+        parts.append("\n## Related Patterns\n")
+        for p in output.patterns:
+            parts.append(f"- {p}")
+    if output.summary:
+        parts.append(f"\n## Summary\n{output.summary}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def ask(question: str) -> str:
+    """Ask your Second Brain a question. Gets instant help powered by
+    accumulated knowledge: company context, customer insights, content
+    patterns, style preferences, and past experiences.
+
+    Args:
+        question: Your question (e.g., "Help me write a follow-up email",
+                  "What's our positioning for enterprise clients?")
+    """
+    deps = _get_deps()
+    model = _get_model()
+    result = await ask_agent.run(
+        question,
+        deps=deps,
+        model=model,
+    )
+    output = result.output
+
+    # Format as readable text for Claude Code
+    parts = [output.answer]
+    if output.context_used:
+        parts.append(f"\n---\nContext used: {', '.join(output.context_used)}")
+    if output.patterns_applied:
+        parts.append(f"Patterns applied: {', '.join(output.patterns_applied)}")
+    if output.next_action:
+        parts.append(f"\nSuggested next: {output.next_action}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def brain_health() -> str:
+    """Check the health and growth metrics of your Second Brain."""
+    deps = _get_deps()
+    # Quick health check from Supabase
+    patterns = await deps.storage_service.get_patterns()
+    experiences = await deps.storage_service.get_experiences()
+    health = await deps.storage_service.get_health_history(limit=1)
+
+    total_patterns = len(patterns)
+    high = len([p for p in patterns if p.get("confidence") == "HIGH"])
+    medium = len([p for p in patterns if p.get("confidence") == "MEDIUM"])
+    low = len([p for p in patterns if p.get("confidence") == "LOW"])
+
+    return (
+        f"# Brain Health\n\n"
+        f"Patterns: {total_patterns} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})\n"
+        f"Experiences: {len(experiences)}\n"
+        f"Status: {'GROWING' if total_patterns > 5 else 'BUILDING'}\n"
+    )
+
+
+if __name__ == "__main__":
+    server.run()

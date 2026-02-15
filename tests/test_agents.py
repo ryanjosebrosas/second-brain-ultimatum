@@ -1,34 +1,6 @@
 """Tests for agent schemas and registration."""
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock
-
 from second_brain.schemas import RecallResult, AskResult, MemoryMatch
-from second_brain.deps import BrainDeps
-from second_brain.config import BrainConfig
-
-
-@pytest.fixture
-def mock_deps(tmp_path):
-    config = BrainConfig(
-        anthropic_api_key="test-key",
-        openai_api_key="test-key",
-        supabase_url="https://test.supabase.co",
-        supabase_key="test-key",
-        brain_data_path=tmp_path,
-    )
-    memory = MagicMock()
-    memory.search = AsyncMock(return_value=[
-        {"memory": "Use exact user words", "score": 0.95}
-    ])
-    storage = MagicMock()
-    storage.get_patterns = AsyncMock(return_value=[
-        {"name": "Short > Structured", "confidence": "MEDIUM",
-         "pattern_text": "When user says short, use 4-6 lines."}
-    ])
-    storage.get_experiences = AsyncMock(return_value=[])
-    storage.get_memory_content = AsyncMock(return_value=[])
-    return BrainDeps(config=config, memory_service=memory, storage_service=storage)
 
 
 class TestSchemas:
