@@ -178,6 +178,63 @@ class CreateResult(BaseModel):
     notes: str = Field(default="", description="Notes for the human editor")
 
 
+class DimensionScore(BaseModel):
+    """A single dimension's review score."""
+
+    dimension: str = Field(description="Review dimension name (e.g., Messaging, Brand Voice)")
+    score: int = Field(description="Score 1-10 for this dimension")
+    status: str = Field(description="Status: pass, warning, or issue")
+    strengths: list[str] = Field(default_factory=list, description="What's done well")
+    suggestions: list[str] = Field(default_factory=list, description="Improvement suggestions")
+    issues: list[str] = Field(default_factory=list, description="Must-fix problems")
+
+
+class ReviewResult(BaseModel):
+    """Aggregate scorecard from a full 6-dimension review."""
+
+    scores: list[DimensionScore] = Field(description="Per-dimension scores")
+    overall_score: float = Field(description="Average score across all dimensions (1-10)")
+    verdict: str = Field(description="READY TO SEND, NEEDS REVISION, or MAJOR REWORK")
+    summary: str = Field(default="", description="2-3 sentence overall assessment")
+    top_strengths: list[str] = Field(default_factory=list, description="Top 3 strengths across all dimensions")
+    critical_issues: list[str] = Field(default_factory=list, description="Must-fix issues across all dimensions")
+    next_steps: list[str] = Field(default_factory=list, description="Recommended next actions")
+
+
+REVIEW_DIMENSIONS: list[dict[str, str]] = [
+    {
+        "name": "Messaging",
+        "focus": "Message clarity and impact",
+        "checks": "Clear key message, compelling value proposition, specific CTA, logical flow, no jargon",
+    },
+    {
+        "name": "Positioning",
+        "focus": "Market positioning and differentiation",
+        "checks": "Differentiators highlighted, aligns with company positioning, competitive advantages clear, target audience alignment",
+    },
+    {
+        "name": "Quality",
+        "focus": "Completeness and professionalism",
+        "checks": "All sections present, no placeholder text, consistent formatting, appropriate length, professional presentation",
+    },
+    {
+        "name": "Data Accuracy",
+        "focus": "Factual accuracy and claims",
+        "checks": "Statistics accurate, claims have evidence, no contradictions, company info correct",
+    },
+    {
+        "name": "Brand Voice",
+        "focus": "Voice and tone consistency",
+        "checks": "Tone matches voice guide, language consistent, personality comes through, matches winning examples",
+    },
+    {
+        "name": "Competitive",
+        "focus": "Competitive positioning",
+        "checks": "Handles likely objections, doesn't oversell, unique value clear, avoids competitor traps",
+    },
+]
+
+
 CONTENT_TYPES: dict[str, ContentTypeConfig] = {
     "linkedin": ContentTypeConfig(
         name="LinkedIn Post",

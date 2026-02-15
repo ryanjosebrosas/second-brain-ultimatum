@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, Relation, LearnResult, PatternExtract,
-    CreateResult,
+    CreateResult, DimensionScore, ReviewResult,
 )
 
 
@@ -349,3 +349,36 @@ class TestMCPTools:
         )
         assert "Unknown content type" in result
         assert "linkedin" in result
+
+    def test_review_content_tool_exists(self):
+        from second_brain.mcp_server import server
+        tool_names = [t.name for t in server._tool_manager._tools.values()]
+        assert "review_content" in tool_names
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.run_full_review")
+    async def test_review_content_tool(self, mock_review, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import review_content
+
+        mock_review.return_value = ReviewResult(
+            scores=[
+                DimensionScore(dimension="Messaging", score=8, status="pass", strengths=["Clear value prop"]),
+                DimensionScore(dimension="Brand Voice", score=6, status="warning", suggestions=["Add personality"]),
+            ],
+            overall_score=7.0,
+            verdict="NEEDS REVISION",
+            summary="Content scores 7.0/10 overall and needs targeted revisions.",
+            top_strengths=["Clear value prop"],
+            critical_issues=[],
+            next_steps=["Consider improvements in: Brand Voice"],
+        )
+        mock_deps_fn.return_value = MagicMock()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await review_content.fn(content="Test content", content_type="linkedin")
+        assert "7.0" in result
+        assert "NEEDS REVISION" in result
+        assert "Messaging" in result
+        assert "Brand Voice" in result
+        assert "Clear value prop" in result

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, AsyncMock
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
     CreateResult, ContentTypeConfig, CONTENT_TYPES,
+    DimensionScore, ReviewResult, REVIEW_DIMENSIONS,
 )
 
 
@@ -336,3 +337,103 @@ class TestCreateAgent:
     def test_agent_exported_from_package(self):
         from second_brain.agents import create_agent
         assert create_agent is not None
+
+
+class TestDimensionScoreSchema:
+    def test_dimension_score_defaults(self):
+        score = DimensionScore(dimension="Messaging", score=8, status="pass")
+        assert score.dimension == "Messaging"
+        assert score.score == 8
+        assert score.status == "pass"
+        assert score.strengths == []
+        assert score.suggestions == []
+        assert score.issues == []
+
+    def test_dimension_score_full(self):
+        score = DimensionScore(
+            dimension="Brand Voice",
+            score=6,
+            status="warning",
+            strengths=["Consistent tone"],
+            suggestions=["Add more personality"],
+            issues=["Missing CTA"],
+        )
+        assert len(score.strengths) == 1
+        assert len(score.suggestions) == 1
+        assert len(score.issues) == 1
+
+
+class TestReviewResultSchema:
+    def test_review_result_defaults(self):
+        scores = [
+            DimensionScore(dimension="Messaging", score=7, status="pass"),
+            DimensionScore(dimension="Quality", score=6, status="warning"),
+        ]
+        result = ReviewResult(scores=scores, overall_score=6.5, verdict="NEEDS REVISION")
+        assert len(result.scores) == 2
+        assert result.overall_score == 6.5
+        assert result.verdict == "NEEDS REVISION"
+        assert result.summary == ""
+        assert result.top_strengths == []
+        assert result.critical_issues == []
+        assert result.next_steps == []
+
+    def test_review_result_ready_to_send(self):
+        result = ReviewResult(
+            scores=[DimensionScore(dimension="Messaging", score=9, status="pass")],
+            overall_score=8.5,
+            verdict="READY TO SEND",
+            top_strengths=["Clear value proposition", "Strong CTA"],
+        )
+        assert result.verdict == "READY TO SEND"
+        assert len(result.top_strengths) == 2
+
+    def test_review_result_major_rework(self):
+        result = ReviewResult(
+            scores=[DimensionScore(dimension="Quality", score=2, status="issue")],
+            overall_score=3.0,
+            verdict="MAJOR REWORK",
+            critical_issues=["Missing sections", "Placeholder text found"],
+        )
+        assert result.verdict == "MAJOR REWORK"
+        assert len(result.critical_issues) == 2
+
+
+class TestReviewDimensions:
+    def test_review_dimensions_count(self):
+        assert len(REVIEW_DIMENSIONS) == 6
+
+    def test_review_dimensions_names(self):
+        names = [d["name"] for d in REVIEW_DIMENSIONS]
+        assert names == ["Messaging", "Positioning", "Quality", "Data Accuracy", "Brand Voice", "Competitive"]
+
+    def test_review_dimensions_have_required_fields(self):
+        for dim in REVIEW_DIMENSIONS:
+            assert "name" in dim
+            assert "focus" in dim
+            assert "checks" in dim
+
+
+class TestReviewAgent:
+    def test_agent_exists(self):
+        from second_brain.agents.review import review_agent
+        assert review_agent is not None
+
+    def test_agent_output_type(self):
+        from second_brain.agents.review import review_agent
+        assert review_agent.output_type is DimensionScore
+
+    def test_agent_has_tools(self):
+        from second_brain.agents.review import review_agent
+        tool_names = list(review_agent._function_toolset.tools)
+        assert "load_voice_reference" in tool_names
+        assert "load_positioning_context" in tool_names
+        assert "load_example_benchmarks" in tool_names
+
+    def test_agent_exported_from_package(self):
+        from second_brain.agents import review_agent
+        assert review_agent is not None
+
+    def test_run_full_review_exists(self):
+        from second_brain.agents.review import run_full_review
+        assert callable(run_full_review)

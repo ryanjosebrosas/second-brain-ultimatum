@@ -17,6 +17,7 @@ from second_brain.agents.recall import recall_agent
 from second_brain.agents.ask import ask_agent
 from second_brain.agents.learn import learn_agent
 from second_brain.agents.create import create_agent
+from second_brain.agents.review import run_full_review
 from second_brain.schemas import CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,47 @@ async def create_content(
         parts.append(f"**Examples**: {', '.join(output.examples_referenced)}")
     if output.notes:
         parts.append(f"\n**Editor notes**: {output.notes}")
+
+    return "\n".join(parts)
+
+
+@server.tool()
+async def review_content(content: str, content_type: str | None = None) -> str:
+    """Review content quality across 6 dimensions. Returns a structured
+    scorecard with per-dimension scores, overall score, and verdict.
+
+    Args:
+        content: The content to review (draft text, email, post, etc.)
+        content_type: Optional content type for context (linkedin, email, etc.)
+    """
+    deps = _get_deps()
+    model = _get_model()
+    result = await run_full_review(content, deps, model, content_type)
+
+    parts = [f"# Review: {result.overall_score}/10 — {result.verdict}\n"]
+
+    if result.summary:
+        parts.append(result.summary)
+
+    parts.append("\n| Dimension | Score | Status |")
+    parts.append("|-----------|-------|--------|")
+    for s in result.scores:
+        parts.append(f"| {s.dimension} | {s.score}/10 | {s.status} |")
+
+    if result.top_strengths:
+        parts.append("\n## Strengths")
+        for strength in result.top_strengths:
+            parts.append(f"- {strength}")
+
+    if result.critical_issues:
+        parts.append("\n## Issues (Must Fix)")
+        for issue in result.critical_issues:
+            parts.append(f"- {issue}")
+
+    if result.next_steps:
+        parts.append("\n## Next Steps")
+        for step in result.next_steps:
+            parts.append(f"- {step}")
 
     return "\n".join(parts)
 

@@ -228,6 +228,46 @@ def create(prompt: str, content_type: str, mode: str | None):
 
 
 @cli.command()
+@click.argument("content")
+@click.option("--type", "content_type", default=None, help="Content type for context (linkedin, email, etc.)")
+def review(content: str, content_type: str | None):
+    """Review content quality across 6 dimensions with a structured scorecard."""
+    from second_brain.agents.review import run_full_review
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await run_full_review(content, deps, model, content_type)
+
+        click.echo(f"\n# Review: {result.overall_score}/10 — {result.verdict}\n")
+
+        if result.summary:
+            click.echo(f"{result.summary}\n")
+
+        click.echo("## Scores by Dimension\n")
+        for s in result.scores:
+            click.echo(f"  {s.dimension:20s} {s.score}/10  [{s.status}]")
+
+        if result.top_strengths:
+            click.echo("\n## Strengths\n")
+            for strength in result.top_strengths:
+                click.echo(f"  - {strength}")
+
+        if result.critical_issues:
+            click.echo("\n## Issues (Must Fix)\n")
+            for issue in result.critical_issues:
+                click.echo(f"  - {issue}")
+
+        if result.next_steps:
+            click.echo("\n## Next Steps\n")
+            for step in result.next_steps:
+                click.echo(f"  - {step}")
+
+    asyncio.run(run())
+
+
+@cli.command()
 @click.option("--type", "content_type", default=None, help="Filter by content type (linkedin, email, etc.)")
 def examples(content_type: str | None):
     """Search content examples in your brain."""
