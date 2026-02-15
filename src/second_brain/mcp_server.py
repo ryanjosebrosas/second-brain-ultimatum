@@ -355,5 +355,51 @@ async def brain_health() -> str:
     return "\n".join(parts)
 
 
+@server.tool()
+async def growth_report(days: int = 30) -> str:
+    """Get a growth report for your Second Brain showing pattern creation,
+    reinforcement, confidence upgrades, and review score trends.
+
+    Args:
+        days: Number of days to include in the report (default: 30)
+    """
+    from second_brain.services.health import HealthService
+
+    deps = _get_deps()
+    metrics = await HealthService().compute_growth(deps, days=days)
+
+    parts = [
+        f"# Growth Report ({days} days)\n",
+        f"## Brain Status: {metrics.status}\n",
+        f"Memories: {metrics.memory_count}",
+        f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, "
+        f"MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})",
+        f"Experiences: {metrics.experience_count}",
+        f"\n## Growth Activity\n",
+        f"Events total: {metrics.growth_events_total}",
+        f"Patterns created: {metrics.patterns_created_period}",
+        f"Patterns reinforced: {metrics.patterns_reinforced_period}",
+        f"Confidence upgrades: {metrics.confidence_upgrades_period}",
+    ]
+
+    if metrics.reviews_completed_period > 0:
+        parts.append(f"\n## Quality Metrics\n")
+        parts.append(f"Reviews completed: {metrics.reviews_completed_period}")
+        parts.append(f"Average score: {metrics.avg_review_score}/10")
+        parts.append(f"Trend: {metrics.review_score_trend}")
+
+    if metrics.stale_patterns:
+        parts.append(f"\n## Stale Patterns (no activity in 30+ days)\n")
+        for name in metrics.stale_patterns:
+            parts.append(f"- {name}")
+
+    if metrics.topics:
+        parts.append(f"\n## Patterns by Topic")
+        for t, c in sorted(metrics.topics.items()):
+            parts.append(f"  - {t}: {c}")
+
+    return "\n".join(parts)
+
+
 if __name__ == "__main__":
     server.run()

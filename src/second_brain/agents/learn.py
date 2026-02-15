@@ -100,6 +100,19 @@ async def store_pattern(
     }
     try:
         await ctx.deps.storage_service.insert_pattern(pattern_data)
+        # Record growth event (non-blocking)
+        try:
+            await ctx.deps.storage_service.add_growth_event({
+                "event_type": "pattern_created",
+                "pattern_name": name,
+                "pattern_topic": topic,
+                "details": {
+                    "confidence": confidence,
+                    "evidence_count": len(evidence or []),
+                },
+            })
+        except Exception:
+            logger.debug("Failed to record growth event for pattern '%s'", name)
     except Exception as e:
         logger.exception("Failed to insert pattern '%s'", name)
         return f"Error storing pattern '{name}': {e}"
@@ -127,6 +140,42 @@ async def reinforce_existing_pattern(
     except ValueError as e:
         logger.exception("Failed to reinforce pattern '%s'", pattern_name)
         return f"Error reinforcing pattern '{pattern_name}': {e}"
+    # Record growth event (non-blocking)
+    try:
+        old_confidence = pattern.get("confidence", "LOW")
+        new_confidence = updated.get("confidence", old_confidence)
+        await ctx.deps.storage_service.add_growth_event({
+            "event_type": "pattern_reinforced",
+            "pattern_name": pattern_name,
+            "pattern_topic": pattern.get("topic", ""),
+            "details": {
+                "new_use_count": updated.get("use_count", 0),
+                "old_confidence": old_confidence,
+                "new_confidence": new_confidence,
+            },
+        })
+        # Record confidence transition if confidence changed
+        if new_confidence != old_confidence:
+            await ctx.deps.storage_service.add_growth_event({
+                "event_type": "confidence_upgraded",
+                "pattern_name": pattern_name,
+                "pattern_topic": pattern.get("topic", ""),
+                "details": {
+                    "from": old_confidence,
+                    "to": new_confidence,
+                    "use_count": updated.get("use_count", 0),
+                },
+            })
+            await ctx.deps.storage_service.add_confidence_transition({
+                "pattern_name": pattern_name,
+                "pattern_topic": pattern.get("topic", ""),
+                "from_confidence": old_confidence,
+                "to_confidence": new_confidence,
+                "use_count": updated.get("use_count", 0),
+                "reason": f"Reinforced to use_count {updated.get('use_count', 0)}",
+            })
+    except Exception:
+        logger.debug("Failed to record growth/confidence events for '%s'", pattern_name)
     return (
         f"Reinforced pattern '{pattern_name}' → "
         f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"

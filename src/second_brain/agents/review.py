@@ -142,6 +142,23 @@ async def run_full_review(
     else:
         summary = f"Content scores {overall_score}/10 overall and needs targeted revisions. Review the issues below before publishing."
 
+    # Record review history (non-blocking)
+    try:
+        await deps.storage_service.add_review_history({
+            "content_type": content_type or "",
+            "overall_score": overall_score,
+            "verdict": verdict,
+            "dimension_scores": [
+                {"dimension": s.dimension, "score": s.score, "status": s.status}
+                for s in scores
+            ],
+            "top_strengths": top_strengths,
+            "critical_issues": critical_issues,
+            "content_preview": content[:200] if content else "",
+        })
+    except Exception:
+        logger.debug("Failed to record review history")
+
     return ReviewResult(
         scores=scores,
         overall_score=overall_score,

@@ -437,3 +437,19 @@ class TestReviewAgent:
     def test_run_full_review_exists(self):
         from second_brain.agents.review import run_full_review
         assert callable(run_full_review)
+
+
+class TestGrowthEventRecording:
+    """Test that learn agent tools record growth events."""
+
+    def test_store_pattern_tool_exists(self):
+        """Verify store_pattern is registered on learn_agent."""
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "store_pattern" in tool_names
+
+    def test_reinforce_pattern_tool_exists(self):
+        """Verify reinforce_existing_pattern is registered on learn_agent."""
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "reinforce_existing_pattern" in tool_names

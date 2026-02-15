@@ -877,3 +877,91 @@ class TestConfidenceHistoryStorage:
         await service.get_confidence_history(pattern_name="Test Pattern")
 
         mock_table.eq.assert_called_once_with("pattern_name", "Test Pattern")
+
+
+class TestEnhancedHealthService:
+    async def test_compute_growth_includes_base_metrics(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=10)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(
+            return_value={"pattern_created": 3, "pattern_reinforced": 2}
+        )
+        mock_deps.storage_service.get_review_history = AsyncMock(return_value=[])
+
+        metrics = await HealthService().compute_growth(mock_deps, days=30)
+
+        assert metrics.total_patterns == 1
+        assert metrics.patterns_created_period == 3
+        assert metrics.patterns_reinforced_period == 2
+        assert metrics.growth_events_total == 5
+
+    async def test_compute_growth_review_trending(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(return_value={})
+        mock_deps.storage_service.get_review_history = AsyncMock(return_value=[
+            {"overall_score": 9.0, "review_date": "2026-02-15"},
+            {"overall_score": 8.5, "review_date": "2026-02-14"},
+            {"overall_score": 6.0, "review_date": "2026-02-10"},
+            {"overall_score": 5.5, "review_date": "2026-02-09"},
+        ])
+
+        metrics = await HealthService().compute_growth(mock_deps, days=30)
+
+        assert metrics.reviews_completed_period == 4
+        assert metrics.avg_review_score > 0
+        assert metrics.review_score_trend == "improving"
+
+    async def test_compute_growth_stale_patterns(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"name": "Old Pattern", "confidence": "LOW", "topic": "x",
+             "date_updated": "2025-01-01"},
+            {"name": "Recent Pattern", "confidence": "LOW", "topic": "x",
+             "date_updated": "2026-02-15"},
+            {"name": "Old HIGH", "confidence": "HIGH", "topic": "x",
+             "date_updated": "2025-01-01"},
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(return_value={})
+        mock_deps.storage_service.get_review_history = AsyncMock(return_value=[])
+
+        metrics = await HealthService().compute_growth(mock_deps, days=30)
+
+        # Old Pattern is stale (old date, not HIGH), Old HIGH is excluded (HIGH confidence)
+        assert "Old Pattern" in metrics.stale_patterns
+        assert "Recent Pattern" not in metrics.stale_patterns
+        assert "Old HIGH" not in metrics.stale_patterns
+
+    async def test_compute_growth_handles_failures(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(
+            side_effect=Exception("Table not found")
+        )
+        mock_deps.storage_service.get_review_history = AsyncMock(
+            side_effect=Exception("Table not found")
+        )
+
+        # Should not raise — graceful degradation
+        metrics = await HealthService().compute_growth(mock_deps, days=30)
+
+        assert metrics.growth_events_total == 0
+        assert metrics.reviews_completed_period == 0

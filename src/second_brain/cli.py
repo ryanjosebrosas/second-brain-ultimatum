@@ -354,6 +354,46 @@ def health():
 
 
 @cli.command()
+@click.option("--days", default=30, help="Number of days for the report")
+def growth(days: int):
+    """View growth report with pattern activity and quality trends."""
+    from second_brain.services.health import HealthService
+
+    deps = create_deps()
+
+    async def _growth():
+        metrics = await HealthService().compute_growth(deps, days=days)
+
+        click.echo(f"\n# Growth Report ({days} days)\n")
+        click.echo(f"Status: {metrics.status}")
+        click.echo(f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, "
+                   f"MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})")
+        click.echo(f"\nGrowth Activity:")
+        click.echo(f"  Events total: {metrics.growth_events_total}")
+        click.echo(f"  Patterns created: {metrics.patterns_created_period}")
+        click.echo(f"  Patterns reinforced: {metrics.patterns_reinforced_period}")
+        click.echo(f"  Confidence upgrades: {metrics.confidence_upgrades_period}")
+
+        if metrics.reviews_completed_period > 0:
+            click.echo(f"\nQuality Metrics:")
+            click.echo(f"  Reviews: {metrics.reviews_completed_period}")
+            click.echo(f"  Avg score: {metrics.avg_review_score}/10")
+            click.echo(f"  Trend: {metrics.review_score_trend}")
+
+        if metrics.stale_patterns:
+            click.echo(f"\nStale Patterns (no activity in 30+ days):")
+            for name in metrics.stale_patterns:
+                click.echo(f"  - {name}")
+
+        if metrics.topics:
+            click.echo(f"\nPatterns by Topic:")
+            for t, c in sorted(metrics.topics.items()):
+                click.echo(f"  {t}: {c}")
+
+    asyncio.run(_growth())
+
+
+@cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""
     from second_brain.migrate import run_migration
