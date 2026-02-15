@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
+from second_brain.config import BrainConfig
 from second_brain.services.memory import MemoryService
 from second_brain.services.storage import StorageService
 
@@ -1340,3 +1341,159 @@ class TestEnhancedHealthService:
 
         assert metrics.growth_events_total == 0
         assert metrics.reviews_completed_period == 0
+
+
+class TestMemoryServiceErrorHandling:
+    """Test MemoryService graceful degradation."""
+
+    @patch("mem0.Memory")
+    async def test_add_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.add.side_effect = Exception("Connection refused")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.add("test content")
+        assert result == {}
+
+    @patch("mem0.Memory")
+    async def test_search_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.search.side_effect = Exception("Timeout")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.search("test query")
+        assert result.memories == []
+        assert result.relations == []
+
+    @patch("mem0.Memory")
+    async def test_get_all_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.get_all.side_effect = Exception("Auth failed")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.get_all()
+        assert result == []
+
+    @patch("mem0.Memory")
+    async def test_delete_does_not_raise_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.delete.side_effect = Exception("Not found")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        await service.delete("nonexistent-id")  # Should not raise
+
+    @patch("mem0.Memory")
+    async def test_add_with_metadata_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.add.side_effect = Exception("API error")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.add_with_metadata("content", metadata={"key": "val"})
+        assert result == {}
+
+    @patch("mem0.Memory")
+    async def test_search_with_filters_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.search.side_effect = Exception("DB down")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.search_with_filters("test", metadata_filters={"cat": "x"})
+        assert result.memories == []
+
+    @patch("mem0.Memory")
+    async def test_update_memory_does_not_raise_on_failure(self, mock_mem_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.update.side_effect = Exception("Update failed")
+        mock_mem_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        await service.update_memory("mem-123", content="Updated")  # Should not raise
+
+
+class TestStorageServiceErrorHandling:
+    """Test StorageService graceful degradation."""
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_patterns_returns_empty_on_failure(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.side_effect = Exception("DB down")
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+        service = StorageService(mock_config)
+        result = await service.get_patterns()
+        assert result == []
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_upsert_pattern_returns_empty_on_failure(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.upsert.side_effect = Exception("DB error")
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+        service = StorageService(mock_config)
+        result = await service.upsert_pattern({"name": "Test"})
+        assert result == {}
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_insert_pattern_returns_empty_on_failure(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.side_effect = Exception("Duplicate")
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+        service = StorageService(mock_config)
+        result = await service.insert_pattern({"name": "Test"})
+        assert result == {}
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_by_name_returns_none_on_failure(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.ilike.side_effect = Exception("Query error")
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+        service = StorageService(mock_config)
+        result = await service.get_pattern_by_name("Test")
+        assert result is None
+
+
+class TestHealthServiceErrorTracking:
+    """Test HealthService error tracking."""
+
+    async def test_compute_tracks_pattern_errors(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_patterns = AsyncMock(
+            side_effect=Exception("DB connection lost")
+        )
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        metrics = await HealthService().compute(mock_deps)
+        assert len(metrics.errors) > 0
+        assert "patterns" in metrics.errors[0]
+
+    async def test_compute_tracks_experience_errors(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(
+            side_effect=Exception("Timeout")
+        )
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        metrics = await HealthService().compute(mock_deps)
+        assert any("experiences" in e for e in metrics.errors)
+
+    async def test_compute_growth_tracks_growth_event_errors(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(
+            side_effect=Exception("Query failed")
+        )
+        mock_deps.storage_service.get_review_history = AsyncMock(return_value=[])
+        metrics = await HealthService().compute_growth(mock_deps)
+        assert any("growth" in e for e in metrics.errors)

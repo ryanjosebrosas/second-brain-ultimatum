@@ -2,6 +2,7 @@
 
 import pytest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 from pydantic import ValidationError
 
 from second_brain.config import BrainConfig
@@ -209,3 +210,183 @@ class TestBrainConfigGraphProvider:
             _env_file=None,
         )
         assert config.graph_provider == "graphiti"
+
+
+class TestGraphProviderValidation:
+    """Test graph_provider cross-field validation."""
+
+    def test_graphiti_requires_neo4j_url(self, tmp_path):
+        with pytest.raises(ValidationError, match="NEO4J_URL"):
+            BrainConfig(
+                graph_provider="graphiti",
+                neo4j_url=None,
+                neo4j_username="neo4j",
+                neo4j_password="pass",
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                _env_file=None,
+            )
+
+    def test_graphiti_requires_neo4j_username(self, tmp_path):
+        with pytest.raises(ValidationError, match="NEO4J_USERNAME"):
+            BrainConfig(
+                graph_provider="graphiti",
+                neo4j_url="neo4j://localhost:7687",
+                neo4j_username=None,
+                neo4j_password="pass",
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                _env_file=None,
+            )
+
+    def test_graphiti_requires_neo4j_password(self, tmp_path):
+        with pytest.raises(ValidationError, match="NEO4J_PASSWORD"):
+            BrainConfig(
+                graph_provider="graphiti",
+                neo4j_url="neo4j://localhost:7687",
+                neo4j_username="neo4j",
+                neo4j_password=None,
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                _env_file=None,
+            )
+
+    def test_graphiti_valid_config_accepted(self, tmp_path):
+        config = BrainConfig(
+            graph_provider="graphiti",
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.graph_provider == "graphiti"
+
+    def test_non_graphiti_skips_validation(self, tmp_path):
+        config = BrainConfig(
+            graph_provider="none",
+            neo4j_url=None,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.graph_provider == "none"
+
+    def test_sensitive_fields_hidden_in_repr(self, tmp_path):
+        config = BrainConfig(
+            anthropic_api_key="SECRET_KEY",
+            supabase_url="https://test.supabase.co",
+            supabase_key="SECRET_SUPABASE",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        r = repr(config)
+        assert "SECRET_KEY" not in r
+        assert "SECRET_SUPABASE" not in r
+
+
+class TestCreateDeps:
+    """Test shared create_deps factory."""
+
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_with_config(self, mock_mem, mock_storage, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        from second_brain.deps import create_deps
+        deps = create_deps(config=config)
+        assert deps.config is config
+        assert deps.graphiti_service is None  # graph_provider="none"
+        mock_mem.assert_called_once_with(config)
+        mock_storage.assert_called_once_with(config)
+
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_graphiti_enabled(self, mock_mem, mock_storage, tmp_path):
+        config = BrainConfig(
+            graph_provider="graphiti",
+            neo4j_url="neo4j://localhost",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        with patch("second_brain.services.graphiti.GraphitiService") as mock_graphiti:
+            mock_graphiti.return_value = MagicMock()
+            from second_brain.deps import create_deps
+            deps = create_deps(config=config)
+            assert deps.graphiti_service is not None
+            mock_graphiti.assert_called_once_with(config)
+
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_graphiti_import_error(self, mock_mem, mock_storage, tmp_path):
+        config = BrainConfig(
+            graph_provider="graphiti",
+            neo4j_url="neo4j://localhost",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        with patch("second_brain.services.graphiti.GraphitiService", side_effect=ImportError):
+            from second_brain.deps import create_deps
+            deps = create_deps(config=config)
+            assert deps.graphiti_service is None  # Graceful degradation
+
+
+class TestBrainDepsRegistry:
+    """Test get_content_type_registry lazy initialization."""
+
+    def test_get_content_type_registry_creates_on_first_call(self, tmp_path):
+        from second_brain.deps import BrainDeps
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        deps = BrainDeps(
+            config=config,
+            memory_service=MagicMock(),
+            storage_service=MagicMock(),
+        )
+        with patch("second_brain.services.storage.ContentTypeRegistry") as mock_reg:
+            mock_reg.return_value = MagicMock()
+            registry = deps.get_content_type_registry()
+            assert registry is not None
+            mock_reg.assert_called_once()
+
+    def test_get_content_type_registry_caches(self, tmp_path):
+        from second_brain.deps import BrainDeps
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        deps = BrainDeps(
+            config=config,
+            memory_service=MagicMock(),
+            storage_service=MagicMock(),
+        )
+        with patch("second_brain.services.storage.ContentTypeRegistry") as mock_reg:
+            mock_reg.return_value = MagicMock()
+            r1 = deps.get_content_type_registry()
+            r2 = deps.get_content_type_registry()
+            assert r1 is r2  # Same instance (cached)
+            mock_reg.assert_called_once()  # Only created once
