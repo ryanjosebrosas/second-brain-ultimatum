@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -8,17 +8,20 @@ class BrainConfig(BaseSettings):
 
     # LLM providers
     anthropic_api_key: str | None = Field(
-        default=None, description="Anthropic API key (None = skip, use Ollama)"
+        default=None, description="Anthropic API key (None = skip, use Ollama)",
+        repr=False,
     )
     openai_api_key: str | None = Field(
-        default=None, description="OpenAI API key for Mem0 embeddings"
+        default=None, description="OpenAI API key for Mem0 embeddings",
+        repr=False,
     )
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama server URL",
     )
     ollama_api_key: str | None = Field(
-        default=None, description="Ollama API key for cloud access"
+        default=None, description="Ollama API key for cloud access",
+        repr=False,
     )
     ollama_model: str = Field(
         default="llama3.1:8b",
@@ -29,6 +32,7 @@ class BrainConfig(BaseSettings):
     mem0_api_key: str | None = Field(
         default=None,
         description="Mem0 Cloud API key (None = use local)",
+        repr=False,
     )
 
     # Graph memory
@@ -47,11 +51,12 @@ class BrainConfig(BaseSettings):
     neo4j_password: str | None = Field(
         default=None,
         description="Neo4j password",
+        repr=False,
     )
 
     # Supabase
     supabase_url: str = Field(..., description="Supabase project URL")
-    supabase_key: str = Field(..., description="Supabase anon key")
+    supabase_key: str = Field(..., description="Supabase anon key", repr=False)
 
     # Brain
     brain_user_id: str = Field(default="ryan", description="Default user ID")
@@ -101,5 +106,21 @@ class BrainConfig(BaseSettings):
     pattern_preview_limit: int = Field(
         default=200, description="Character limit for pattern text in search results"
     )
+
+    @model_validator(mode="after")
+    def _validate_graph_config(self) -> "BrainConfig":
+        if self.graph_provider == "graphiti":
+            missing = []
+            if not self.neo4j_url:
+                missing.append("NEO4J_URL")
+            if not self.neo4j_username:
+                missing.append("NEO4J_USERNAME")
+            if not self.neo4j_password:
+                missing.append("NEO4J_PASSWORD")
+            if missing:
+                raise ValueError(
+                    f"graph_provider='graphiti' requires: {', '.join(missing)}"
+                )
+        return self
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

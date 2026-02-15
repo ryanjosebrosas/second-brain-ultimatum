@@ -51,8 +51,12 @@ class MemoryService:
                     "password": self.config.neo4j_password,
                 },
             }
-        logger.info("Using Mem0 local client")
-        return Memory.from_config(mem0_config)
+        try:
+            logger.info("Using Mem0 local client")
+            return Memory.from_config(mem0_config)
+        except Exception as e:
+            logger.error("Failed to initialize Mem0 local client: %s", e)
+            raise
 
     async def add(self, content: str, metadata: dict | None = None,
                   enable_graph: bool | None = None) -> dict:
@@ -65,8 +69,13 @@ class MemoryService:
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if use_graph and self._is_cloud:
             kwargs["enable_graph"] = True
-        result = self._client.add(messages, **kwargs)
-        return result
+        try:
+            result = self._client.add(messages, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning("Mem0 add failed: %s", type(e).__name__)
+            logger.debug("Mem0 add error detail: %s", e)
+            return {}
 
     async def add_with_metadata(
         self,
@@ -92,8 +101,13 @@ class MemoryService:
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if use_graph and self._is_cloud:
             kwargs["enable_graph"] = True
-        result = self._client.add(messages, **kwargs)
-        return result
+        try:
+            result = self._client.add(messages, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning("Mem0 add_with_metadata failed: %s", type(e).__name__)
+            logger.debug("Mem0 add_with_metadata error detail: %s", e)
+            return {}
 
     @property
     def _is_cloud(self) -> bool:
@@ -123,7 +137,12 @@ class MemoryService:
             kwargs["filters"] = {"user_id": self.user_id}
             if use_graph:
                 kwargs["enable_graph"] = True
-        results = self._client.search(query, **kwargs)
+        try:
+            results = self._client.search(query, **kwargs)
+        except Exception as e:
+            logger.warning("Mem0 search failed: %s", type(e).__name__)
+            logger.debug("Mem0 search error detail: %s", e)
+            return SearchResult(memories=[], relations=[])
         if isinstance(results, dict):
             memories = results.get("results", [])
             relations = results.get("relations", [])
@@ -175,11 +194,16 @@ class MemoryService:
                 kwargs["filters"] = metadata_filters
 
         try:
-            results = self._client.search(query, **kwargs)
-        except TypeError:
-            logger.warning("Mem0 client doesn't support filters, falling back to unfiltered search")
-            kwargs.pop("filters", None)
-            results = self._client.search(query, **kwargs)
+            try:
+                results = self._client.search(query, **kwargs)
+            except TypeError:
+                logger.warning("Mem0 client doesn't support filters, falling back to unfiltered search")
+                kwargs.pop("filters", None)
+                results = self._client.search(query, **kwargs)
+        except Exception as e:
+            logger.warning("Mem0 search_with_filters failed: %s", type(e).__name__)
+            logger.debug("Mem0 search_with_filters error detail: %s", e)
+            return SearchResult(memories=[], relations=[], search_filters=metadata_filters or {})
 
         if isinstance(results, dict):
             memories = results.get("results", [])
@@ -210,36 +234,60 @@ class MemoryService:
             content: New content text (None = keep existing).
             metadata: New metadata dict (None = keep existing).
         """
-        if self._is_cloud:
-            kwargs: dict = {}
-            if content is not None:
-                kwargs["text"] = content
-            if metadata is not None:
-                kwargs["metadata"] = metadata
-            if kwargs:
-                self._client.update(memory_id=memory_id, **kwargs)
-        else:
-            # Local client only supports data= parameter
-            if content is not None:
-                self._client.update(memory_id=memory_id, data=content)
-            elif metadata is not None:
-                logger.warning("Local Mem0 client doesn't support metadata-only updates")
+        try:
+            if self._is_cloud:
+                kwargs: dict = {}
+                if content is not None:
+                    kwargs["text"] = content
+                if metadata is not None:
+                    kwargs["metadata"] = metadata
+                if kwargs:
+                    self._client.update(memory_id=memory_id, **kwargs)
+            else:
+                # Local client only supports data= parameter
+                if content is not None:
+                    self._client.update(memory_id=memory_id, data=content)
+                elif metadata is not None:
+                    logger.warning("Local Mem0 client doesn't support metadata-only updates")
+        except Exception as e:
+            logger.warning("Mem0 update_memory failed: %s", type(e).__name__)
+            logger.debug("Mem0 update_memory error detail: %s", e)
 
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""
-        kwargs: dict = {"user_id": self.user_id}
-        if self._is_cloud:
-            kwargs["filters"] = {"user_id": self.user_id}
-        results = self._client.get_all(**kwargs)
-        if isinstance(results, dict):
-            return results.get("results", [])
-        return results
+        try:
+            kwargs: dict = {"user_id": self.user_id}
+            if self._is_cloud:
+                kwargs["filters"] = {"user_id": self.user_id}
+            results = self._client.get_all(**kwargs)
+            if isinstance(results, dict):
+                return results.get("results", [])
+            return results
+        except Exception as e:
+            logger.warning("Mem0 get_all failed: %s", type(e).__name__)
+            logger.debug("Mem0 get_all error detail: %s", e)
+            return []
 
     async def get_memory_count(self) -> int:
         """Get total memory count for the user."""
-        memories = await self.get_all()
-        return len(memories)
+        try:
+            memories = await self.get_all()
+            return len(memories)
+        except Exception as e:
+            logger.warning("Mem0 get_memory_count failed: %s", type(e).__name__)
+            logger.debug("Mem0 get_memory_count error detail: %s", e)
+            return 0
 
     async def delete(self, memory_id: str) -> None:
         """Delete a specific memory."""
-        self._client.delete(memory_id)
+        try:
+            self._client.delete(memory_id)
+        except Exception as e:
+            logger.warning("Mem0 delete failed: %s", type(e).__name__)
+            logger.debug("Mem0 delete error detail: %s", e)
+
+    async def close(self) -> None:
+        """Release Mem0 client resources."""
+        if hasattr(self._client, "close"):
+            self._client.close()
+        self._client = None

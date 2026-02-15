@@ -10,33 +10,8 @@ import click
 if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from second_brain.config import BrainConfig
-from second_brain.deps import BrainDeps
+from second_brain.deps import BrainDeps, create_deps
 from second_brain.models import get_model
-from second_brain.services.memory import MemoryService
-from second_brain.services.storage import StorageService
-
-logger = logging.getLogger(__name__)
-
-
-def create_deps() -> BrainDeps:
-    """Create the dependency container with all services."""
-    config = BrainConfig()
-    graphiti = None
-    if config.graph_provider == "graphiti":
-        try:
-            from second_brain.services.graphiti import GraphitiService
-            graphiti = GraphitiService(config)
-        except ImportError:
-            logger.warning("graphiti-core not installed. Install with: "
-                           "pip install -e '.[graphiti]'")
-
-    return BrainDeps(
-        config=config,
-        memory_service=MemoryService(config),
-        storage_service=StorageService(config),
-        graphiti_service=graphiti,
-    )
 
 
 @click.group()
@@ -391,6 +366,42 @@ def growth(days: int):
                 click.echo(f"  {t}: {c}")
 
     asyncio.run(_growth())
+
+
+@cli.command()
+@click.option("--min-cluster", default=3, type=int,
+               help="Minimum memories to form a pattern cluster")
+def consolidate(min_cluster: int):
+    """Consolidate accumulated memories into patterns."""
+    from second_brain.agents.learn import learn_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await learn_agent.run(
+            f"Run memory consolidation with min_cluster_size={min_cluster}. "
+            f"Use the consolidate_memories tool to review accumulated memories, "
+            f"then use store_pattern and reinforce_existing_pattern to act on findings. "
+            f"Tag graduated memories with tag_graduated_memories when done.",
+            deps=deps,
+            model=model,
+        )
+        output = result.output
+
+        click.echo(f"\n# Brain Consolidation\n")
+        click.echo(f"Summary: {output.input_summary}\n")
+
+        if output.patterns_extracted:
+            click.echo("## Patterns Identified\n")
+            for p in output.patterns_extracted:
+                marker = "(reinforced)" if p.is_reinforcement else "(new)"
+                click.echo(f"  [{p.confidence}] {p.name} {marker}")
+
+        click.echo(f"\nResults: {output.patterns_new} new, "
+                   f"{output.patterns_reinforced} reinforced")
+
+    asyncio.run(run())
 
 
 @cli.group()

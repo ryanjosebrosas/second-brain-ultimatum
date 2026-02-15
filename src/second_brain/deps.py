@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -7,6 +8,8 @@ if TYPE_CHECKING:
     from second_brain.services.graphiti import GraphitiService
     from second_brain.services.memory import MemoryService
     from second_brain.services.storage import ContentTypeRegistry, StorageService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,3 +28,33 @@ class BrainDeps:
             from second_brain.services.storage import ContentTypeRegistry
             self.content_type_registry = ContentTypeRegistry(self.storage_service)
         return self.content_type_registry
+
+
+def create_deps(config: BrainConfig | None = None) -> BrainDeps:
+    """Create BrainDeps with all services initialized.
+
+    Args:
+        config: Optional config override. Defaults to loading from .env.
+    """
+    from second_brain.services.memory import MemoryService
+    from second_brain.services.storage import StorageService
+
+    if config is None:
+        config = BrainConfig()
+
+    graphiti = None
+    if config.graph_provider == "graphiti":
+        try:
+            from second_brain.services.graphiti import GraphitiService
+            graphiti = GraphitiService(config)
+        except ImportError:
+            logger.warning(
+                "graphiti-core not installed. Install with: pip install -e '.[graphiti]'"
+            )
+
+    return BrainDeps(
+        config=config,
+        memory_service=MemoryService(config),
+        storage_service=StorageService(config),
+        graphiti_service=graphiti,
+    )

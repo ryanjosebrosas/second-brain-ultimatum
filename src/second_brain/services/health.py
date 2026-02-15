@@ -34,6 +34,7 @@ class HealthMetrics:
     avg_review_score: float = 0.0
     review_score_trend: str = "stable"
     stale_patterns: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 class HealthService:
@@ -41,8 +42,21 @@ class HealthService:
 
     async def compute(self, deps: "BrainDeps") -> HealthMetrics:
         """Compute current health metrics from all services."""
-        patterns = await deps.storage_service.get_patterns()
-        experiences = await deps.storage_service.get_experiences()
+        errors: list[str] = []
+
+        try:
+            patterns = await deps.storage_service.get_patterns()
+        except Exception as e:
+            logger.warning("Health: patterns unavailable: %s", type(e).__name__)
+            patterns = []
+            errors.append(f"patterns: {type(e).__name__}")
+
+        try:
+            experiences = await deps.storage_service.get_experiences()
+        except Exception as e:
+            logger.warning("Health: experiences unavailable: %s", type(e).__name__)
+            experiences = []
+            errors.append(f"experiences: {type(e).__name__}")
 
         total = len(patterns)
         high = len([p for p in patterns if p.get("confidence") == "HIGH"])
@@ -56,8 +70,9 @@ class HealthService:
 
         try:
             memory_count: int | str = await deps.memory_service.get_memory_count()
-        except Exception:
+        except Exception as e:
             memory_count = "unavailable"
+            errors.append(f"memory_count: {type(e).__name__}")
 
         latest = patterns[0].get("date_updated", "unknown") if patterns else "none"
         graph = deps.config.graph_provider or "disabled"
@@ -74,6 +89,7 @@ class HealthService:
             latest_update=latest,
             topics=topics,
             status=status,
+            errors=errors,
         )
 
     async def compute_growth(self, deps: "BrainDeps", days: int = 30) -> HealthMetrics:
@@ -89,8 +105,9 @@ class HealthService:
             metrics.patterns_reinforced_period = counts.get("pattern_reinforced", 0)
             metrics.confidence_upgrades_period = counts.get("confidence_upgraded", 0)
             metrics.experiences_recorded_period = counts.get("experience_recorded", 0)
-        except Exception:
-            logger.debug("Growth event counts unavailable")
+        except Exception as e:
+            logger.debug("Growth event counts unavailable: %s", type(e).__name__)
+            metrics.errors.append(f"growth_events: {type(e).__name__}")
 
         # Get review score trending
         try:
@@ -109,8 +126,9 @@ class HealthService:
                             metrics.review_score_trend = "improving"
                         elif recent_avg < older_avg - 0.5:
                             metrics.review_score_trend = "declining"
-        except Exception:
-            logger.debug("Review history unavailable")
+        except Exception as e:
+            logger.debug("Review history unavailable: %s", type(e).__name__)
+            metrics.errors.append(f"review_history: {type(e).__name__}")
 
         # Detect stale patterns (not reinforced in 30+ days)
         try:
@@ -122,7 +140,8 @@ class HealthService:
                 if p.get("date_updated", "") < cutoff and p.get("confidence") != "HIGH"
             ]
             metrics.stale_patterns = stale[:10]  # cap at 10
-        except Exception:
-            logger.debug("Stale pattern detection failed")
+        except Exception as e:
+            logger.debug("Stale pattern detection failed: %s", type(e).__name__)
+            metrics.errors.append(f"stale_patterns: {type(e).__name__}")
 
         return metrics

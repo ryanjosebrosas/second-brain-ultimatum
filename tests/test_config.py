@@ -203,6 +203,9 @@ class TestBrainConfigGraphProvider:
             supabase_key="test-key",
             brain_data_path=tmp_path,
             graph_provider="graphiti",
+            neo4j_url="neo4j+s://test.databases.neo4j.io",
+            neo4j_username="neo4j",
+            neo4j_password="test-password",
             _env_file=None,
         )
         assert config.graph_provider == "graphiti"

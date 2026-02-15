@@ -50,23 +50,27 @@ async def search_existing_patterns(
 ) -> str:
     """Search for existing patterns that might match what you're about to extract.
     Call this BEFORE creating new patterns to check for reinforcement opportunities."""
-    patterns = await ctx.deps.storage_service.get_patterns()
-    if not patterns:
-        return "No existing patterns found. Safe to create new ones."
-    matching = [
-        p for p in patterns
-        if query.lower() in p.get("name", "").lower()
-        or query.lower() in p.get("pattern_text", "").lower()
-    ]
-    if not matching:
-        return f"No patterns matching '{query}'. This appears to be a new pattern."
-    formatted = []
-    for p in matching:
-        formatted.append(
-            f"- {p['name']} (confidence: {p.get('confidence', 'LOW')}, "
-            f"uses: {p.get('use_count', 1)})"
-        )
-    return f"Existing matches:\n" + "\n".join(formatted)
+    try:
+        patterns = await ctx.deps.storage_service.get_patterns()
+        if not patterns:
+            return "No existing patterns found. Safe to create new ones."
+        matching = [
+            p for p in patterns
+            if query.lower() in p.get("name", "").lower()
+            or query.lower() in p.get("pattern_text", "").lower()
+        ]
+        if not matching:
+            return f"No patterns matching '{query}'. This appears to be a new pattern."
+        formatted = []
+        for p in matching:
+            formatted.append(
+                f"- {p['name']} (confidence: {p.get('confidence', 'LOW')}, "
+                f"uses: {p.get('use_count', 1)})"
+            )
+        return f"Existing matches:\n" + "\n".join(formatted)
+    except Exception as e:
+        logger.warning("search_existing_patterns failed: %s", type(e).__name__)
+        return f"Pattern search unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -89,65 +93,68 @@ async def store_pattern(
         applicable_content_types: Optional list of content type slugs this pattern
             applies to (e.g., ['linkedin', 'email']). None = universal pattern.
     """
-    existing = await ctx.deps.storage_service.get_pattern_by_name(name)
-    if existing:
-        return (
-            f"Pattern '{name}' already exists (use_count: {existing.get('use_count', 1)}, "
-            f"confidence: {existing.get('confidence', 'LOW')}). "
-            f"Use reinforce_existing_pattern instead."
-        )
-    pattern_data = {
-        "name": name,
-        "topic": topic,
-        "pattern_text": pattern_text,
-        "confidence": confidence,
-        "evidence": evidence or [],
-        "anti_patterns": anti_patterns or [],
-        "context": context,
-        "source_experience": source_experience,
-        "applicable_content_types": applicable_content_types,
-        "date_updated": str(date.today()),
-    }
     try:
-        await ctx.deps.storage_service.insert_pattern(pattern_data)
-        # Record growth event (non-blocking)
-        try:
-            await ctx.deps.storage_service.add_growth_event({
-                "event_type": "pattern_created",
-                "pattern_name": name,
-                "pattern_topic": topic,
-                "details": {
-                    "confidence": confidence,
-                    "evidence_count": len(evidence or []),
-                },
-            })
-        except Exception:
-            logger.debug("Failed to record growth event for pattern '%s'", name)
-        # Dual-write: sync pattern to Mem0 for semantic discovery
-        try:
-            mem0_content = f"Pattern: {name} — {pattern_text}"
-            if context:
-                mem0_content += f". Context: {context}"
-            # Add content type relationships for graph extraction
-            if applicable_content_types:
-                mem0_content += f". Applies to: {', '.join(applicable_content_types)}"
-            await ctx.deps.memory_service.add_with_metadata(
-                content=mem0_content,
-                metadata={
-                    "category": "pattern",
-                    "pattern_name": name,
-                    "topic": topic,
-                    "confidence": confidence,
-                    "applicable_content_types": applicable_content_types,
-                },
-                enable_graph=True,  # Let Mem0 extract entities/relationships
+        existing = await ctx.deps.storage_service.get_pattern_by_name(name)
+        if existing:
+            return (
+                f"Pattern '{name}' already exists (use_count: {existing.get('use_count', 1)}, "
+                f"confidence: {existing.get('confidence', 'LOW')}). "
+                f"Use reinforce_existing_pattern instead."
             )
-        except Exception:
-            logger.debug("Failed to sync pattern '%s' to Mem0", name)
+        pattern_data = {
+            "name": name,
+            "topic": topic,
+            "pattern_text": pattern_text,
+            "confidence": confidence,
+            "evidence": evidence or [],
+            "anti_patterns": anti_patterns or [],
+            "context": context,
+            "source_experience": source_experience,
+            "applicable_content_types": applicable_content_types,
+            "date_updated": str(date.today()),
+        }
+        try:
+            await ctx.deps.storage_service.insert_pattern(pattern_data)
+            # Record growth event (non-critical)
+            try:
+                await ctx.deps.storage_service.add_growth_event({
+                    "event_type": "pattern_created",
+                    "pattern_name": name,
+                    "pattern_topic": topic,
+                    "details": {
+                        "confidence": confidence,
+                        "evidence_count": len(evidence or []),
+                    },
+                })
+            except Exception:
+                logger.debug("Failed to record growth event for pattern '%s'", name)
+            # Dual-write: sync pattern to Mem0 for semantic discovery (non-critical)
+            try:
+                mem0_content = f"Pattern: {name} — {pattern_text}"
+                if context:
+                    mem0_content += f". Context: {context}"
+                if applicable_content_types:
+                    mem0_content += f". Applies to: {', '.join(applicable_content_types)}"
+                await ctx.deps.memory_service.add_with_metadata(
+                    content=mem0_content,
+                    metadata={
+                        "category": "pattern",
+                        "pattern_name": name,
+                        "topic": topic,
+                        "confidence": confidence,
+                        "applicable_content_types": applicable_content_types,
+                    },
+                    enable_graph=True,
+                )
+            except Exception:
+                logger.debug("Failed to sync pattern '%s' to Mem0 (non-critical)", name)
+        except Exception as e:
+            logger.exception("Failed to insert pattern '%s'", name)
+            return f"Error storing pattern '{name}': {e}"
+        return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
     except Exception as e:
-        logger.exception("Failed to insert pattern '%s'", name)
-        return f"Error storing pattern '{name}': {e}"
-    return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
+        logger.warning("store_pattern failed: %s", type(e).__name__)
+        return f"Pattern storage unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -158,77 +165,81 @@ async def reinforce_existing_pattern(
 ) -> str:
     """Reinforce an existing pattern: increment use_count, upgrade confidence, append evidence.
     Use this when is_reinforcement=True instead of store_pattern."""
-    pattern = await ctx.deps.storage_service.get_pattern_by_name(pattern_name)
-    if not pattern:
-        return (
-            f"No existing pattern named '{pattern_name}'. "
-            f"Use store_pattern to create it instead."
-        )
     try:
-        updated = await ctx.deps.storage_service.reinforce_pattern(
-            pattern["id"], new_evidence
-        )
-    except ValueError as e:
-        logger.exception("Failed to reinforce pattern '%s'", pattern_name)
-        return f"Error reinforcing pattern '{pattern_name}': {e}"
-    # Record growth event (non-blocking)
-    try:
-        old_confidence = pattern.get("confidence", "LOW")
-        new_confidence = updated.get("confidence", old_confidence)
-        await ctx.deps.storage_service.add_growth_event({
-            "event_type": "pattern_reinforced",
-            "pattern_name": pattern_name,
-            "pattern_topic": pattern.get("topic", ""),
-            "details": {
-                "new_use_count": updated.get("use_count", 0),
-                "old_confidence": old_confidence,
-                "new_confidence": new_confidence,
-            },
-        })
-        # Record confidence transition if confidence changed
-        if new_confidence != old_confidence:
+        pattern = await ctx.deps.storage_service.get_pattern_by_name(pattern_name)
+        if not pattern:
+            return (
+                f"No existing pattern named '{pattern_name}'. "
+                f"Use store_pattern to create it instead."
+            )
+        try:
+            updated = await ctx.deps.storage_service.reinforce_pattern(
+                pattern["id"], new_evidence
+            )
+        except ValueError as e:
+            logger.exception("Failed to reinforce pattern '%s'", pattern_name)
+            return f"Error reinforcing pattern '{pattern_name}': {e}"
+        # Record growth event (non-critical)
+        try:
+            old_confidence = pattern.get("confidence", "LOW")
+            new_confidence = updated.get("confidence", old_confidence)
             await ctx.deps.storage_service.add_growth_event({
-                "event_type": "confidence_upgraded",
+                "event_type": "pattern_reinforced",
                 "pattern_name": pattern_name,
                 "pattern_topic": pattern.get("topic", ""),
                 "details": {
-                    "from": old_confidence,
-                    "to": new_confidence,
-                    "use_count": updated.get("use_count", 0),
+                    "new_use_count": updated.get("use_count", 0),
+                    "old_confidence": old_confidence,
+                    "new_confidence": new_confidence,
                 },
             })
-            await ctx.deps.storage_service.add_confidence_transition({
-                "pattern_name": pattern_name,
-                "pattern_topic": pattern.get("topic", ""),
-                "from_confidence": old_confidence,
-                "to_confidence": new_confidence,
-                "use_count": updated.get("use_count", 0),
-                "reason": f"Reinforced to use_count {updated.get('use_count', 0)}",
-            })
-    except Exception:
-        logger.debug("Failed to record growth/confidence events for '%s'", pattern_name)
-    # Dual-write: update pattern in Mem0 with new confidence
-    try:
-        mem0_content = (
-            f"Pattern reinforced: {pattern_name} — "
-            f"now at use_count {updated.get('use_count', 0)}, "
-            f"confidence {updated.get('confidence', 'LOW')}"
+            # Record confidence transition if confidence changed
+            if new_confidence != old_confidence:
+                await ctx.deps.storage_service.add_growth_event({
+                    "event_type": "confidence_upgraded",
+                    "pattern_name": pattern_name,
+                    "pattern_topic": pattern.get("topic", ""),
+                    "details": {
+                        "from": old_confidence,
+                        "to": new_confidence,
+                        "use_count": updated.get("use_count", 0),
+                    },
+                })
+                await ctx.deps.storage_service.add_confidence_transition({
+                    "pattern_name": pattern_name,
+                    "pattern_topic": pattern.get("topic", ""),
+                    "from_confidence": old_confidence,
+                    "to_confidence": new_confidence,
+                    "use_count": updated.get("use_count", 0),
+                    "reason": f"Reinforced to use_count {updated.get('use_count', 0)}",
+                })
+        except Exception:
+            logger.debug("Failed to record growth/confidence events for '%s'", pattern_name)
+        # Dual-write: update pattern in Mem0 with new confidence (non-critical)
+        try:
+            mem0_content = (
+                f"Pattern reinforced: {pattern_name} — "
+                f"now at use_count {updated.get('use_count', 0)}, "
+                f"confidence {updated.get('confidence', 'LOW')}"
+            )
+            await ctx.deps.memory_service.add_with_metadata(
+                content=mem0_content,
+                metadata={
+                    "category": "pattern_reinforcement",
+                    "pattern_name": pattern_name,
+                    "topic": pattern.get("topic", ""),
+                    "confidence": updated.get("confidence", "LOW"),
+                },
+            )
+        except Exception:
+            logger.debug("Failed to sync reinforcement for '%s' to Mem0 (non-critical)", pattern_name)
+        return (
+            f"Reinforced pattern '{pattern_name}' → "
+            f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
         )
-        await ctx.deps.memory_service.add_with_metadata(
-            content=mem0_content,
-            metadata={
-                "category": "pattern_reinforcement",
-                "pattern_name": pattern_name,
-                "topic": pattern.get("topic", ""),
-                "confidence": updated.get("confidence", "LOW"),
-            },
-        )
-    except Exception:
-        logger.debug("Failed to sync reinforcement for '%s' to Mem0", pattern_name)
-    return (
-        f"Reinforced pattern '{pattern_name}' → "
-        f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
-    )
+    except Exception as e:
+        logger.warning("reinforce_existing_pattern failed: %s", type(e).__name__)
+        return f"Pattern reinforcement unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -239,9 +250,13 @@ async def add_to_memory(
 ) -> str:
     """Store a key learning or insight in Mem0 semantic memory for future recall.
     Use for insights that don't fit a structured pattern format."""
-    metadata = {"category": category, "source": "learn_agent"}
-    await ctx.deps.memory_service.add(content, metadata=metadata)
-    return f"Added to semantic memory (category: {category})."
+    try:
+        metadata = {"category": category, "source": "learn_agent"}
+        await ctx.deps.memory_service.add(content, metadata=metadata)
+        return f"Added to semantic memory (category: {category})."
+    except Exception as e:
+        logger.warning("add_to_memory failed: %s", type(e).__name__)
+        return f"Memory storage unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -255,33 +270,37 @@ async def store_experience(
 ) -> str:
     """Store a work experience entry in Supabase. Only call this if the input
     describes a complete work session with clear outcomes."""
-    experience_data = {
-        "name": name,
-        "category": category,
-        "output_summary": output_summary,
-        "learnings": learnings,
-        "patterns_extracted": patterns_extracted or [],
-    }
-    await ctx.deps.storage_service.add_experience(experience_data)
-
-    # Dual-write: sync experience to Mem0 for graph relationships
     try:
-        mem0_content = f"Experience: {name} (category: {category}). {output_summary}"
-        if patterns_extracted:
-            mem0_content += f". Patterns used: {', '.join(patterns_extracted)}"
-        await ctx.deps.memory_service.add_with_metadata(
-            content=mem0_content,
-            metadata={
-                "category": "experience",
-                "experience_name": name,
-                "experience_category": category,
-            },
-            enable_graph=True,
-        )
-    except Exception:
-        logger.debug("Failed to sync experience '%s' to Mem0", name)
+        experience_data = {
+            "name": name,
+            "category": category,
+            "output_summary": output_summary,
+            "learnings": learnings,
+            "patterns_extracted": patterns_extracted or [],
+        }
+        await ctx.deps.storage_service.add_experience(experience_data)
 
-    return f"Recorded experience '{name}' (category: {category})."
+        # Dual-write: sync experience to Mem0 for graph relationships (non-critical)
+        try:
+            mem0_content = f"Experience: {name} (category: {category}). {output_summary}"
+            if patterns_extracted:
+                mem0_content += f". Patterns used: {', '.join(patterns_extracted)}"
+            await ctx.deps.memory_service.add_with_metadata(
+                content=mem0_content,
+                metadata={
+                    "category": "experience",
+                    "experience_name": name,
+                    "experience_category": category,
+                },
+                enable_graph=True,
+            )
+        except Exception:
+            logger.debug("Failed to sync experience '%s' to Mem0 (non-critical)", name)
+
+        return f"Recorded experience '{name}' (category: {category})."
+    except Exception as e:
+        logger.warning("store_experience failed: %s", type(e).__name__)
+        return f"Experience storage unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -299,43 +318,47 @@ async def consolidate_memories(
         min_cluster_size: Minimum memories in a cluster to suggest graduation.
             Defaults to config.graduation_min_memories (3).
     """
-    min_size = min_cluster_size or ctx.deps.config.graduation_min_memories
+    try:
+        min_size = min_cluster_size or ctx.deps.config.graduation_min_memories
 
-    # Fetch all memories
-    all_memories = await ctx.deps.memory_service.get_all()
-    if not all_memories:
-        return "No memories found in Mem0. Nothing to consolidate."
+        # Fetch all memories
+        all_memories = await ctx.deps.memory_service.get_all()
+        if not all_memories:
+            return "No memories found in Mem0. Nothing to consolidate."
 
-    # Filter out already-categorized memories (patterns, graduated)
-    uncategorized = []
-    for mem in all_memories:
-        metadata = mem.get("metadata", {})
-        category = metadata.get("category", "")
-        if category not in ("pattern", "pattern_reinforcement", "graduated"):
-            uncategorized.append(mem)
+        # Filter out already-categorized memories (patterns, graduated)
+        uncategorized = []
+        for mem in all_memories:
+            metadata = mem.get("metadata", {})
+            category = metadata.get("category", "")
+            if category not in ("pattern", "pattern_reinforcement", "graduated"):
+                uncategorized.append(mem)
 
-    if not uncategorized:
-        return "All memories are already categorized. Nothing to consolidate."
+        if not uncategorized:
+            return "All memories are already categorized. Nothing to consolidate."
 
-    # Format memories for LLM analysis
-    formatted = [f"Found {len(uncategorized)} uncategorized memories (of {len(all_memories)} total):\n"]
-    for i, mem in enumerate(uncategorized[:50], 1):  # Limit to 50 for context
-        memory_text = mem.get("memory", mem.get("result", ""))
-        metadata = mem.get("metadata", {})
-        category = metadata.get("category", "uncategorized")
-        formatted.append(f"{i}. [{category}] {memory_text}")
+        # Format memories for LLM analysis
+        formatted = [f"Found {len(uncategorized)} uncategorized memories (of {len(all_memories)} total):\n"]
+        for i, mem in enumerate(uncategorized[:50], 1):  # Limit to 50 for context
+            memory_text = mem.get("memory", mem.get("result", ""))
+            metadata = mem.get("metadata", {})
+            category = metadata.get("category", "uncategorized")
+            formatted.append(f"{i}. [{category}] {memory_text}")
 
-    formatted.append(f"\n---\nMinimum cluster size for graduation: {min_size}")
-    formatted.append(
-        f"Analyze these memories for recurring themes. For each theme "
-        f"appearing in {min_size}+ memories:\n"
-        "1. Check if it matches an existing pattern (use search_existing_patterns)\n"
-        "2. If match: use reinforce_existing_pattern\n"
-        "3. If new: use store_pattern to create it\n"
-        "Report what you found and what actions you took."
-    )
+        formatted.append(f"\n---\nMinimum cluster size for graduation: {min_size}")
+        formatted.append(
+            f"Analyze these memories for recurring themes. For each theme "
+            f"appearing in {min_size}+ memories:\n"
+            "1. Check if it matches an existing pattern (use search_existing_patterns)\n"
+            "2. If match: use reinforce_existing_pattern\n"
+            "3. If new: use store_pattern to create it\n"
+            "Report what you found and what actions you took."
+        )
 
-    return "\n".join(formatted)
+        return "\n".join(formatted)
+    except Exception as e:
+        logger.warning("consolidate_memories failed: %s", type(e).__name__)
+        return f"Memory consolidation unavailable: {type(e).__name__}"
 
 
 @learn_agent.tool
@@ -351,18 +374,22 @@ async def tag_graduated_memories(
         memory_ids: List of Mem0 memory IDs to tag.
         pattern_name: Name of the pattern they graduated into.
     """
-    tagged = 0
-    for memory_id in memory_ids:
-        try:
-            await ctx.deps.memory_service.update_memory(
-                memory_id=memory_id,
-                metadata={
-                    "category": "graduated",
-                    "graduated_to_pattern": pattern_name,
-                },
-            )
-            tagged += 1
-        except Exception as e:
-            logger.debug("Failed to tag memory %s as graduated: %s", memory_id, e)
+    try:
+        tagged = 0
+        for memory_id in memory_ids:
+            try:
+                await ctx.deps.memory_service.update_memory(
+                    memory_id=memory_id,
+                    metadata={
+                        "category": "graduated",
+                        "graduated_to_pattern": pattern_name,
+                    },
+                )
+                tagged += 1
+            except Exception as e:
+                logger.debug("Failed to tag memory %s as graduated: %s", memory_id, e)
 
-    return f"Tagged {tagged}/{len(memory_ids)} memories as graduated to pattern '{pattern_name}'."
+        return f"Tagged {tagged}/{len(memory_ids)} memories as graduated to pattern '{pattern_name}'."
+    except Exception as e:
+        logger.warning("tag_graduated_memories failed: %s", type(e).__name__)
+        return f"Memory tagging unavailable: {type(e).__name__}"

@@ -8,11 +8,8 @@ import logging
 
 from fastmcp import FastMCP
 
-from second_brain.config import BrainConfig
-from second_brain.deps import BrainDeps
+from second_brain.deps import BrainDeps, create_deps
 from second_brain.models import get_model
-from second_brain.services.memory import MemoryService
-from second_brain.services.storage import StorageService
 from second_brain.agents.recall import recall_agent
 from second_brain.agents.ask import ask_agent
 from second_brain.agents.learn import learn_agent
@@ -32,22 +29,8 @@ _model = None
 def _get_deps() -> BrainDeps:
     global _deps, _model
     if _deps is None:
-        config = BrainConfig()
-        graphiti = None
-        if config.graph_provider == "graphiti":
-            try:
-                from second_brain.services.graphiti import GraphitiService
-                graphiti = GraphitiService(config)
-            except ImportError:
-                logger.warning("graphiti-core not installed for MCP server")
-
-        _deps = BrainDeps(
-            config=config,
-            memory_service=MemoryService(config),
-            storage_service=StorageService(config),
-            graphiti_service=graphiti,
-        )
-        _model = get_model(config)
+        _deps = create_deps()
+        _model = get_model(_deps.config)
     return _deps
 
 

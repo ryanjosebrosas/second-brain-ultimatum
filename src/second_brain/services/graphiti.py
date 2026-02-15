@@ -15,11 +15,14 @@ class GraphitiService:
         self.config = config
         self._client = None  # Lazy init (async)
         self._initialized = False
+        self._init_failed = False
 
     async def _ensure_init(self):
         """Lazy async initialization of Graphiti client."""
         if self._initialized:
             return
+        if self._client is None and self._init_failed:
+            return  # Already failed, don't retry
         try:
             from graphiti_core import Graphiti
 
@@ -37,8 +40,10 @@ class GraphitiService:
             self._initialized = True
             logger.info("Graphiti client initialized with Neo4j")
         except Exception as e:
-            logger.error(f"Failed to initialize Graphiti: {e}")
-            raise
+            logger.error("Failed to initialize Graphiti: %s", type(e).__name__)
+            logger.debug("Graphiti init error detail: %s", e)
+            self._init_failed = True
+            self._client = None
 
     def _build_providers(self):
         """Build LLM, embedder, and cross-encoder providers."""
@@ -95,34 +100,48 @@ class GraphitiService:
     ) -> None:
         """Add content as a graph episode for entity extraction."""
         await self._ensure_init()
+        if not self._initialized:
+            logger.debug("Graphiti not available, skipping add_episode")
+            return
 
-        from graphiti_core.edges import EpisodeType
+        try:
+            from graphiti_core.edges import EpisodeType
 
-        source_desc = "second-brain"
-        if metadata:
-            source_desc = metadata.get("source", metadata.get("category", "second-brain"))
+            source_desc = "second-brain"
+            if metadata:
+                source_desc = metadata.get("source", metadata.get("category", "second-brain"))
 
-        await self._client.add_episode(
-            name=f"episode_{hash(content) & 0xFFFFFFFF:08x}",
-            episode_body=content,
-            source=EpisodeType.text,
-            source_description=source_desc,
-            reference_time=datetime.now(timezone.utc),
-        )
+            await self._client.add_episode(
+                name=f"episode_{hash(content) & 0xFFFFFFFF:08x}",
+                episode_body=content,
+                source=EpisodeType.text,
+                source_description=source_desc,
+                reference_time=datetime.now(timezone.utc),
+            )
+        except Exception as e:
+            logger.warning("Graphiti add_episode failed: %s", type(e).__name__)
+            logger.debug("Graphiti add_episode error detail: %s", e)
 
     async def search(self, query: str, limit: int = 10) -> list[dict]:
         """Search graph for entity relationships."""
         await self._ensure_init()
+        if not self._initialized:
+            return []
 
-        results = await self._client.search(query)
-        relations = []
-        for edge in results[:limit]:
-            relations.append({
-                "source": getattr(edge, "source_node_name", "?"),
-                "relationship": getattr(edge, "fact", "?"),
-                "target": getattr(edge, "target_node_name", "?"),
-            })
-        return relations
+        try:
+            results = await self._client.search(query)
+            relations = []
+            for edge in results[:limit]:
+                relations.append({
+                    "source": getattr(edge, "source_node_name", "?"),
+                    "relationship": getattr(edge, "fact", "?"),
+                    "target": getattr(edge, "target_node_name", "?"),
+                })
+            return relations
+        except Exception as e:
+            logger.warning("Graphiti search failed: %s", type(e).__name__)
+            logger.debug("Graphiti search error detail: %s", e)
+            return []
 
     async def close(self):
         """Close the Graphiti client connection."""

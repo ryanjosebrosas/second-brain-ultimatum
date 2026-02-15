@@ -33,48 +33,60 @@ review_agent = Agent(
 @review_agent.tool
 async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
     """Load the user's voice and tone guide for evaluating brand voice consistency."""
-    content = await ctx.deps.storage_service.get_memory_content("style-voice")
-    if not content:
-        return "No voice guide found."
-    sections = []
-    for item in content:
-        title = item.get("title", "Untitled")
-        text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
-        sections.append(f"### {title}\n{text}")
-    return "## Voice & Tone Reference\n" + "\n\n".join(sections)
+    try:
+        content = await ctx.deps.storage_service.get_memory_content("style-voice")
+        if not content:
+            return "No voice guide found."
+        sections = []
+        for item in content:
+            title = item.get("title", "Untitled")
+            text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
+            sections.append(f"### {title}\n{text}")
+        return "## Voice & Tone Reference\n" + "\n\n".join(sections)
+    except Exception as e:
+        logger.warning("load_voice_reference failed: %s", type(e).__name__)
+        return f"Voice reference unavailable: {type(e).__name__}"
 
 
 @review_agent.tool
 async def load_positioning_context(ctx: RunContext[BrainDeps]) -> str:
     """Load company, personal, and customer positioning context for evaluating market alignment."""
-    all_sections = []
-    for category, label in [("company", "Company"), ("personal", "Personal"), ("customers", "Customers")]:
-        items = await ctx.deps.storage_service.get_memory_content(category)
-        if items:
-            lines = [f"### {label}"]
-            for item in items:
-                title = item.get("title", "Untitled")
-                text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
-                lines.append(f"#### {title}\n{text}")
-            all_sections.append("\n".join(lines))
-    if not all_sections:
-        return "No positioning context found."
-    return "## Positioning Context\n" + "\n\n".join(all_sections)
+    try:
+        all_sections = []
+        for category, label in [("company", "Company"), ("personal", "Personal"), ("customers", "Customers")]:
+            items = await ctx.deps.storage_service.get_memory_content(category)
+            if items:
+                lines = [f"### {label}"]
+                for item in items:
+                    title = item.get("title", "Untitled")
+                    text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
+                    lines.append(f"#### {title}\n{text}")
+                all_sections.append("\n".join(lines))
+        if not all_sections:
+            return "No positioning context found."
+        return "## Positioning Context\n" + "\n\n".join(all_sections)
+    except Exception as e:
+        logger.warning("load_positioning_context failed: %s", type(e).__name__)
+        return f"Positioning context unavailable: {type(e).__name__}"
 
 
 @review_agent.tool
 async def load_example_benchmarks(ctx: RunContext[BrainDeps], content_type: str | None = None) -> str:
     """Load content examples as quality benchmarks for comparison."""
-    examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
-    if not examples:
-        return "No benchmark examples found."
-    limit = ctx.deps.config.experience_limit
-    sections = []
-    for ex in examples[:limit]:
-        title = ex.get("title", "Untitled")
-        text = ex.get("content", "")[:ctx.deps.config.content_preview_limit]
-        sections.append(f"### {title}\n{text}")
-    return "## Example Benchmarks\n" + "\n\n".join(sections)
+    try:
+        examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
+        if not examples:
+            return "No benchmark examples found."
+        limit = ctx.deps.config.experience_limit
+        sections = []
+        for ex in examples[:limit]:
+            title = ex.get("title", "Untitled")
+            text = ex.get("content", "")[:ctx.deps.config.content_preview_limit]
+            sections.append(f"### {title}\n{text}")
+        return "## Example Benchmarks\n" + "\n\n".join(sections)
+    except Exception as e:
+        logger.warning("load_example_benchmarks failed: %s", type(e).__name__)
+        return f"Example benchmarks unavailable: {type(e).__name__}"
 
 
 async def run_full_review(

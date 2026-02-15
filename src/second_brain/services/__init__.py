@@ -3,7 +3,7 @@
 from second_brain.services.health import HealthService
 from second_brain.services.memory import MemoryService
 from second_brain.services.search_result import SearchResult
-from second_brain.services.storage import StorageService
+from second_brain.services.storage import ContentTypeRegistry, StorageService
 
 # Lazy import: graphiti-core is optional
 try:
@@ -11,4 +11,11 @@ try:
 except ImportError:
     GraphitiService = None
 
-__all__ = ["GraphitiService", "HealthService", "MemoryService", "SearchResult", "StorageService"]
+__all__ = [
+    "ContentTypeRegistry",
+    "GraphitiService",
+    "HealthService",
+    "MemoryService",
+    "SearchResult",
+    "StorageService",
+]

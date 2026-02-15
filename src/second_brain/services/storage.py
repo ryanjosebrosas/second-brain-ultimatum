@@ -29,13 +29,18 @@ class StorageService:
     async def get_patterns(
         self, topic: str | None = None, confidence: str | None = None
     ) -> list[dict]:
-        query = self._client.table("patterns").select("*")
-        if topic:
-            query = query.eq("topic", topic)
-        if confidence:
-            query = query.eq("confidence", confidence)
-        result = query.order("date_updated", desc=True).execute()
-        return result.data
+        try:
+            query = self._client.table("patterns").select("*")
+            if topic:
+                query = query.eq("topic", topic)
+            if confidence:
+                query = query.eq("confidence", confidence)
+            result = query.order("date_updated", desc=True).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_patterns failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def get_patterns_for_content_type(
         self, content_type_slug: str
@@ -51,37 +56,57 @@ class StorageService:
         ]
 
     async def upsert_pattern(self, pattern: dict) -> dict:
-        result = self._client.table("patterns").upsert(pattern).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("patterns").upsert(pattern).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_pattern failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def insert_pattern(self, pattern: dict) -> dict:
         """Insert a new pattern. Raises on duplicate name (DB UNIQUE constraint)."""
-        result = self._client.table("patterns").insert(pattern).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("patterns").insert(pattern).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase insert_pattern failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_pattern_by_name(self, name: str) -> dict | None:
         """Find a pattern by name (case-insensitive). Returns the pattern dict or None."""
-        result = (
-            self._client.table("patterns")
-            .select("*")
-            .ilike("name", name)
-            .limit(1)
-            .execute()
-        )
-        return result.data[0] if result.data else None
+        try:
+            result = (
+                self._client.table("patterns")
+                .select("*")
+                .ilike("name", name)
+                .limit(1)
+                .execute()
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_pattern_by_name failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
 
     async def reinforce_pattern(
         self, pattern_id: str, new_evidence: list[str] | None = None
     ) -> dict:
         """Atomically reinforce a pattern: increment use_count, upgrade confidence, append evidence."""
         # Fetch current state
-        current = (
-            self._client.table("patterns")
-            .select("*")
-            .eq("id", pattern_id)
-            .limit(1)
-            .execute()
-        )
+        try:
+            current = (
+                self._client.table("patterns")
+                .select("*")
+                .eq("id", pattern_id)
+                .limit(1)
+                .execute()
+            )
+        except Exception as e:
+            logger.warning("Supabase reinforce_pattern fetch failed: %s", type(e).__name__)
+            raise ValueError("Failed to fetch pattern for reinforcement") from e
+
         if not current.data:
             logger.warning("reinforce_pattern: pattern_id=%s not found", pattern_id)
             raise ValueError(f"Pattern '{pattern_id}' not found for reinforcement")
@@ -106,12 +131,18 @@ class StorageService:
             "evidence": merged_evidence,
             "date_updated": str(date.today()),
         }
-        result = (
-            self._client.table("patterns")
-            .update(update_data)
-            .eq("id", pattern_id)
-            .execute()
-        )
+
+        try:
+            result = (
+                self._client.table("patterns")
+                .update(update_data)
+                .eq("id", pattern_id)
+                .execute()
+            )
+        except Exception as e:
+            logger.warning("Supabase reinforce_pattern update failed: %s", type(e).__name__)
+            raise ValueError("Failed to update pattern for reinforcement") from e
+
         if not result.data:
             logger.error("reinforce_pattern: update failed for pattern_id=%s", pattern_id)
             raise ValueError(f"Failed to update pattern '{pattern_id}'")
@@ -123,51 +154,86 @@ class StorageService:
 
     async def delete_pattern(self, pattern_id: str) -> bool:
         """Delete a pattern by ID."""
-        result = self._client.table("patterns").delete().eq("id", pattern_id).execute()
-        return len(result.data) > 0
+        try:
+            result = self._client.table("patterns").delete().eq("id", pattern_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_pattern failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Experiences ---
 
     async def add_experience(self, experience: dict) -> dict:
-        result = self._client.table("experiences").insert(experience).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("experiences").insert(experience).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_experience failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_experiences(
         self, category: str | None = None, limit: int = 20
     ) -> list[dict]:
-        query = self._client.table("experiences").select("*")
-        if category:
-            query = query.eq("category", category)
-        result = query.order("created_at", desc=True).limit(limit).execute()
-        return result.data
+        try:
+            query = self._client.table("experiences").select("*")
+            if category:
+                query = query.eq("category", category)
+            result = query.order("created_at", desc=True).limit(limit).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_experiences failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def delete_experience(self, experience_id: str) -> bool:
         """Delete an experience by ID."""
-        result = self._client.table("experiences").delete().eq("id", experience_id).execute()
-        return len(result.data) > 0
+        try:
+            result = self._client.table("experiences").delete().eq("id", experience_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_experience failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Brain Health ---
 
     async def add_health_snapshot(self, snapshot: dict) -> dict:
-        result = self._client.table("brain_health").insert(snapshot).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("brain_health").insert(snapshot).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_health_snapshot failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_health_history(self, limit: int = 30) -> list[dict]:
-        result = (
-            self._client.table("brain_health")
-            .select("*")
-            .order("date", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return result.data
+        try:
+            result = (
+                self._client.table("brain_health")
+                .select("*")
+                .order("date", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_health_history failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     # --- Growth Log ---
 
     async def add_growth_event(self, event: dict) -> dict:
         """Record a brain growth event."""
-        result = self._client.table("growth_log").insert(event).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("growth_log").insert(event).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_growth_event failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_growth_events(
         self,
@@ -175,29 +241,44 @@ class StorageService:
         days: int = 30,
     ) -> list[dict]:
         """Get growth events, optionally filtered by type, within the last N days."""
-        cutoff = str(date.today() - timedelta(days=days))
-        query = self._client.table("growth_log").select("*")
-        if event_type:
-            query = query.eq("event_type", event_type)
-        query = query.gte("event_date", cutoff)
-        result = query.order("event_date", desc=True).execute()
-        return result.data
+        try:
+            cutoff = str(date.today() - timedelta(days=days))
+            query = self._client.table("growth_log").select("*")
+            if event_type:
+                query = query.eq("event_type", event_type)
+            query = query.gte("event_date", cutoff)
+            result = query.order("event_date", desc=True).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_growth_events failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def get_growth_event_counts(self, days: int = 30) -> dict[str, int]:
         """Get counts of each event type within the last N days."""
-        events = await self.get_growth_events(days=days)
-        counts: dict[str, int] = {}
-        for e in events:
-            t = e.get("event_type", "unknown")
-            counts[t] = counts.get(t, 0) + 1
-        return counts
+        try:
+            events = await self.get_growth_events(days=days)
+            counts: dict[str, int] = {}
+            for e in events:
+                t = e.get("event_type", "unknown")
+                counts[t] = counts.get(t, 0) + 1
+            return counts
+        except Exception as e:
+            logger.warning("Supabase get_growth_event_counts failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     # --- Review History ---
 
     async def add_review_history(self, entry: dict) -> dict:
         """Record a review result for quality trending."""
-        result = self._client.table("review_history").insert(entry).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("review_history").insert(entry).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_review_history failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_review_history(
         self,
@@ -205,18 +286,28 @@ class StorageService:
         limit: int = 30,
     ) -> list[dict]:
         """Get review history, optionally filtered by content type."""
-        query = self._client.table("review_history").select("*")
-        if content_type:
-            query = query.eq("content_type", content_type)
-        result = query.order("review_date", desc=True).limit(limit).execute()
-        return result.data
+        try:
+            query = self._client.table("review_history").select("*")
+            if content_type:
+                query = query.eq("content_type", content_type)
+            result = query.order("review_date", desc=True).limit(limit).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_review_history failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     # --- Confidence History ---
 
     async def add_confidence_transition(self, transition: dict) -> dict:
         """Record a confidence level change."""
-        result = self._client.table("confidence_history").insert(transition).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("confidence_history").insert(transition).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_confidence_transition failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def get_confidence_history(
         self,
@@ -224,109 +315,180 @@ class StorageService:
         limit: int = 50,
     ) -> list[dict]:
         """Get confidence transitions, optionally for a specific pattern."""
-        query = self._client.table("confidence_history").select("*")
-        if pattern_name:
-            query = query.eq("pattern_name", pattern_name)
-        result = query.order("transition_date", desc=True).limit(limit).execute()
-        return result.data
+        try:
+            query = self._client.table("confidence_history").select("*")
+            if pattern_name:
+                query = query.eq("pattern_name", pattern_name)
+            result = query.order("transition_date", desc=True).limit(limit).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_confidence_history failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     # --- Memory Content ---
 
     async def get_memory_content(
         self, category: str, subcategory: str | None = None
     ) -> list[dict]:
-        query = self._client.table("memory_content").select("*")
-        query = query.eq("category", category)
-        if subcategory:
-            query = query.eq("subcategory", subcategory)
-        result = query.execute()
-        return result.data
+        try:
+            query = self._client.table("memory_content").select("*")
+            query = query.eq("category", category)
+            if subcategory:
+                query = query.eq("subcategory", subcategory)
+            result = query.execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_memory_content failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def upsert_memory_content(self, content: dict) -> dict:
-        result = self._client.table("memory_content").upsert(content).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("memory_content").upsert(content).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_memory_content failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     # --- Examples ---
 
     async def get_examples(
         self, content_type: str | None = None
     ) -> list[dict]:
-        query = self._client.table("examples").select("*")
-        if content_type:
-            query = query.eq("content_type", content_type)
-        result = query.order("created_at", desc=True).execute()
-        return result.data
+        try:
+            query = self._client.table("examples").select("*")
+            if content_type:
+                query = query.eq("content_type", content_type)
+            result = query.order("created_at", desc=True).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_examples failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def upsert_example(self, example: dict) -> dict:
-        result = self._client.table("examples").upsert(example).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("examples").upsert(example).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_example failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def delete_example(self, example_id: str) -> bool:
         """Delete an example by ID."""
-        result = self._client.table("examples").delete().eq("id", example_id).execute()
-        return len(result.data) > 0
+        try:
+            result = self._client.table("examples").delete().eq("id", example_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_example failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Knowledge Repo ---
 
     async def get_knowledge(
         self, category: str | None = None
     ) -> list[dict]:
-        query = self._client.table("knowledge_repo").select("*")
-        if category:
-            query = query.eq("category", category)
-        result = query.order("created_at", desc=True).execute()
-        return result.data
+        try:
+            query = self._client.table("knowledge_repo").select("*")
+            if category:
+                query = query.eq("category", category)
+            result = query.order("created_at", desc=True).execute()
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_knowledge failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def upsert_knowledge(self, knowledge: dict) -> dict:
-        result = self._client.table("knowledge_repo").upsert(knowledge).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self._client.table("knowledge_repo").upsert(knowledge).execute()
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_knowledge failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def delete_knowledge(self, knowledge_id: str) -> bool:
         """Delete a knowledge entry by ID."""
-        result = self._client.table("knowledge_repo").delete().eq("id", knowledge_id).execute()
-        return len(result.data) > 0
+        try:
+            result = self._client.table("knowledge_repo").delete().eq("id", knowledge_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_knowledge failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Content Types ---
 
     async def get_content_types(self) -> list[dict]:
         """Get all content types ordered by name."""
-        result = (
-            self._client.table("content_types")
-            .select("*")
-            .order("name")
-            .execute()
-        )
-        return result.data
+        try:
+            result = (
+                self._client.table("content_types")
+                .select("*")
+                .order("name")
+                .execute()
+            )
+            return result.data
+        except Exception as e:
+            logger.warning("Supabase get_content_types failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
 
     async def get_content_type_by_slug(self, slug: str) -> dict | None:
         """Get a content type by its slug (e.g., 'linkedin', 'newsletter')."""
-        result = (
-            self._client.table("content_types")
-            .select("*")
-            .eq("slug", slug)
-            .limit(1)
-            .execute()
-        )
-        return result.data[0] if result.data else None
+        try:
+            result = (
+                self._client.table("content_types")
+                .select("*")
+                .eq("slug", slug)
+                .limit(1)
+                .execute()
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_content_type_by_slug failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
 
     async def upsert_content_type(self, content_type: dict) -> dict:
         """Create or update a content type. Uses slug as the conflict key."""
-        result = (
-            self._client.table("content_types")
-            .upsert(content_type, on_conflict="slug")
-            .execute()
-        )
-        return result.data[0] if result.data else {}
+        try:
+            result = (
+                self._client.table("content_types")
+                .upsert(content_type, on_conflict="slug")
+                .execute()
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_content_type failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
 
     async def delete_content_type(self, slug: str) -> bool:
         """Delete a content type by slug. Returns True if deleted."""
-        result = (
-            self._client.table("content_types")
-            .delete()
-            .eq("slug", slug)
-            .execute()
-        )
-        return len(result.data) > 0
+        try:
+            result = (
+                self._client.table("content_types")
+                .delete()
+                .eq("slug", slug)
+                .execute()
+            )
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_content_type failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
+
+    async def close(self) -> None:
+        """Release Supabase client resources."""
+        # supabase-py Client doesn't have an explicit close,
+        # but we null the reference for garbage collection
+        self._client = None
 
 
 class ContentTypeRegistry:
