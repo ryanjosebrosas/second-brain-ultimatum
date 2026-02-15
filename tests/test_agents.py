@@ -1,6 +1,8 @@
 """Tests for agent schemas and registration."""
 
-from second_brain.schemas import RecallResult, AskResult, MemoryMatch
+from second_brain.schemas import (
+    RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
+)
 
 
 class TestSchemas:
@@ -76,3 +78,63 @@ class TestAskAgent:
         assert "load_brain_context" in tool_names
         assert "find_relevant_patterns" in tool_names
         assert "find_similar_experiences" in tool_names
+
+
+class TestLearnResult:
+    def test_learn_result_defaults(self):
+        result = LearnResult(input_summary="test")
+        assert result.patterns_extracted == []
+        assert result.insights == []
+        assert result.experience_recorded is False
+        assert result.patterns_new == 0
+        assert result.patterns_reinforced == 0
+
+    def test_pattern_extract_fields(self):
+        pattern = PatternExtract(
+            name="Test Pattern",
+            topic="Process",
+            pattern_text="Always test first",
+            evidence=["Worked in project X"],
+        )
+        assert pattern.confidence == "LOW"
+        assert pattern.is_reinforcement is False
+        assert pattern.existing_pattern_name == ""
+
+    def test_learn_result_with_patterns(self):
+        pattern = PatternExtract(
+            name="Test",
+            topic="Content",
+            pattern_text="Write concisely",
+        )
+        result = LearnResult(
+            input_summary="Session notes",
+            patterns_extracted=[pattern],
+            patterns_new=1,
+            storage_summary="1 pattern stored",
+        )
+        assert len(result.patterns_extracted) == 1
+        assert result.patterns_new == 1
+
+
+class TestLearnAgent:
+    def test_agent_exists(self):
+        from second_brain.agents.learn import learn_agent
+        assert learn_agent is not None
+
+    def test_agent_output_type(self):
+        from second_brain.agents.learn import learn_agent
+        assert learn_agent.output_type is LearnResult
+
+    def test_agent_has_tools(self):
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "search_existing_patterns" in tool_names
+        assert "store_pattern" in tool_names
+        assert "add_to_memory" in tool_names
+        assert "store_experience" in tool_names
+
+    def test_agent_has_dynamic_instructions(self):
+        from second_brain.agents.learn import learn_agent
+        # @agent.instructions appends callables to _instructions list
+        dynamic = [i for i in learn_agent._instructions if callable(i)]
+        assert len(dynamic) > 0

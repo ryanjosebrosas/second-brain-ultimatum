@@ -15,6 +15,7 @@ from second_brain.services.memory import MemoryService
 from second_brain.services.storage import StorageService
 from second_brain.agents.recall import recall_agent
 from second_brain.agents.ask import ask_agent
+from second_brain.agents.learn import learn_agent
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,47 @@ async def ask(question: str) -> str:
             parts.append(f"- {rel.source} --[{rel.relationship}]--> {rel.target}")
     if output.next_action:
         parts.append(f"\nSuggested next: {output.next_action}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def learn(content: str, category: str = "general") -> str:
+    """Extract patterns and learnings from a work session or experience.
+    Feed raw text and the agent will identify patterns, insights, and
+    store them in your Second Brain.
+
+    Args:
+        content: Raw text from a work session, conversation, or experience
+                 to extract learnings from.
+        category: Experience category - content, prospects, clients, or general.
+    """
+    deps = _get_deps()
+    model = _get_model()
+    result = await learn_agent.run(
+        f"Extract learnings from this work session (category: {category}):\n\n{content}",
+        deps=deps,
+        model=model,
+    )
+    output = result.output
+
+    parts = [f"# Learn: {output.input_summary}\n"]
+
+    if output.patterns_extracted:
+        parts.append("## Patterns Extracted\n")
+        for p in output.patterns_extracted:
+            marker = "(reinforced)" if p.is_reinforcement else "(new)"
+            parts.append(f"- [{p.confidence}] {p.name} {marker}")
+            parts.append(f"  {p.pattern_text[:120]}")
+
+    if output.insights:
+        parts.append("\n## Insights\n")
+        for insight in output.insights:
+            parts.append(f"- {insight}")
+
+    parts.append(f"\n## Summary")
+    parts.append(f"New: {output.patterns_new} | Reinforced: {output.patterns_reinforced}")
+    parts.append(output.storage_summary)
+
     return "\n".join(parts)
 
 

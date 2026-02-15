@@ -119,6 +119,55 @@ def ask(question: str):
 
 
 @cli.command()
+@click.argument("content")
+@click.option(
+    "--category",
+    default="general",
+    help="Experience category (content, prospects, clients, general)",
+)
+def learn(content: str, category: str):
+    """Extract patterns and learnings from a work session or experience."""
+    from second_brain.agents.learn import learn_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await learn_agent.run(
+            f"Extract learnings from this work session (category: {category}):\n\n{content}",
+            deps=deps,
+            model=model,
+        )
+        output = result.output
+
+        click.echo(f"\n# Learn: {output.input_summary}\n")
+
+        if output.patterns_extracted:
+            click.echo("## Patterns Extracted\n")
+            for p in output.patterns_extracted:
+                marker = "(reinforced)" if p.is_reinforcement else "(new)"
+                click.echo(f"  [{p.confidence}] {p.name} {marker}")
+                click.echo(f"         {p.pattern_text[:100]}")
+                if p.anti_patterns:
+                    click.echo(f"         Anti: {', '.join(p.anti_patterns[:2])}")
+
+        if output.insights:
+            click.echo("\n## Insights\n")
+            for insight in output.insights:
+                click.echo(f"  - {insight}")
+
+        if output.experience_recorded:
+            click.echo(f"\n## Experience: recorded ({output.experience_category})")
+
+        click.echo(f"\n## Summary")
+        click.echo(f"  New patterns: {output.patterns_new}")
+        click.echo(f"  Reinforced: {output.patterns_reinforced}")
+        click.echo(f"  {output.storage_summary}")
+
+    asyncio.run(run())
+
+
+@cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""
     from second_brain.migrate import run_migration

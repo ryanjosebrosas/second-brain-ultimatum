@@ -2,7 +2,9 @@
 
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from second_brain.schemas import RecallResult, AskResult, MemoryMatch, Relation
+from second_brain.schemas import (
+    RecallResult, AskResult, MemoryMatch, Relation, LearnResult, PatternExtract,
+)
 
 
 class TestMCPTools:
@@ -129,3 +131,34 @@ class TestMCPTools:
         result = await recall.fn(query="content strategy")
         assert "Graph Relationships" in result
         assert "LinkedIn --[uses]--> content strategy" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.learn_agent")
+    async def test_learn_tool(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import learn
+
+        mock_result = MagicMock()
+        mock_result.output = LearnResult(
+            input_summary="LinkedIn post session",
+            patterns_extracted=[
+                PatternExtract(
+                    name="Use Exact Words",
+                    topic="Content",
+                    pattern_text="Use the user's exact words, don't polish",
+                    evidence=["Draft v3 was rejected for being too AI"],
+                )
+            ],
+            insights=["Raw voice performs better than polished"],
+            patterns_new=1,
+            patterns_reinforced=0,
+            storage_summary="1 pattern stored in registry, 1 insight added to memory",
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = MagicMock()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await learn.fn(content="Session notes about LinkedIn writing...", category="content")
+        assert "LinkedIn post session" in result
+        assert "Use Exact Words" in result
+        assert "New: 1" in result
