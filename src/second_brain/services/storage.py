@@ -1,7 +1,7 @@
 """Structured storage via Supabase for patterns, experiences, metrics."""
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from supabase import create_client, Client
 
@@ -144,6 +144,74 @@ class StorageService:
             .limit(limit)
             .execute()
         )
+        return result.data
+
+    # --- Growth Log ---
+
+    async def add_growth_event(self, event: dict) -> dict:
+        """Record a brain growth event."""
+        result = self._client.table("growth_log").insert(event).execute()
+        return result.data[0] if result.data else {}
+
+    async def get_growth_events(
+        self,
+        event_type: str | None = None,
+        days: int = 30,
+    ) -> list[dict]:
+        """Get growth events, optionally filtered by type, within the last N days."""
+        cutoff = str(date.today() - timedelta(days=days))
+        query = self._client.table("growth_log").select("*")
+        if event_type:
+            query = query.eq("event_type", event_type)
+        query = query.gte("event_date", cutoff)
+        result = query.order("event_date", desc=True).execute()
+        return result.data
+
+    async def get_growth_event_counts(self, days: int = 30) -> dict[str, int]:
+        """Get counts of each event type within the last N days."""
+        events = await self.get_growth_events(days=days)
+        counts: dict[str, int] = {}
+        for e in events:
+            t = e.get("event_type", "unknown")
+            counts[t] = counts.get(t, 0) + 1
+        return counts
+
+    # --- Review History ---
+
+    async def add_review_history(self, entry: dict) -> dict:
+        """Record a review result for quality trending."""
+        result = self._client.table("review_history").insert(entry).execute()
+        return result.data[0] if result.data else {}
+
+    async def get_review_history(
+        self,
+        content_type: str | None = None,
+        limit: int = 30,
+    ) -> list[dict]:
+        """Get review history, optionally filtered by content type."""
+        query = self._client.table("review_history").select("*")
+        if content_type:
+            query = query.eq("content_type", content_type)
+        result = query.order("review_date", desc=True).limit(limit).execute()
+        return result.data
+
+    # --- Confidence History ---
+
+    async def add_confidence_transition(self, transition: dict) -> dict:
+        """Record a confidence level change."""
+        result = self._client.table("confidence_history").insert(transition).execute()
+        return result.data[0] if result.data else {}
+
+    async def get_confidence_history(
+        self,
+        pattern_name: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Get confidence transitions, optionally for a specific pattern."""
+        query = self._client.table("confidence_history").select("*")
+        if pattern_name:
+            query = query.eq("pattern_name", pattern_name)
+        result = query.order("transition_date", desc=True).limit(limit).execute()
         return result.data
 
     # --- Memory Content ---

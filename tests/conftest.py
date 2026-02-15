@@ -104,6 +104,20 @@ def mock_storage():
     storage.delete_experience = AsyncMock(return_value=True)
     storage.delete_example = AsyncMock(return_value=True)
     storage.delete_knowledge = AsyncMock(return_value=True)
+    # Growth tracking mocks
+    storage.add_growth_event = AsyncMock(return_value={
+        "id": "growth-1", "event_type": "pattern_created", "event_date": "2026-02-15",
+    })
+    storage.get_growth_events = AsyncMock(return_value=[])
+    storage.get_growth_event_counts = AsyncMock(return_value={})
+    storage.add_review_history = AsyncMock(return_value={
+        "id": "review-1", "overall_score": 8.0, "verdict": "READY TO SEND",
+    })
+    storage.get_review_history = AsyncMock(return_value=[])
+    storage.add_confidence_transition = AsyncMock(return_value={
+        "id": "conf-1", "pattern_name": "Test", "from_confidence": "LOW", "to_confidence": "MEDIUM",
+    })
+    storage.get_confidence_history = AsyncMock(return_value=[])
     return storage
 
 

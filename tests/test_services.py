@@ -667,3 +667,213 @@ class TestStorageReinforcement:
 
         assert result["id"] == "uuid-new"
         mock_table.insert.assert_called_once()
+
+
+class TestGrowthLogStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_add_growth_event(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "event_type": "pattern_created",
+                   "pattern_name": "Test Pattern"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.add_growth_event({
+            "event_type": "pattern_created",
+            "pattern_name": "Test Pattern",
+            "details": {"confidence": "LOW"},
+        })
+
+        assert result["event_type"] == "pattern_created"
+        mock_client.table.assert_called_with("growth_log")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_growth_events(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.gte.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[
+                {"event_type": "pattern_created", "event_date": "2026-02-15"},
+                {"event_type": "pattern_reinforced", "event_date": "2026-02-14"},
+            ]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        events = await service.get_growth_events(days=7)
+
+        assert len(events) == 2
+        mock_table.gte.assert_called_once()
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_growth_events_with_type_filter(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.gte.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_growth_events(event_type="pattern_created", days=30)
+
+        mock_table.eq.assert_called_once_with("event_type", "pattern_created")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_growth_event_counts(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.gte.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[
+                {"event_type": "pattern_created"},
+                {"event_type": "pattern_created"},
+                {"event_type": "pattern_reinforced"},
+            ]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        counts = await service.get_growth_event_counts(days=30)
+
+        assert counts == {"pattern_created": 2, "pattern_reinforced": 1}
+
+
+class TestReviewHistoryStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_add_review_history(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "overall_score": 8.5, "verdict": "READY TO SEND"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.add_review_history({
+            "overall_score": 8.5,
+            "verdict": "READY TO SEND",
+            "content_type": "linkedin",
+        })
+
+        assert result["overall_score"] == 8.5
+        mock_client.table.assert_called_with("review_history")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_review_history(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[
+                {"overall_score": 8.5, "review_date": "2026-02-15"},
+                {"overall_score": 7.0, "review_date": "2026-02-14"},
+            ]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        history = await service.get_review_history(limit=10)
+
+        assert len(history) == 2
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_review_history_filtered(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_review_history(content_type="email")
+
+        mock_table.eq.assert_called_once_with("content_type", "email")
+
+
+class TestConfidenceHistoryStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_add_confidence_transition(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "pattern_name": "Test",
+                   "from_confidence": "LOW", "to_confidence": "MEDIUM"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.add_confidence_transition({
+            "pattern_name": "Test",
+            "from_confidence": "LOW",
+            "to_confidence": "MEDIUM",
+            "use_count": 2,
+        })
+
+        assert result["from_confidence"] == "LOW"
+        assert result["to_confidence"] == "MEDIUM"
+        mock_client.table.assert_called_with("confidence_history")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_confidence_history(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[
+                {"pattern_name": "A", "from_confidence": "LOW", "to_confidence": "MEDIUM"},
+                {"pattern_name": "B", "from_confidence": "MEDIUM", "to_confidence": "HIGH"},
+            ]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        history = await service.get_confidence_history(limit=20)
+
+        assert len(history) == 2
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_confidence_history_by_pattern(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_confidence_history(pattern_name="Test Pattern")
+
+        mock_table.eq.assert_called_once_with("pattern_name", "Test Pattern")

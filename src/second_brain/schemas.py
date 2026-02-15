@@ -201,6 +201,86 @@ class ReviewResult(BaseModel):
     next_steps: list[str] = Field(default_factory=list, description="Recommended next actions")
 
 
+class GrowthEvent(BaseModel):
+    """A single brain growth event for the growth log."""
+
+    event_type: str = Field(
+        description="Event type: pattern_created, pattern_reinforced, "
+        "confidence_upgraded, experience_recorded"
+    )
+    event_date: str = Field(
+        default="",
+        description="Date of event (YYYY-MM-DD). Empty = server default.",
+    )
+    pattern_name: str = Field(default="", description="Pattern name if applicable")
+    pattern_topic: str = Field(default="", description="Pattern topic if applicable")
+    details: dict = Field(
+        default_factory=dict,
+        description="Event-specific details (JSON)",
+    )
+
+
+class ReviewHistoryEntry(BaseModel):
+    """A stored review result for quality trending."""
+
+    review_date: str = Field(
+        default="",
+        description="Date of review (YYYY-MM-DD). Empty = server default.",
+    )
+    content_type: str = Field(default="", description="Content type reviewed")
+    overall_score: float = Field(description="Overall review score 1-10")
+    verdict: str = Field(description="READY TO SEND, NEEDS REVISION, or MAJOR REWORK")
+    dimension_scores: list[dict] = Field(
+        default_factory=list,
+        description="Per-dimension scores as dicts",
+    )
+    top_strengths: list[str] = Field(default_factory=list)
+    critical_issues: list[str] = Field(default_factory=list)
+    content_preview: str = Field(
+        default="",
+        description="First 200 chars of reviewed content",
+    )
+
+
+class ConfidenceTransition(BaseModel):
+    """A confidence level change event."""
+
+    transition_date: str = Field(
+        default="",
+        description="Date of transition (YYYY-MM-DD). Empty = server default.",
+    )
+    pattern_name: str = Field(description="Pattern that changed confidence")
+    pattern_topic: str = Field(default="", description="Pattern topic")
+    from_confidence: str = Field(description="Previous confidence: NEW, LOW, MEDIUM, HIGH")
+    to_confidence: str = Field(description="New confidence: LOW, MEDIUM, HIGH")
+    use_count: int = Field(default=1, description="Use count at time of transition")
+    reason: str = Field(default="", description="Why the transition happened")
+
+
+class GrowthSummary(BaseModel):
+    """Aggregated growth metrics for reporting."""
+
+    period_days: int = Field(description="Number of days in the reporting period")
+    patterns_created: int = Field(default=0)
+    patterns_reinforced: int = Field(default=0)
+    confidence_upgrades: int = Field(default=0)
+    experiences_recorded: int = Field(default=0)
+    reviews_completed: int = Field(default=0)
+    avg_review_score: float = Field(default=0.0)
+    review_score_trend: str = Field(
+        default="stable",
+        description="improving, stable, or declining",
+    )
+    stale_patterns: list[str] = Field(
+        default_factory=list,
+        description="Pattern names not reinforced in 30+ days",
+    )
+    top_patterns: list[str] = Field(
+        default_factory=list,
+        description="Most reinforced patterns in the period",
+    )
+
+
 REVIEW_DIMENSIONS: list[dict[str, str]] = [
     {
         "name": "Messaging",
