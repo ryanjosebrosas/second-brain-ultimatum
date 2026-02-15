@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from second_brain.config import BrainConfig
 
 if TYPE_CHECKING:
+    from second_brain.services.graphiti import GraphitiService
     from second_brain.services.memory import MemoryService
     from second_brain.services.storage import StorageService
 
@@ -15,3 +16,4 @@ class BrainDeps:
     config: BrainConfig
     memory_service: "MemoryService"
     storage_service: "StorageService"
+    graphiti_service: "GraphitiService | None" = None

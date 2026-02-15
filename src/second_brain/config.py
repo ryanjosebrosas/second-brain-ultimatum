@@ -33,6 +33,24 @@ class BrainConfig(BaseSettings):
         description="Mem0 Cloud API key (None = use local)",
     )
 
+    # Graph memory
+    graph_provider: str = Field(
+        default="none",
+        description="Graph memory provider: none, mem0, or graphiti",
+    )
+    neo4j_url: str | None = Field(
+        default=None,
+        description="Neo4j connection URL (e.g., neo4j+s://xxx.databases.neo4j.io)",
+    )
+    neo4j_username: str | None = Field(
+        default=None,
+        description="Neo4j username",
+    )
+    neo4j_password: str | None = Field(
+        default=None,
+        description="Neo4j password",
+    )
+
     # Supabase
     supabase_url: str = Field(..., description="Supabase project URL")
     supabase_key: str = Field(..., description="Supabase anon key")

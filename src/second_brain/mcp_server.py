@@ -34,6 +34,7 @@ def _get_deps() -> BrainDeps:
             config=config,
             memory_service=MemoryService(config),
             storage_service=StorageService(config),
+            graphiti_service=None,
         )
         _model = get_model(config)
     return _deps

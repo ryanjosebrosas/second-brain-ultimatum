@@ -3,6 +3,7 @@
 import logging
 
 from second_brain.config import BrainConfig
+from second_brain.services.search_result import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class MemoryService:
     def __init__(self, config: BrainConfig):
         self.config = config
         self.user_id = config.brain_user_id
+        self.enable_graph = config.graph_provider == "mem0"
         self._client = self._init_client()
 
     def _init_client(self):
@@ -40,34 +42,53 @@ class MemoryService:
                 },
             }
         }
+        if self.enable_graph and self.config.neo4j_url:
+            mem0_config["graph_store"] = {
+                "provider": "neo4j",
+                "config": {
+                    "url": self.config.neo4j_url,
+                    "username": self.config.neo4j_username,
+                    "password": self.config.neo4j_password,
+                },
+            }
         logger.info("Using Mem0 local client")
         return Memory.from_config(mem0_config)
 
-    async def add(self, content: str, metadata: dict | None = None) -> dict:
+    async def add(self, content: str, metadata: dict | None = None,
+                  enable_graph: bool | None = None) -> dict:
         """Add a memory. Content is auto-extracted into facts by Mem0."""
         messages = [{"role": "user", "content": content}]
-        result = self._client.add(
-            messages,
-            user_id=self.user_id,
-            metadata=metadata or {},
-        )
+        kwargs: dict = {
+            "user_id": self.user_id,
+            "metadata": metadata or {},
+        }
+        use_graph = enable_graph if enable_graph is not None else self.enable_graph
+        if use_graph and self._is_cloud:
+            kwargs["enable_graph"] = True
+        result = self._client.add(messages, **kwargs)
         return result
 
     @property
     def _is_cloud(self) -> bool:
         return type(self._client).__name__ == "MemoryClient"
 
-    async def search(self, query: str, limit: int = 10) -> list[dict]:
+    async def search(self, query: str, limit: int = 10,
+                     enable_graph: bool | None = None) -> SearchResult:
         """Semantic search across memories."""
-        kwargs = {"user_id": self.user_id}
-        # Mem0 Cloud v2 requires explicit filters for search
+        kwargs: dict = {"user_id": self.user_id}
+        use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if self._is_cloud:
             kwargs["filters"] = {"user_id": self.user_id}
+            if use_graph:
+                kwargs["enable_graph"] = True
         results = self._client.search(query, **kwargs)
-        # v2 returns {"results": [...]}, v1 returns a list
         if isinstance(results, dict):
-            results = results.get("results", [])
-        return results[:limit] if isinstance(results, list) else []
+            memories = results.get("results", [])
+            relations = results.get("relations", [])
+            memories = memories[:limit] if isinstance(memories, list) else []
+            return SearchResult(memories=memories, relations=relations)
+        memories = results[:limit] if isinstance(results, list) else []
+        return SearchResult(memories=memories, relations=[])
 
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""

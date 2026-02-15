@@ -37,8 +37,9 @@ class TestMemoryService:
         service = MemoryService(mock_config)
         results = await service.search("test query")
 
-        assert len(results) == 1
-        assert results[0]["memory"] == "test pattern"
+        assert len(results.memories) == 1
+        assert results.memories[0]["memory"] == "test pattern"
+        assert results.relations == []
 
     @patch("mem0.Memory")
     async def test_search_with_limit(self, mock_memory_cls, mock_config):
@@ -52,7 +53,7 @@ class TestMemoryService:
         service = MemoryService(mock_config)
         results = await service.search("test", limit=2)
 
-        assert len(results) == 2
+        assert len(results.memories) == 2
 
     @patch("mem0.Memory")
     async def test_search_non_list_result(self, mock_memory_cls, mock_config):
@@ -63,7 +64,8 @@ class TestMemoryService:
         service = MemoryService(mock_config)
         results = await service.search("test")
 
-        assert results == []
+        assert results.memories == []
+        assert results.relations == []
 
     @patch("mem0.Memory")
     async def test_get_all(self, mock_memory_cls, mock_config):

@@ -3,6 +3,14 @@
 from pydantic import BaseModel, Field
 
 
+class Relation(BaseModel):
+    """A graph relationship between entities."""
+
+    source: str = Field(description="Source entity name")
+    relationship: str = Field(description="Relationship type (e.g., uses, includes)")
+    target: str = Field(description="Target entity name")
+
+
 class MemoryMatch(BaseModel):
     """A single memory search result."""
 
@@ -23,6 +31,10 @@ class RecallResult(BaseModel):
         default_factory=list,
         description="Related pattern names from registry",
     )
+    relations: list[Relation] = Field(
+        default_factory=list,
+        description="Entity relationships from graph memory",
+    )
     summary: str = Field(
         default="",
         description="Brief summary of what was found",
@@ -40,6 +52,10 @@ class AskResult(BaseModel):
     patterns_applied: list[str] = Field(
         default_factory=list,
         description="Patterns applied in the response",
+    )
+    relations: list[Relation] = Field(
+        default_factory=list,
+        description="Entity relationships from graph memory",
     )
     confidence: str = Field(
         default="MEDIUM",
