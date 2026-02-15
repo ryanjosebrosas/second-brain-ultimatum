@@ -168,6 +168,66 @@ def learn(content: str, category: str):
 
 
 @cli.command()
+@click.argument("prompt")
+@click.option(
+    "--type",
+    "content_type",
+    default="linkedin",
+    help="Content type (linkedin, email, landing-page, comment)",
+)
+@click.option(
+    "--mode",
+    "mode",
+    default=None,
+    help="Communication mode (casual, professional, formal). Defaults to type's default.",
+)
+def create(prompt: str, content_type: str, mode: str | None):
+    """Draft content in your voice using brain knowledge."""
+    from second_brain.agents.create import create_agent
+    from second_brain.schemas import CONTENT_TYPES
+
+    if content_type not in CONTENT_TYPES:
+        available = ", ".join(CONTENT_TYPES.keys())
+        click.echo(f"Unknown content type '{content_type}'. Available: {available}")
+        return
+
+    type_config = CONTENT_TYPES[content_type]
+    effective_mode = mode or type_config.default_mode
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    enhanced = (
+        f"Content type: {type_config.name} ({content_type})\n"
+        f"Communication mode: {effective_mode}\n"
+        f"Structure: {type_config.structure_hint}\n"
+    )
+    if type_config.max_words:
+        enhanced += f"Target length: ~{type_config.max_words} words\n"
+    enhanced += f"\nRequest: {prompt}"
+
+    async def run():
+        result = await create_agent.run(enhanced, deps=deps, model=model)
+        output = result.output
+
+        click.echo(f"\n# Draft ({output.content_type} - {output.mode})\n")
+        click.echo(output.draft)
+        click.echo(f"\n---")
+        click.echo(f"Words: {output.word_count}")
+
+        if output.voice_elements:
+            click.echo(f"\nVoice: {', '.join(output.voice_elements)}")
+        if output.patterns_applied:
+            click.echo(f"Patterns: {', '.join(output.patterns_applied)}")
+        if output.examples_referenced:
+            click.echo(f"Examples: {', '.join(output.examples_referenced)}")
+        if output.notes:
+            click.echo(f"\nEditor notes: {output.notes}")
+
+    asyncio.run(run())
+
+
+@cli.command()
 @click.option("--type", "content_type", default=None, help="Filter by content type (linkedin, email, etc.)")
 def examples(content_type: str | None):
     """Search content examples in your brain."""

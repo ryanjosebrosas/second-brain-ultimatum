@@ -141,3 +141,74 @@ class LearnResult(BaseModel):
         default=0,
         description="Count of existing patterns reinforced",
     )
+
+
+class ContentTypeConfig(BaseModel):
+    """Configuration for a content type in the registry."""
+
+    name: str
+    default_mode: str
+    structure_hint: str
+    example_type: str
+    max_words: int = 0
+    description: str = ""
+
+
+class CreateResult(BaseModel):
+    """Output from the CreateAgent."""
+
+    draft: str = Field(description="The drafted content")
+    content_type: str = Field(description="Content type used (e.g., linkedin, email)")
+    mode: str = Field(
+        description="Communication mode: casual, professional, or formal"
+    )
+    voice_elements: list[str] = Field(
+        default_factory=list,
+        description="Voice/tone elements applied in the draft",
+    )
+    patterns_applied: list[str] = Field(
+        default_factory=list,
+        description="Brain patterns applied",
+    )
+    examples_referenced: list[str] = Field(
+        default_factory=list,
+        description="Example titles that informed the draft",
+    )
+    word_count: int = Field(default=0, description="Word count of the draft")
+    notes: str = Field(default="", description="Notes for the human editor")
+
+
+CONTENT_TYPES: dict[str, ContentTypeConfig] = {
+    "linkedin": ContentTypeConfig(
+        name="LinkedIn Post",
+        default_mode="casual",
+        structure_hint="Hook -> Body (2-3 paragraphs) -> CTA/Question",
+        example_type="linkedin",
+        max_words=300,
+        description="LinkedIn feed post",
+    ),
+    "email": ContentTypeConfig(
+        name="Professional Email",
+        default_mode="professional",
+        structure_hint="Subject -> Opening -> Body -> Closing -> Next Steps",
+        example_type="email",
+        max_words=500,
+        description="Client or prospect email",
+    ),
+    "landing-page": ContentTypeConfig(
+        name="Landing Page",
+        default_mode="professional",
+        structure_hint="Headline -> Subhead -> Problem -> Solution -> Proof -> CTA",
+        example_type="landing-page",
+        max_words=1000,
+        description="Homepage or landing page copy",
+    ),
+    "comment": ContentTypeConfig(
+        name="Comment/Reply",
+        default_mode="casual",
+        structure_hint="Acknowledgment -> Insight/Value -> Question (optional)",
+        example_type="comment",
+        max_words=150,
+        description="Social media comment or reply",
+    ),
+}

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, Relation, LearnResult, PatternExtract,
+    CreateResult,
 )
 
 
@@ -309,3 +310,42 @@ class TestMCPTools:
 
         result = await delete_item.fn(table="invalid", item_id="uuid-123")
         assert "Invalid table" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_tool(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import create_content
+
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Check out our new AI automation platform...",
+            content_type="linkedin",
+            mode="casual",
+            voice_elements=["direct", "conversational"],
+            patterns_applied=["Hook First"],
+            examples_referenced=["Q3 Launch Post"],
+            word_count=85,
+            notes="Verify the product name",
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = MagicMock()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await create_content.fn(
+            prompt="Announce our new AI automation product",
+            content_type="linkedin",
+            mode="casual",
+        )
+        assert "AI automation" in result
+        assert "85" in result
+
+    async def test_create_content_invalid_type(self):
+        from second_brain.mcp_server import create_content
+
+        result = await create_content.fn(
+            prompt="test",
+            content_type="invalid-type",
+        )
+        assert "Unknown content type" in result
+        assert "linkedin" in result

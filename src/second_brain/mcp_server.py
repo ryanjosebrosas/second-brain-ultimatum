@@ -16,6 +16,8 @@ from second_brain.services.storage import StorageService
 from second_brain.agents.recall import recall_agent
 from second_brain.agents.ask import ask_agent
 from second_brain.agents.learn import learn_agent
+from second_brain.agents.create import create_agent
+from second_brain.schemas import CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +166,60 @@ async def learn(content: str, category: str = "general") -> str:
     parts.append(f"\n## Summary")
     parts.append(f"New: {output.patterns_new} | Reinforced: {output.patterns_reinforced}")
     parts.append(output.storage_summary)
+
+    return "\n".join(parts)
+
+
+@server.tool()
+async def create_content(
+    prompt: str, content_type: str = "linkedin", mode: str | None = None
+) -> str:
+    """Draft content in your voice using brain knowledge.
+    The agent loads your voice guide, relevant examples, applicable patterns,
+    and audience context, then produces a draft for human editing.
+
+    Args:
+        prompt: What to write about — e.g., "Announce our new AI automation product"
+        content_type: Content type — linkedin, email, landing-page, or comment.
+        mode: Communication mode — casual, professional, or formal.
+              Defaults to the content type's default mode.
+    """
+    if content_type not in CONTENT_TYPES:
+        available = ", ".join(CONTENT_TYPES.keys())
+        return f"Unknown content type '{content_type}'. Available: {available}"
+
+    type_config = CONTENT_TYPES[content_type]
+    effective_mode = mode or type_config.default_mode
+
+    deps = _get_deps()
+    model = _get_model()
+
+    enhanced = (
+        f"Content type: {type_config.name} ({content_type})\n"
+        f"Communication mode: {effective_mode}\n"
+        f"Structure: {type_config.structure_hint}\n"
+    )
+    if type_config.max_words:
+        enhanced += f"Target length: ~{type_config.max_words} words\n"
+    enhanced += f"\nRequest: {prompt}"
+
+    result = await create_agent.run(enhanced, deps=deps, model=model)
+    output = result.output
+
+    parts = [
+        f"# Draft: {output.content_type} ({output.mode})\n",
+        output.draft,
+        f"\n---",
+        f"**Words**: {output.word_count}",
+    ]
+    if output.voice_elements:
+        parts.append(f"**Voice**: {', '.join(output.voice_elements)}")
+    if output.patterns_applied:
+        parts.append(f"**Patterns**: {', '.join(output.patterns_applied)}")
+    if output.examples_referenced:
+        parts.append(f"**Examples**: {', '.join(output.examples_referenced)}")
+    if output.notes:
+        parts.append(f"\n**Editor notes**: {output.notes}")
 
     return "\n".join(parts)
 

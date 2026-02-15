@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, AsyncMock
 
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
+    CreateResult, ContentTypeConfig, CONTENT_TYPES,
 )
 
 
@@ -255,3 +256,83 @@ class TestPatternReinforcement:
                 name="test", topic="t", pattern_text="p", confidence=level,
             )
             assert p.confidence == level
+
+
+class TestCreateResultSchema:
+    def test_create_result_defaults(self):
+        result = CreateResult(
+            draft="Test draft content",
+            content_type="linkedin",
+            mode="casual",
+        )
+        assert result.draft == "Test draft content"
+        assert result.content_type == "linkedin"
+        assert result.mode == "casual"
+        assert result.voice_elements == []
+        assert result.patterns_applied == []
+        assert result.examples_referenced == []
+        assert result.word_count == 0
+        assert result.notes == ""
+
+    def test_create_result_full(self):
+        result = CreateResult(
+            draft="Full draft here",
+            content_type="email",
+            mode="professional",
+            voice_elements=["direct", "concise"],
+            patterns_applied=["Hook First"],
+            examples_referenced=["Q4 Update Email"],
+            word_count=150,
+            notes="Check the CTA wording",
+        )
+        assert len(result.voice_elements) == 2
+        assert len(result.patterns_applied) == 1
+        assert result.word_count == 150
+        assert result.notes == "Check the CTA wording"
+
+    def test_content_type_config(self):
+        config = ContentTypeConfig(
+            name="Test Type",
+            default_mode="casual",
+            structure_hint="Intro -> Body -> Close",
+            example_type="test",
+        )
+        assert config.name == "Test Type"
+        assert config.max_words == 0
+        assert config.description == ""
+
+    def test_content_types_registry(self):
+        assert "linkedin" in CONTENT_TYPES
+        assert "email" in CONTENT_TYPES
+        assert "landing-page" in CONTENT_TYPES
+        assert "comment" in CONTENT_TYPES
+        assert len(CONTENT_TYPES) == 4
+
+    def test_content_type_defaults(self):
+        linkedin = CONTENT_TYPES["linkedin"]
+        assert linkedin.default_mode == "casual"
+        assert linkedin.max_words == 300
+        email = CONTENT_TYPES["email"]
+        assert email.default_mode == "professional"
+
+
+class TestCreateAgent:
+    def test_agent_exists(self):
+        from second_brain.agents.create import create_agent
+        assert create_agent is not None
+
+    def test_agent_output_type(self):
+        from second_brain.agents.create import create_agent
+        assert create_agent.output_type is CreateResult
+
+    def test_agent_has_tools(self):
+        from second_brain.agents.create import create_agent
+        tool_names = list(create_agent._function_toolset.tools)
+        assert "load_voice_guide" in tool_names
+        assert "load_content_examples" in tool_names
+        assert "find_applicable_patterns" in tool_names
+        assert "load_audience_context" in tool_names
+
+    def test_agent_exported_from_package(self):
+        from second_brain.agents import create_agent
+        assert create_agent is not None
