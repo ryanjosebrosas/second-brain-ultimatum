@@ -259,6 +259,50 @@ class TestPatternReinforcement:
             assert p.confidence == level
 
 
+class TestPatternContentTypeLink:
+    """Test that store_pattern handles applicable_content_types."""
+
+    async def test_store_pattern_with_content_types(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Hook First",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(
+            mock_ctx,
+            name="Hook First",
+            topic="Content",
+            pattern_text="Start with a compelling hook",
+            applicable_content_types=["linkedin", "instagram"],
+        )
+        assert "Stored new pattern" in result
+        # Verify the content types were passed to storage
+        call_args = mock_deps.storage_service.insert_pattern.call_args[0][0]
+        assert call_args["applicable_content_types"] == ["linkedin", "instagram"]
+
+    async def test_store_pattern_without_content_types(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Universal",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(
+            mock_ctx,
+            name="Universal",
+            topic="Process",
+            pattern_text="Always test first",
+        )
+        assert "Stored new pattern" in result
+        call_args = mock_deps.storage_service.insert_pattern.call_args[0][0]
+        assert call_args["applicable_content_types"] is None
+
+
 class TestCreateResultSchema:
     def test_create_result_defaults(self):
         result = CreateResult(
@@ -541,3 +585,140 @@ class TestContentTypeExpansion:
         assert config.default_mode == "casual"
         assert config.max_words == 200
         assert "Hashtags" in config.structure_hint
+
+
+class TestDynamicContentTypes:
+    """Tests for dynamic content type system."""
+
+    def test_default_content_types_alias(self):
+        from second_brain.schemas import CONTENT_TYPES, DEFAULT_CONTENT_TYPES
+        assert CONTENT_TYPES is DEFAULT_CONTENT_TYPES
+
+    def test_default_content_types_all_builtin(self):
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        for slug, config in DEFAULT_CONTENT_TYPES.items():
+            assert config.is_builtin is True, f"{slug} should be builtin"
+
+    def test_content_type_config_new_fields(self):
+        from second_brain.schemas import ContentTypeConfig
+        config = ContentTypeConfig(
+            name="Newsletter",
+            default_mode="professional",
+            structure_hint="Subject -> Body -> Footer",
+            example_type="newsletter",
+            max_words=800,
+            description="Email newsletter",
+            is_builtin=False,
+        )
+        assert config.is_builtin is False
+        assert config.review_dimensions is None
+
+    def test_content_type_config_with_review_dimensions(self):
+        from second_brain.schemas import ContentTypeConfig, ReviewDimensionConfig
+        dims = [
+            ReviewDimensionConfig(name="Messaging", weight=1.5, enabled=True),
+            ReviewDimensionConfig(name="Quality", weight=1.0, enabled=True),
+            ReviewDimensionConfig(name="Data Accuracy", weight=0.0, enabled=False),
+        ]
+        config = ContentTypeConfig(
+            name="Comment",
+            default_mode="casual",
+            structure_hint="Ack -> Insight",
+            example_type="comment",
+            review_dimensions=dims,
+        )
+        assert len(config.review_dimensions) == 3
+        assert config.review_dimensions[0].weight == 1.5
+        assert config.review_dimensions[2].enabled is False
+
+    def test_review_dimension_config_defaults(self):
+        from second_brain.schemas import ReviewDimensionConfig
+        dim = ReviewDimensionConfig(name="Messaging")
+        assert dim.weight == 1.0
+        assert dim.enabled is True
+
+    def test_default_review_dimensions(self):
+        from second_brain.schemas import DEFAULT_REVIEW_DIMENSIONS, REVIEW_DIMENSIONS
+        assert len(DEFAULT_REVIEW_DIMENSIONS) == len(REVIEW_DIMENSIONS)
+        for dc in DEFAULT_REVIEW_DIMENSIONS:
+            assert dc.weight == 1.0
+            assert dc.enabled is True
+
+    def test_content_type_from_row_basic(self):
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "slug": "newsletter",
+            "name": "Newsletter",
+            "default_mode": "professional",
+            "structure_hint": "Subject -> Body -> Footer",
+            "example_type": "newsletter",
+            "max_words": 800,
+            "description": "Email newsletter",
+            "is_builtin": False,
+            "review_dimensions": None,
+        }
+        config = content_type_from_row(row)
+        assert config.name == "Newsletter"
+        assert config.default_mode == "professional"
+        assert config.max_words == 800
+        assert config.is_builtin is False
+        assert config.review_dimensions is None
+
+    def test_content_type_from_row_with_dimensions(self):
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "slug": "comment",
+            "name": "Comment",
+            "default_mode": "casual",
+            "structure_hint": "Ack -> Insight",
+            "example_type": "comment",
+            "max_words": 150,
+            "is_builtin": True,
+            "review_dimensions": [
+                {"name": "Messaging", "weight": 1.0, "enabled": True},
+                {"name": "Quality", "weight": 1.0, "enabled": True},
+            ],
+        }
+        config = content_type_from_row(row)
+        assert config.review_dimensions is not None
+        assert len(config.review_dimensions) == 2
+        assert config.review_dimensions[0].name == "Messaging"
+
+    def test_content_type_from_row_minimal(self):
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "name": "Minimal",
+            "slug": "minimal",
+            "structure_hint": "X",
+            "example_type": "minimal",
+        }
+        config = content_type_from_row(row)
+        assert config.name == "Minimal"
+        assert config.default_mode == "professional"  # default
+        assert config.max_words == 0  # default
+        assert config.is_builtin is False  # default
+
+    def test_pattern_extract_applicable_content_types_default(self):
+        from second_brain.schemas import PatternExtract
+        p = PatternExtract(name="t", topic="t", pattern_text="t")
+        assert p.applicable_content_types is None
+
+    def test_pattern_extract_applicable_content_types_set(self):
+        from second_brain.schemas import PatternExtract
+        p = PatternExtract(
+            name="Hook First",
+            topic="Content",
+            pattern_text="Start with a hook",
+            applicable_content_types=["linkedin", "instagram"],
+        )
+        assert p.applicable_content_types == ["linkedin", "instagram"]
+
+    def test_pattern_extract_universal_vs_specific(self):
+        from second_brain.schemas import PatternExtract
+        universal = PatternExtract(name="u", topic="t", pattern_text="t")
+        specific = PatternExtract(
+            name="s", topic="t", pattern_text="t",
+            applicable_content_types=["email"],
+        )
+        assert universal.applicable_content_types is None  # universal
+        assert specific.applicable_content_types == ["email"]  # specific

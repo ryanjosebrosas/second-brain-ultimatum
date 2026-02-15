@@ -118,6 +118,32 @@ def mock_storage():
         "id": "conf-1", "pattern_name": "Test", "from_confidence": "LOW", "to_confidence": "MEDIUM",
     })
     storage.get_confidence_history = AsyncMock(return_value=[])
+    # Content type mocks
+    storage.get_content_types = AsyncMock(return_value=[
+        {
+            "id": "ct-1", "slug": "linkedin", "name": "LinkedIn Post",
+            "default_mode": "casual", "structure_hint": "Hook -> Body -> CTA",
+            "example_type": "linkedin", "max_words": 300, "description": "LinkedIn feed post",
+            "review_dimensions": None, "is_builtin": True,
+        },
+        {
+            "id": "ct-2", "slug": "email", "name": "Professional Email",
+            "default_mode": "professional", "structure_hint": "Subject -> Body -> Closing",
+            "example_type": "email", "max_words": 500, "description": "Client email",
+            "review_dimensions": None, "is_builtin": True,
+        },
+    ])
+    storage.get_content_type_by_slug = AsyncMock(return_value={
+        "id": "ct-1", "slug": "linkedin", "name": "LinkedIn Post",
+        "default_mode": "casual", "structure_hint": "Hook -> Body -> CTA",
+        "example_type": "linkedin", "max_words": 300, "is_builtin": True,
+        "review_dimensions": None,
+    })
+    storage.upsert_content_type = AsyncMock(return_value={
+        "id": "ct-new", "slug": "newsletter", "name": "Newsletter",
+    })
+    storage.delete_content_type = AsyncMock(return_value=True)
+    storage.get_patterns_for_content_type = AsyncMock(return_value=[])
     return storage
 
 

@@ -288,6 +288,266 @@ class TestKnowledgeStorage:
         mock_table.eq.assert_called_once_with("category", "frameworks")
 
 
+class TestContentTypeStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_content_types(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[
+                {"slug": "linkedin", "name": "LinkedIn Post", "is_builtin": True},
+                {"slug": "email", "name": "Professional Email", "is_builtin": True},
+            ]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        types = await service.get_content_types()
+
+        assert len(types) == 2
+        assert types[0]["slug"] == "linkedin"
+        mock_client.table.assert_called_with("content_types")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_content_type_by_slug(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"slug": "newsletter", "name": "Newsletter"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_content_type_by_slug("newsletter")
+
+        assert result is not None
+        assert result["slug"] == "newsletter"
+        mock_table.eq.assert_called_once_with("slug", "newsletter")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_content_type_by_slug_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_content_type_by_slug("nonexistent")
+
+        assert result is None
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_upsert_content_type(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.upsert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"slug": "newsletter", "name": "Newsletter"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.upsert_content_type({"slug": "newsletter", "name": "Newsletter"})
+
+        assert result["slug"] == "newsletter"
+        mock_client.table.assert_called_with("content_types")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_content_type_success(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"slug": "newsletter"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_content_type("newsletter")
+
+        assert result is True
+        mock_table.eq.assert_called_once_with("slug", "newsletter")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_content_type_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_content_type("nonexistent")
+
+        assert result is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_patterns_for_content_type(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[
+            {"name": "Hook First", "applicable_content_types": ["linkedin", "instagram"]},
+            {"name": "Universal Pattern", "applicable_content_types": None},
+            {"name": "Email Only", "applicable_content_types": ["email"]},
+        ])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_patterns_for_content_type("linkedin")
+
+        # Should include "Hook First" (matches linkedin) and "Universal Pattern" (None = universal)
+        assert len(result) == 2
+        names = [p["name"] for p in result]
+        assert "Hook First" in names
+        assert "Universal Pattern" in names
+        assert "Email Only" not in names
+
+
+class TestContentTypeRegistry:
+    async def test_registry_loads_from_db(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
+             "structure_hint": "Hook -> Body", "example_type": "linkedin",
+             "max_words": 300, "is_builtin": True, "review_dimensions": None},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+        result = await registry.get_all()
+
+        assert "linkedin" in result
+        assert result["linkedin"].name == "LinkedIn Post"
+
+    async def test_registry_caches_results(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
+             "structure_hint": "Hook -> Body", "example_type": "linkedin",
+             "max_words": 300, "is_builtin": True, "review_dimensions": None},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+
+        # First call loads from DB
+        await registry.get_all()
+        # Second call should use cache
+        await registry.get_all()
+
+        # DB was called only once
+        assert mock_deps.storage_service.get_content_types.call_count == 1
+
+    async def test_registry_invalidate_forces_reload(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
+             "structure_hint": "Hook -> Body", "example_type": "linkedin",
+             "max_words": 300, "is_builtin": True, "review_dimensions": None},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+
+        await registry.get_all()
+        registry.invalidate()
+        await registry.get_all()
+
+        assert mock_deps.storage_service.get_content_types.call_count == 2
+
+    async def test_registry_falls_back_to_defaults_on_empty(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+        result = await registry.get_all()
+
+        assert len(result) == len(DEFAULT_CONTENT_TYPES)
+        assert "linkedin" in result
+
+    async def test_registry_falls_back_on_error(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+
+        mock_deps.storage_service.get_content_types = AsyncMock(
+            side_effect=Exception("DB unavailable")
+        )
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+        result = await registry.get_all()
+
+        assert len(result) == len(DEFAULT_CONTENT_TYPES)
+
+    async def test_registry_get_single(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
+             "structure_hint": "Hook -> Body", "example_type": "linkedin",
+             "max_words": 300, "is_builtin": True, "review_dimensions": None},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+
+        result = await registry.get("linkedin")
+        assert result is not None
+        assert result.name == "LinkedIn Post"
+
+        missing = await registry.get("nonexistent")
+        assert missing is None
+
+    async def test_registry_slugs(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "email", "name": "Email", "default_mode": "professional",
+             "structure_hint": "S", "example_type": "email", "max_words": 500,
+             "is_builtin": True, "review_dimensions": None},
+            {"slug": "linkedin", "name": "LinkedIn", "default_mode": "casual",
+             "structure_hint": "S", "example_type": "linkedin", "max_words": 300,
+             "is_builtin": True, "review_dimensions": None},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+        slugs = await registry.slugs()
+
+        assert slugs == ["email", "linkedin"]  # sorted alphabetically
+
+    async def test_registry_parses_review_dimensions(self, mock_deps):
+        from second_brain.services.storage import ContentTypeRegistry
+
+        mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
+            {"slug": "comment", "name": "Comment", "default_mode": "casual",
+             "structure_hint": "S", "example_type": "comment", "max_words": 150,
+             "is_builtin": True,
+             "review_dimensions": [
+                 {"name": "Messaging", "weight": 1.0, "enabled": True},
+                 {"name": "Quality", "weight": 1.0, "enabled": True},
+                 {"name": "Data Accuracy", "weight": 0.5, "enabled": False},
+             ]},
+        ])
+        registry = ContentTypeRegistry(mock_deps.storage_service)
+        comment = await registry.get("comment")
+
+        assert comment is not None
+        assert comment.review_dimensions is not None
+        assert len(comment.review_dimensions) == 3
+        assert comment.review_dimensions[0].name == "Messaging"
+        assert comment.review_dimensions[2].enabled is False
+
+
 class TestDeleteOperations:
     @patch("second_brain.services.storage.create_client")
     async def test_delete_pattern_success(self, mock_create, mock_config):
