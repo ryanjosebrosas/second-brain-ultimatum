@@ -15,3 +15,12 @@ worktrees/
 # Environment files
 .env
 .env.local
+
+# Python artifacts
+__pycache__/
+*.egg-info/
+*.pyc
+
+# Tool configs
+.codex/
+.opencode/
