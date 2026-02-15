@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "archon": {
+      "type": "http",
+      "url": "http://159.195.45.47:8051/mcp"
+    },
+    "second-brain": {
+      "command": "python",
+      "args": ["-m", "second_brain.mcp_server"],
+      "cwd": "C:\\Users\\Utopia\\Desktop\\AI Projects\\V1 - Migration AI - Claude",
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "SUPABASE_URL": "${SUPABASE_URL}",
+        "SUPABASE_KEY": "${SUPABASE_KEY}",
+        "BRAIN_DATA_PATH": "C:\\Users\\Utopia\\Documents\\MEGA\\Template",
+        "BRAIN_USER_ID": "ryan"
+      }
+    }
+  }
+}
