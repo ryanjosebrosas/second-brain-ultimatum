@@ -407,6 +407,50 @@ class TestMCPTools:
         assert "Clear value prop" in result
 
 
+class TestMCPInputValidation:
+    """Test input validation on MCP tools."""
+
+    async def test_recall_empty_query_returns_error(self):
+        from second_brain.mcp_server import recall
+        result = await recall.fn(query="")
+        assert "empty" in result.lower()
+
+    async def test_recall_long_query_returns_error(self):
+        from second_brain.mcp_server import recall
+        result = await recall.fn(query="x" * 15000)
+        assert "too long" in result.lower()
+
+    async def test_ask_whitespace_returns_error(self):
+        from second_brain.mcp_server import ask
+        result = await ask.fn(question="   ")
+        assert "empty" in result.lower()
+
+    async def test_learn_empty_content_returns_error(self):
+        from second_brain.mcp_server import learn
+        result = await learn.fn(content="")
+        assert "empty" in result.lower()
+
+    async def test_create_content_empty_prompt_returns_error(self):
+        from second_brain.mcp_server import create_content
+        result = await create_content.fn(prompt="")
+        assert "empty" in result.lower()
+
+    async def test_review_content_empty_returns_error(self):
+        from second_brain.mcp_server import review_content
+        result = await review_content.fn(content="   ")
+        assert "empty" in result.lower()
+
+    async def test_delete_item_empty_id_returns_error(self):
+        from second_brain.mcp_server import delete_item
+        result = await delete_item.fn(table="pattern", item_id="")
+        assert "empty" in result.lower()
+
+    async def test_manage_content_type_empty_slug_returns_error(self):
+        from second_brain.mcp_server import manage_content_type
+        result = await manage_content_type.fn(action="add", slug="")
+        assert "empty" in result.lower()
+
+
 class TestConsolidateBrain:
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")

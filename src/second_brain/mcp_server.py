@@ -18,6 +18,20 @@ from second_brain.agents.review import run_full_review
 
 logger = logging.getLogger(__name__)
 
+MAX_INPUT_LENGTH = 10000  # Characters
+
+
+def _validate_mcp_input(text: str, label: str = "input") -> str:
+    """Validate MCP tool text input."""
+    if not text or not text.strip():
+        raise ValueError(f"{label} cannot be empty")
+    if len(text) > MAX_INPUT_LENGTH:
+        raise ValueError(
+            f"{label} too long ({len(text)} chars, max {MAX_INPUT_LENGTH})"
+        )
+    return text.strip()
+
+
 # Initialize server
 server = FastMCP("Second Brain")
 
@@ -48,6 +62,10 @@ async def recall(query: str) -> str:
         query: What to search for (e.g., "content writing patterns",
                "enterprise objection handling", "past LinkedIn work")
     """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     model = _get_model()
     result = await recall_agent.run(
@@ -88,6 +106,10 @@ async def ask(question: str) -> str:
         question: Your question (e.g., "Help me write a follow-up email",
                   "What's our positioning for enterprise clients?")
     """
+    try:
+        question = _validate_mcp_input(question, label="question")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     model = _get_model()
     result = await ask_agent.run(
@@ -123,6 +145,10 @@ async def learn(content: str, category: str = "general") -> str:
                  to extract learnings from.
         category: Experience category - content, prospects, clients, or general.
     """
+    try:
+        content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     model = _get_model()
     result = await learn_agent.run(
@@ -169,6 +195,10 @@ async def create_content(
         mode: Communication mode — casual, professional, or formal.
               Defaults to the content type's default mode.
     """
+    try:
+        prompt = _validate_mcp_input(prompt, label="prompt")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     model = _get_model()
     registry = deps.get_content_type_registry()
@@ -222,6 +252,10 @@ async def review_content(content: str, content_type: str | None = None) -> str:
         content_type: Optional content type for adaptive dimension scoring
                      (linkedin, email, etc.)
     """
+    try:
+        content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     model = _get_model()
     result = await run_full_review(content, deps, model, content_type)
@@ -304,6 +338,10 @@ async def delete_item(table: str, item_id: str) -> str:
         table: Which table to delete from (pattern, experience, example, knowledge)
         item_id: The UUID of the item to delete
     """
+    try:
+        item_id = _validate_mcp_input(item_id, label="item_id")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     methods = {
         "pattern": deps.storage_service.delete_pattern,
@@ -467,6 +505,10 @@ async def manage_content_type(
         max_words: Target word count (default 500)
         description: Brief description of the content type
     """
+    try:
+        slug = _validate_mcp_input(slug, label="slug")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     registry = deps.get_content_type_registry()
 

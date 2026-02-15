@@ -99,6 +99,18 @@ class BrainConfig(BaseSettings):
         description="Number of days of memories to consider for graduation",
     )
 
+    # API timeouts
+    api_timeout_seconds: int = Field(
+        default=30,
+        description="Timeout in seconds for external API calls (Mem0, Supabase, LLM)",
+    )
+
+    # Input validation
+    max_input_length: int = Field(
+        default=10000,
+        description="Maximum character length for CLI/MCP text inputs",
+    )
+
     # Display limits
     content_preview_limit: int = Field(
         default=1000, description="Character limit for content previews in agent context"

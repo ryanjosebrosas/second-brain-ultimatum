@@ -14,6 +14,18 @@ from second_brain.deps import BrainDeps, create_deps
 from second_brain.models import get_model
 
 
+def _validate_input(text: str, max_length: int = 10000, label: str = "input") -> str:
+    """Validate and sanitize CLI text input."""
+    text = text.strip()
+    if not text:
+        raise click.BadParameter(f"{label} cannot be empty")
+    if len(text) > max_length:
+        raise click.BadParameter(
+            f"{label} too long ({len(text)} chars, max {max_length})"
+        )
+    return text
+
+
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 def cli(verbose: bool):
@@ -26,6 +38,7 @@ def cli(verbose: bool):
 @click.argument("query")
 def recall(query: str):
     """Search your brain's memory for relevant context."""
+    query = _validate_input(query, label="query")
     from second_brain.agents.recall import recall_agent
 
     deps = create_deps()
@@ -64,6 +77,7 @@ def recall(query: str):
 @click.argument("question")
 def ask(question: str):
     """Get instant help powered by your brain's knowledge."""
+    question = _validate_input(question, label="question")
     from second_brain.agents.ask import ask_agent
 
     deps = create_deps()
@@ -102,6 +116,7 @@ def ask(question: str):
 )
 def learn(content: str, category: str):
     """Extract patterns and learnings from a work session or experience."""
+    content = _validate_input(content, label="content")
     from second_brain.agents.learn import learn_agent
 
     deps = create_deps()
@@ -158,6 +173,7 @@ def learn(content: str, category: str):
 )
 def create(prompt: str, content_type: str, mode: str | None):
     """Draft content in your voice using brain knowledge."""
+    prompt = _validate_input(prompt, label="prompt")
     from second_brain.agents.create import create_agent
 
     deps = create_deps()
@@ -207,6 +223,7 @@ def create(prompt: str, content_type: str, mode: str | None):
 @click.option("--type", "content_type", default=None, help="Content type for context (linkedin, email, etc.)")
 def review(content: str, content_type: str | None):
     """Review content quality across 6 dimensions with a structured scorecard."""
+    content = _validate_input(content, label="content")
     from second_brain.agents.review import run_full_review
 
     deps = create_deps()
@@ -287,6 +304,7 @@ def knowledge(category: str | None):
 @click.argument("item_id")
 def delete(table: str, item_id: str):
     """Delete an item from the brain by table and ID."""
+    item_id = _validate_input(item_id, max_length=100, label="item_id")
     deps = create_deps()
 
     async def _delete():

@@ -427,10 +427,6 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
     ),
 }
 
-# Backwards-compatible alias — existing code can still import CONTENT_TYPES.
-# New code should use DEFAULT_CONTENT_TYPES or load from DB via StorageService.
-CONTENT_TYPES = DEFAULT_CONTENT_TYPES
-
 
 def content_type_from_row(row: dict) -> ContentTypeConfig:
     """Convert a Supabase content_types row to a ContentTypeConfig."""

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock
 
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
-    CreateResult, ContentTypeConfig, CONTENT_TYPES,
+    CreateResult, ContentTypeConfig, DEFAULT_CONTENT_TYPES,
     DimensionScore, ReviewResult, REVIEW_DIMENSIONS,
 )
 
@@ -347,17 +347,17 @@ class TestCreateResultSchema:
         assert config.description == ""
 
     def test_content_types_registry(self):
-        assert "linkedin" in CONTENT_TYPES
-        assert "email" in CONTENT_TYPES
-        assert "landing-page" in CONTENT_TYPES
-        assert "comment" in CONTENT_TYPES
-        assert len(CONTENT_TYPES) == 9
+        assert "linkedin" in DEFAULT_CONTENT_TYPES
+        assert "email" in DEFAULT_CONTENT_TYPES
+        assert "landing-page" in DEFAULT_CONTENT_TYPES
+        assert "comment" in DEFAULT_CONTENT_TYPES
+        assert len(DEFAULT_CONTENT_TYPES) == 9
 
     def test_content_type_defaults(self):
-        linkedin = CONTENT_TYPES["linkedin"]
+        linkedin = DEFAULT_CONTENT_TYPES["linkedin"]
         assert linkedin.default_mode == "casual"
         assert linkedin.max_words == 300
-        email = CONTENT_TYPES["email"]
+        email = DEFAULT_CONTENT_TYPES["email"]
         assert email.default_mode == "professional"
 
 
@@ -504,35 +504,35 @@ class TestContentTypeExpansion:
 
     def test_total_content_types(self):
         """Verify we have 9 content types total."""
-        from second_brain.schemas import CONTENT_TYPES
-        assert len(CONTENT_TYPES) == 9
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        assert len(DEFAULT_CONTENT_TYPES) == 9
 
     def test_original_content_types_unchanged(self):
         """Verify original 4 content types are still present and unchanged."""
-        from second_brain.schemas import CONTENT_TYPES
-        assert "linkedin" in CONTENT_TYPES
-        assert "email" in CONTENT_TYPES
-        assert "landing-page" in CONTENT_TYPES
-        assert "comment" in CONTENT_TYPES
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        assert "linkedin" in DEFAULT_CONTENT_TYPES
+        assert "email" in DEFAULT_CONTENT_TYPES
+        assert "landing-page" in DEFAULT_CONTENT_TYPES
+        assert "comment" in DEFAULT_CONTENT_TYPES
         # Verify original values unchanged
-        assert CONTENT_TYPES["linkedin"].max_words == 300
-        assert CONTENT_TYPES["email"].default_mode == "professional"
-        assert CONTENT_TYPES["landing-page"].max_words == 1000
-        assert CONTENT_TYPES["comment"].max_words == 150
+        assert DEFAULT_CONTENT_TYPES["linkedin"].max_words == 300
+        assert DEFAULT_CONTENT_TYPES["email"].default_mode == "professional"
+        assert DEFAULT_CONTENT_TYPES["landing-page"].max_words == 1000
+        assert DEFAULT_CONTENT_TYPES["comment"].max_words == 150
 
     def test_new_content_types_registered(self):
         """Verify all 5 new content types are present."""
-        from second_brain.schemas import CONTENT_TYPES
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
         new_types = ["case-study", "proposal", "one-pager", "presentation", "instagram"]
         for t in new_types:
-            assert t in CONTENT_TYPES, f"Missing content type: {t}"
+            assert t in DEFAULT_CONTENT_TYPES, f"Missing content type: {t}"
 
     def test_new_content_types_have_required_fields(self):
         """Verify each new content type has all required fields populated."""
-        from second_brain.schemas import CONTENT_TYPES
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
         new_types = ["case-study", "proposal", "one-pager", "presentation", "instagram"]
         for t in new_types:
-            config = CONTENT_TYPES[t]
+            config = DEFAULT_CONTENT_TYPES[t]
             assert config.name, f"{t}: missing name"
             assert config.default_mode in ("casual", "professional", "formal"), \
                 f"{t}: invalid mode '{config.default_mode}'"
@@ -543,8 +543,8 @@ class TestContentTypeExpansion:
 
     def test_case_study_config(self):
         """Verify case-study content type configuration."""
-        from second_brain.schemas import CONTENT_TYPES
-        config = CONTENT_TYPES["case-study"]
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        config = DEFAULT_CONTENT_TYPES["case-study"]
         assert config.name == "Case Study"
         assert config.default_mode == "professional"
         assert config.max_words == 1500
@@ -552,8 +552,8 @@ class TestContentTypeExpansion:
 
     def test_proposal_config(self):
         """Verify proposal content type configuration."""
-        from second_brain.schemas import CONTENT_TYPES
-        config = CONTENT_TYPES["proposal"]
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        config = DEFAULT_CONTENT_TYPES["proposal"]
         assert config.name == "Sales Proposal"
         assert config.default_mode == "professional"
         assert config.max_words == 2000
@@ -561,8 +561,8 @@ class TestContentTypeExpansion:
 
     def test_one_pager_config(self):
         """Verify one-pager content type configuration."""
-        from second_brain.schemas import CONTENT_TYPES
-        config = CONTENT_TYPES["one-pager"]
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        config = DEFAULT_CONTENT_TYPES["one-pager"]
         assert config.name == "One-Pager"
         assert config.default_mode == "professional"
         assert config.max_words == 500
@@ -570,8 +570,8 @@ class TestContentTypeExpansion:
 
     def test_presentation_config(self):
         """Verify presentation content type configuration."""
-        from second_brain.schemas import CONTENT_TYPES
-        config = CONTENT_TYPES["presentation"]
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        config = DEFAULT_CONTENT_TYPES["presentation"]
         assert config.name == "Presentation Script"
         assert config.default_mode == "professional"
         assert config.max_words == 800
@@ -579,8 +579,8 @@ class TestContentTypeExpansion:
 
     def test_instagram_config(self):
         """Verify instagram content type configuration."""
-        from second_brain.schemas import CONTENT_TYPES
-        config = CONTENT_TYPES["instagram"]
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        config = DEFAULT_CONTENT_TYPES["instagram"]
         assert config.name == "Instagram Post"
         assert config.default_mode == "casual"
         assert config.max_words == 200
@@ -590,9 +590,9 @@ class TestContentTypeExpansion:
 class TestDynamicContentTypes:
     """Tests for dynamic content type system."""
 
-    def test_default_content_types_alias(self):
-        from second_brain.schemas import CONTENT_TYPES, DEFAULT_CONTENT_TYPES
-        assert CONTENT_TYPES is DEFAULT_CONTENT_TYPES
+    def test_default_content_types_exists(self):
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        assert len(DEFAULT_CONTENT_TYPES) == 9
 
     def test_default_content_types_all_builtin(self):
         from second_brain.schemas import DEFAULT_CONTENT_TYPES

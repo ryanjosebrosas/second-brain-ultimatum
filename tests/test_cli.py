@@ -374,6 +374,44 @@ class TestTypesRemoveCommand:
         assert "Removed" in result.output
 
 
+class TestCLIInputValidation:
+    """Test input validation on CLI commands."""
+
+    def test_recall_empty_string_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["recall", ""])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+    def test_recall_very_long_input_rejected(self, runner, mock_create_deps):
+        long_query = "x" * 15000
+        result = runner.invoke(cli, ["recall", long_query])
+        assert result.exit_code != 0 or "too long" in result.output.lower()
+
+    def test_ask_whitespace_only_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["ask", "   "])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+    def test_learn_empty_content_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["learn", ""])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+    def test_create_empty_prompt_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["create", ""])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+    def test_review_whitespace_only_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["review", "   "])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+    def test_delete_long_id_rejected(self, runner, mock_create_deps):
+        long_id = "x" * 200
+        result = runner.invoke(cli, ["delete", "pattern", long_id])
+        assert result.exit_code != 0 or "too long" in result.output.lower()
+
+    def test_delete_empty_id_rejected(self, runner, mock_create_deps):
+        result = runner.invoke(cli, ["delete", "pattern", ""])
+        assert result.exit_code != 0 or "empty" in result.output.lower()
+
+
 class TestMigrateCommand:
     """Test migrate command."""
 
