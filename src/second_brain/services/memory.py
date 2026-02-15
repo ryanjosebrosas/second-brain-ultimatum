@@ -72,6 +72,20 @@ class MemoryService:
     def _is_cloud(self) -> bool:
         return type(self._client).__name__ == "MemoryClient"
 
+    async def enable_project_graph(self) -> None:
+        """Enable graph memory at Mem0 Cloud project level."""
+        if not self._is_cloud:
+            logger.warning("Project-level graph requires Mem0 Cloud client — skipping")
+            return
+        if not self.enable_graph:
+            logger.warning("Graph provider is not 'mem0' — skipping project graph enablement")
+            return
+        try:
+            self._client.project.update(enable_graph=True)
+            logger.info("Enabled graph memory at Mem0 project level")
+        except Exception as e:
+            logger.error(f"Failed to enable project-level graph: {e}")
+
     async def search(self, query: str, limit: int = 10,
                      enable_graph: bool | None = None) -> SearchResult:
         """Semantic search across memories."""
@@ -92,7 +106,13 @@ class MemoryService:
 
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""
-        return self._client.get_all(user_id=self.user_id)
+        kwargs: dict = {"user_id": self.user_id}
+        if self._is_cloud:
+            kwargs["filters"] = {"user_id": self.user_id}
+        results = self._client.get_all(**kwargs)
+        if isinstance(results, dict):
+            return results.get("results", [])
+        return results
 
     async def delete(self, memory_id: str) -> None:
         """Delete a specific memory."""

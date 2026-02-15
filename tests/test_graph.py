@@ -94,3 +94,66 @@ class TestMemoryServiceGraph:
         assert isinstance(result, SearchResult)
         assert len(result.memories) == 1
         assert result.relations == []
+
+    @patch.object(MemoryService, '_is_cloud', new_callable=PropertyMock, return_value=True)
+    @patch("mem0.MemoryClient")
+    async def test_enable_project_graph_on_cloud(
+        self, mock_client_cls, mock_is_cloud, brain_config_graph
+    ):
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        service = MemoryService(brain_config_graph)
+        await service.enable_project_graph()
+        mock_client.project.update.assert_called_once_with(enable_graph=True)
+
+    @patch("mem0.Memory")
+    async def test_enable_project_graph_skips_local(
+        self, mock_memory_cls, mock_config
+    ):
+        mock_client = MagicMock()
+        mock_memory_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        await service.enable_project_graph()
+        mock_client.project.update.assert_not_called()
+
+
+class TestReingestVerification:
+    @patch("scripts.reingest_graph.BrainMigrator")
+    @patch("scripts.reingest_graph.MemoryService")
+    @patch("scripts.reingest_graph.BrainConfig")
+    async def test_reingest_enables_graph_before_migration(
+        self, mock_config_cls, mock_memory_cls, mock_migrator_cls
+    ):
+        # Configure BrainConfig mock
+        mock_config = MagicMock()
+        mock_config.graph_provider = "mem0"
+        mock_config_cls.return_value = mock_config
+
+        # Configure MemoryService mock
+        mock_memory = MagicMock()
+        mock_memory.enable_project_graph = AsyncMock()
+        mock_memory.get_all = AsyncMock(return_value=[])
+        mock_memory.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "test", "score": 0.9}],
+            relations=[{"source": "A", "relationship": "links", "target": "B"}],
+        ))
+        mock_memory_cls.return_value = mock_memory
+
+        # Configure BrainMigrator mock
+        mock_migrator = MagicMock()
+        mock_migrator.migrate_memory_content = AsyncMock()
+        mock_migrator.migrate_patterns = AsyncMock()
+        mock_migrator.migrate_experiences = AsyncMock()
+        mock_migrator_cls.return_value = mock_migrator
+
+        from scripts.reingest_graph import reingest
+        await reingest()
+
+        # Verify enable_project_graph was called
+        mock_memory.enable_project_graph.assert_called_once()
+        # Verify migration methods were called
+        mock_migrator.migrate_memory_content.assert_called_once()
+        mock_migrator.migrate_patterns.assert_called_once()
+        mock_migrator.migrate_experiences.assert_called_once()
+        # Verify verification search was called
+        mock_memory.search.assert_called_once_with("test", limit=1)
