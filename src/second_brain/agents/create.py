@@ -65,11 +65,26 @@ async def load_content_examples(
 
 @create_agent.tool
 async def find_applicable_patterns(
-    ctx: RunContext[BrainDeps], topic: str
+    ctx: RunContext[BrainDeps], topic: str, content_type: str = ""
 ) -> str:
-    """Find brain patterns and semantic memories relevant to the content topic."""
+    """Find brain patterns and semantic memories relevant to the content topic.
+    When content_type is provided, prioritizes patterns linked to that type."""
     patterns = await ctx.deps.storage_service.get_patterns()
     result = await ctx.deps.memory_service.search(topic)
+
+    # Filter patterns by content type if provided
+    if content_type and patterns:
+        # Separate: type-specific patterns first, then universal patterns
+        type_specific = [
+            p for p in patterns
+            if p.get("applicable_content_types")
+            and content_type in p["applicable_content_types"]
+        ]
+        universal = [
+            p for p in patterns
+            if p.get("applicable_content_types") is None
+        ]
+        patterns = type_specific + universal
 
     sections = []
 
@@ -77,8 +92,11 @@ async def find_applicable_patterns(
         pattern_lines = ["## Pattern Registry"]
         for p in patterns:
             text = p.get("pattern_text", "")[:ctx.deps.config.pattern_preview_limit]
+            types_label = ""
+            if p.get("applicable_content_types"):
+                types_label = f" [{', '.join(p['applicable_content_types'])}]"
             pattern_lines.append(
-                f"- [{p.get('confidence', 'LOW')}] **{p['name']}**: {text}"
+                f"- [{p.get('confidence', 'LOW')}] **{p['name']}**{types_label}: {text}"
             )
         sections.append("\n".join(pattern_lines))
 

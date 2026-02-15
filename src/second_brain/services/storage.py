@@ -1,12 +1,15 @@
 """Structured storage via Supabase for patterns, experiences, metrics."""
 
 import logging
+import time
 from datetime import date, timedelta
 
 from supabase import create_client, Client
 
 from second_brain.config import BrainConfig
-from second_brain.schemas import ConfidenceLevel
+from second_brain.schemas import (
+    ConfidenceLevel, ContentTypeConfig, DEFAULT_CONTENT_TYPES, content_type_from_row,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,19 @@ class StorageService:
             query = query.eq("confidence", confidence)
         result = query.order("date_updated", desc=True).execute()
         return result.data
+
+    async def get_patterns_for_content_type(
+        self, content_type_slug: str
+    ) -> list[dict]:
+        """Get patterns applicable to a specific content type.
+        Returns patterns where applicable_content_types contains the slug,
+        OR where applicable_content_types is NULL (universal patterns)."""
+        all_patterns = await self.get_patterns()
+        return [
+            p for p in all_patterns
+            if p.get("applicable_content_types") is None
+            or content_type_slug in (p.get("applicable_content_types") or [])
+        ]
 
     async def upsert_pattern(self, pattern: dict) -> dict:
         result = self._client.table("patterns").upsert(pattern).execute()
@@ -269,3 +285,99 @@ class StorageService:
         """Delete a knowledge entry by ID."""
         result = self._client.table("knowledge_repo").delete().eq("id", knowledge_id).execute()
         return len(result.data) > 0
+
+    # --- Content Types ---
+
+    async def get_content_types(self) -> list[dict]:
+        """Get all content types ordered by name."""
+        result = (
+            self._client.table("content_types")
+            .select("*")
+            .order("name")
+            .execute()
+        )
+        return result.data
+
+    async def get_content_type_by_slug(self, slug: str) -> dict | None:
+        """Get a content type by its slug (e.g., 'linkedin', 'newsletter')."""
+        result = (
+            self._client.table("content_types")
+            .select("*")
+            .eq("slug", slug)
+            .limit(1)
+            .execute()
+        )
+        return result.data[0] if result.data else None
+
+    async def upsert_content_type(self, content_type: dict) -> dict:
+        """Create or update a content type. Uses slug as the conflict key."""
+        result = (
+            self._client.table("content_types")
+            .upsert(content_type, on_conflict="slug")
+            .execute()
+        )
+        return result.data[0] if result.data else {}
+
+    async def delete_content_type(self, slug: str) -> bool:
+        """Delete a content type by slug. Returns True if deleted."""
+        result = (
+            self._client.table("content_types")
+            .delete()
+            .eq("slug", slug)
+            .execute()
+        )
+        return len(result.data) > 0
+
+
+class ContentTypeRegistry:
+    """Cached content type registry with DB-first, fallback-to-defaults strategy.
+
+    Loads content types from Supabase on first access, caches for `ttl` seconds.
+    Falls back to DEFAULT_CONTENT_TYPES if DB is empty or unreachable.
+    """
+
+    def __init__(self, storage: "StorageService", ttl: int = 300):
+        self._storage = storage
+        self._ttl = ttl
+        self._cache: dict[str, ContentTypeConfig] | None = None
+        self._cache_time: float = 0.0
+
+    def _is_stale(self) -> bool:
+        return self._cache is None or (time.time() - self._cache_time) > self._ttl
+
+    def invalidate(self):
+        """Force cache refresh on next access."""
+        self._cache = None
+        self._cache_time = 0.0
+
+    async def get_all(self) -> dict[str, ContentTypeConfig]:
+        """Get all content types as {slug: ContentTypeConfig} dict."""
+        if not self._is_stale() and self._cache is not None:
+            return self._cache
+
+        try:
+            rows = await self._storage.get_content_types()
+            if rows:
+                self._cache = {
+                    row["slug"]: content_type_from_row(row)
+                    for row in rows
+                }
+                self._cache_time = time.time()
+                return self._cache
+        except Exception:
+            logger.warning("Failed to load content types from DB, using defaults")
+
+        # Fallback to hardcoded defaults
+        self._cache = dict(DEFAULT_CONTENT_TYPES)
+        self._cache_time = time.time()
+        return self._cache
+
+    async def get(self, slug: str) -> ContentTypeConfig | None:
+        """Get a single content type by slug."""
+        all_types = await self.get_all()
+        return all_types.get(slug)
+
+    async def slugs(self) -> list[str]:
+        """Get all available content type slugs."""
+        all_types = await self.get_all()
+        return sorted(all_types.keys())

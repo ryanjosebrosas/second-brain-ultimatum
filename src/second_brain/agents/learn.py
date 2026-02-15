@@ -23,7 +23,10 @@ learn_agent = Agent(
         "Confidence rules: LOW (new, 1st use), MEDIUM (2-4 uses), HIGH (5+ uses). "
         "Extract anti-patterns when the input describes what NOT to do. "
         "Store every extracted pattern and add key learnings to semantic memory. "
-        "Create an experience entry if the input describes a complete work session with outcomes."
+        "Create an experience entry if the input describes a complete work session with outcomes. "
+        "When creating patterns, consider which content types they apply to. "
+        "Set applicable_content_types to a list of slugs (e.g., ['linkedin', 'email']) "
+        "if the pattern is specific to certain types. Leave it as None for universal patterns."
     ),
 )
 
@@ -77,9 +80,15 @@ async def store_pattern(
     anti_patterns: list[str] | None = None,
     context: str = "",
     source_experience: str = "",
+    applicable_content_types: list[str] | None = None,
 ) -> str:
     """Store a NEW pattern in the Supabase pattern registry.
-    Only use for genuinely new patterns. For reinforcement, use reinforce_existing_pattern."""
+    Only use for genuinely new patterns. For reinforcement, use reinforce_existing_pattern.
+
+    Args:
+        applicable_content_types: Optional list of content type slugs this pattern
+            applies to (e.g., ['linkedin', 'email']). None = universal pattern.
+    """
     existing = await ctx.deps.storage_service.get_pattern_by_name(name)
     if existing:
         return (
@@ -96,6 +105,7 @@ async def store_pattern(
         "anti_patterns": anti_patterns or [],
         "context": context,
         "source_experience": source_experience,
+        "applicable_content_types": applicable_content_types,
         "date_updated": str(date.today()),
     }
     try:
