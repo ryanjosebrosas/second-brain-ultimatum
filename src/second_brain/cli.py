@@ -208,42 +208,47 @@ def knowledge(category: str | None):
 
 
 @cli.command()
+@click.argument("table", type=click.Choice(["pattern", "experience", "example", "knowledge"]))
+@click.argument("item_id")
+def delete(table: str, item_id: str):
+    """Delete an item from the brain by table and ID."""
+    deps = create_deps()
+
+    async def _delete():
+        method = {
+            "pattern": deps.storage_service.delete_pattern,
+            "experience": deps.storage_service.delete_experience,
+            "example": deps.storage_service.delete_example,
+            "knowledge": deps.storage_service.delete_knowledge,
+        }[table]
+        deleted = await method(item_id)
+        if deleted:
+            click.echo(f"Deleted {table} {item_id}")
+        else:
+            click.echo(f"No {table} found with ID {item_id}")
+
+    asyncio.run(_delete())
+
+
+@cli.command()
 def health():
     """Check brain health and growth metrics."""
+    from second_brain.services.health import HealthService
+
     deps = create_deps()
 
     async def _health():
-        patterns = await deps.storage_service.get_patterns()
-        experiences = await deps.storage_service.get_experiences()
-        total = len(patterns)
-        high = len([p for p in patterns if p.get("confidence") == "HIGH"])
-        medium = len([p for p in patterns if p.get("confidence") == "MEDIUM"])
-        low = len([p for p in patterns if p.get("confidence") == "LOW"])
-
-        # Topic breakdown
-        topics: dict[str, int] = {}
-        for p in patterns:
-            t = p.get("topic", "uncategorized")
-            topics[t] = topics.get(t, 0) + 1
-
-        try:
-            memory_count = await deps.memory_service.get_memory_count()
-        except Exception:
-            memory_count = "unavailable"
-
-        latest = patterns[0].get("date_updated", "unknown") if patterns else "none"
-        graph = deps.config.graph_provider or "disabled"
-
-        click.echo(f"Memories: {memory_count}")
-        click.echo(f"Patterns: {total} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})")
-        click.echo(f"Experiences: {len(experiences)}")
-        click.echo(f"Graph: {graph}")
-        click.echo(f"Last updated: {latest}")
-        if topics:
+        metrics = await HealthService().compute(deps)
+        click.echo(f"Memories: {metrics.memory_count}")
+        click.echo(f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})")
+        click.echo(f"Experiences: {metrics.experience_count}")
+        click.echo(f"Graph: {metrics.graph_provider}")
+        click.echo(f"Last updated: {metrics.latest_update}")
+        if metrics.topics:
             click.echo("\nPatterns by Topic:")
-            for t, c in sorted(topics.items()):
+            for t, c in sorted(metrics.topics.items()):
                 click.echo(f"  {t}: {c}")
-        click.echo(f"\nStatus: {'GROWING' if total > 5 else 'BUILDING'}")
+        click.echo(f"\nStatus: {metrics.status}")
 
     asyncio.run(_health())
 

@@ -1,6 +1,6 @@
-"""Unit tests for MemoryService and StorageService."""
+"""Unit tests for MemoryService, StorageService, and HealthService."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.services.memory import MemoryService
 from second_brain.services.storage import StorageService
@@ -285,3 +285,162 @@ class TestKnowledgeStorage:
         await service.get_knowledge(category="frameworks")
 
         mock_table.eq.assert_called_once_with("category", "frameworks")
+
+
+class TestDeleteOperations:
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_pattern_success(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "uuid-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_pattern("uuid-1")
+
+        assert result is True
+        mock_client.table.assert_called_with("patterns")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_pattern_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_pattern("nonexistent")
+
+        assert result is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_experience_success(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "uuid-2"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_experience("uuid-2")
+
+        assert result is True
+        mock_client.table.assert_called_with("experiences")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_experience_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_experience("nonexistent")
+
+        assert result is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_example_success(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "uuid-3"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_example("uuid-3")
+
+        assert result is True
+        mock_client.table.assert_called_with("examples")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_knowledge_success(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "uuid-4"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_knowledge("uuid-4")
+
+        assert result is True
+        mock_client.table.assert_called_with("knowledge_repo")
+
+
+class TestHealthService:
+    async def test_compute_health(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
+            {"confidence": "MEDIUM", "topic": "messaging", "date_updated": "2026-02-14"},
+            {"confidence": "LOW", "topic": "content", "date_updated": "2026-02-13"},
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[
+            {"name": "test experience"}
+        ])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=42)
+        mock_deps.config.graph_provider = "none"
+
+        metrics = await HealthService().compute(mock_deps)
+
+        assert metrics.total_patterns == 3
+        assert metrics.high_confidence == 1
+        assert metrics.medium_confidence == 1
+        assert metrics.low_confidence == 1
+        assert metrics.experience_count == 1
+        assert metrics.memory_count == 42
+        assert metrics.graph_provider == "none"
+        assert metrics.latest_update == "2026-02-15"
+        assert metrics.status == "BUILDING"
+        assert metrics.topics == {"content": 2, "messaging": 1}
+
+    async def test_compute_health_memory_unavailable(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(
+            side_effect=Exception("Mem0 unavailable")
+        )
+        mock_deps.config.graph_provider = "none"
+
+        metrics = await HealthService().compute(mock_deps)
+
+        assert metrics.memory_count == "unavailable"
+        assert metrics.total_patterns == 0
+        assert metrics.latest_update == "none"
+        assert metrics.status == "BUILDING"
+
+    async def test_compute_health_growing_status(self, mock_deps):
+        from second_brain.services.health import HealthService
+
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"}
+            for _ in range(6)
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=10)
+        mock_deps.config.graph_provider = "mem0"
+
+        metrics = await HealthService().compute(mock_deps)
+
+        assert metrics.status == "GROWING"
+        assert metrics.total_patterns == 6
+        assert metrics.graph_provider == "mem0"

@@ -72,4 +72,26 @@ class BrainConfig(BaseSettings):
         description="Fallback model when primary unavailable",
     )
 
+    # Search limits
+    memory_search_limit: int = Field(
+        default=10, description="Default limit for semantic memory search results"
+    )
+    graph_search_limit: int = Field(
+        default=5, description="Default limit for graph relationship search results"
+    )
+    pattern_context_limit: int = Field(
+        default=30, description="Number of existing patterns injected into learn agent context"
+    )
+    experience_limit: int = Field(
+        default=5, description="Default limit for experience retrieval"
+    )
+
+    # Display limits
+    content_preview_limit: int = Field(
+        default=1000, description="Character limit for content previews in agent context"
+    )
+    pattern_preview_limit: int = Field(
+        default=200, description="Character limit for pattern text in search results"
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

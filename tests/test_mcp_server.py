@@ -206,7 +206,7 @@ class TestMCPTools:
         result = await brain_health.fn()
         assert "Memories: 99" in result
         assert "Graph: disabled" in result
-        assert "Last updated: no patterns yet" in result
+        assert "Last updated: none" in result
         assert "BUILDING" in result
 
     @patch("second_brain.mcp_server._get_deps")
@@ -277,3 +277,35 @@ class TestMCPTools:
 
         result = await search_knowledge.fn()
         assert "No knowledge entries found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_item_tool(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_item
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.delete_pattern = AsyncMock(return_value=True)
+        mock_deps_fn.return_value = mock_deps
+
+        result = await delete_item.fn(table="pattern", item_id="uuid-123")
+        assert "Deleted pattern" in result
+        assert "uuid-123" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_item_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_item
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.delete_experience = AsyncMock(return_value=False)
+        mock_deps_fn.return_value = mock_deps
+
+        result = await delete_item.fn(table="experience", item_id="nonexistent")
+        assert "No experience found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_item_invalid_table(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_item
+
+        mock_deps_fn.return_value = MagicMock()
+
+        result = await delete_item.fn(table="invalid", item_id="uuid-123")
+        assert "Invalid table" in result

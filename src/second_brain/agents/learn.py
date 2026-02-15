@@ -29,7 +29,7 @@ async def inject_existing_patterns(ctx: RunContext[BrainDeps]) -> str:
     patterns = await ctx.deps.storage_service.get_patterns()
     if not patterns:
         return "No existing patterns in the brain yet. All extractions will be new."
-    names = [p["name"] for p in patterns[:30]]
+    names = [p["name"] for p in patterns[:ctx.deps.config.pattern_context_limit]]
     return (
         f"Existing patterns (check for reinforcement before creating new): "
         f"{', '.join(names)}"

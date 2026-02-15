@@ -1,5 +1,6 @@
 """Second Brain services — memory and storage backends."""
 
+from second_brain.services.health import HealthService
 from second_brain.services.memory import MemoryService
 from second_brain.services.search_result import SearchResult
 from second_brain.services.storage import StorageService
@@ -10,4 +11,4 @@ try:
 except ImportError:
     GraphitiService = None
 
-__all__ = ["GraphitiService", "MemoryService", "SearchResult", "StorageService"]
+__all__ = ["GraphitiService", "HealthService", "MemoryService", "SearchResult", "StorageService"]

@@ -33,7 +33,7 @@ async def load_brain_context(ctx: RunContext[BrainDeps]) -> str:
         if content:
             section_parts = [f"## {category.title()}"]
             for item in content:
-                section_parts.append(f"### {item['title']}\n{item['content'][:1000]}")
+                section_parts.append(f"### {item['title']}\n{item['content'][:ctx.deps.config.content_preview_limit]}")
             sections.append("\n".join(section_parts))
     return "\n\n".join(sections) if sections else "Brain context is empty. Run /setup first."
 
@@ -43,14 +43,14 @@ async def find_relevant_patterns(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
     """Find patterns relevant to the current question."""
-    result = await ctx.deps.memory_service.search(query, limit=5)
+    result = await ctx.deps.memory_service.search(query)
     patterns = await ctx.deps.storage_service.get_patterns()
 
     # Collect relations
     relations = result.relations
     if ctx.deps.graphiti_service:
         try:
-            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            graphiti_rels = await ctx.deps.graphiti_service.search(query)
             relations = relations + graphiti_rels
         except Exception as e:
             logger.debug("Graphiti search failed (non-critical): %s", e)
@@ -70,7 +70,7 @@ async def find_relevant_patterns(
     formatted.append("\n## Pattern Registry")
     for p in patterns[:10]:
         formatted.append(
-            f"- [{p['confidence']}] **{p['name']}**: {p.get('pattern_text', '')[:150]}"
+            f"- [{p['confidence']}] **{p['name']}**: {p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
         )
     return "\n".join(formatted)
 
@@ -81,15 +81,15 @@ async def find_similar_experiences(
 ) -> str:
     """Find past work similar to the current question."""
     result = await ctx.deps.memory_service.search(
-        f"past experience: {query}", limit=5
+        f"past experience: {query}"
     )
-    experiences = await ctx.deps.storage_service.get_experiences(limit=5)
+    experiences = await ctx.deps.storage_service.get_experiences(limit=ctx.deps.config.experience_limit)
 
     # Collect relations
     relations = result.relations
     if ctx.deps.graphiti_service:
         try:
-            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            graphiti_rels = await ctx.deps.graphiti_service.search(query)
             relations = relations + graphiti_rels
         except Exception as e:
             logger.debug("Graphiti search failed (non-critical): %s", e)
@@ -99,7 +99,7 @@ async def find_similar_experiences(
         score = f" (score: {e['review_score']})" if e.get("review_score") else ""
         formatted.append(f"- **{e['name']}** [{e['category']}]{score}")
         if e.get("learnings"):
-            formatted.append(f"  Learnings: {e['learnings'][:200]}")
+            formatted.append(f"  Learnings: {e['learnings'][:ctx.deps.config.pattern_preview_limit]}")
 
     if relations:
         formatted.append("\n## Graph Relationships")
@@ -122,7 +122,7 @@ async def search_knowledge(
     formatted = ["## Knowledge Repository"]
     for k in knowledge:
         formatted.append(f"- [{k['category']}] **{k['title']}**")
-        preview = k.get("content", "")[:200]
+        preview = k.get("content", "")[:ctx.deps.config.pattern_preview_limit]
         if preview:
             formatted.append(f"  {preview}")
     return "\n".join(formatted)

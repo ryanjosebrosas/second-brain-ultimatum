@@ -86,9 +86,10 @@ class MemoryService:
         except Exception as e:
             logger.error(f"Failed to enable project-level graph: {e}")
 
-    async def search(self, query: str, limit: int = 10,
+    async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None) -> SearchResult:
         """Semantic search across memories."""
+        limit = limit if limit is not None else self.config.memory_search_limit
         kwargs: dict = {"user_id": self.user_id}
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if self._is_cloud:

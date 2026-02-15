@@ -26,7 +26,7 @@ async def search_semantic_memory(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
     """Search Mem0 semantic memory for relevant content."""
-    result = await ctx.deps.memory_service.search(query, limit=10)
+    result = await ctx.deps.memory_service.search(query)
 
     # Collect relations from Mem0 graph
     relations = result.relations
@@ -34,7 +34,7 @@ async def search_semantic_memory(
     # Also check Graphiti if available
     if ctx.deps.graphiti_service:
         try:
-            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            graphiti_rels = await ctx.deps.graphiti_service.search(query)
             relations = relations + graphiti_rels
         except Exception as e:
             logger.debug("Graphiti search failed (non-critical): %s", e)
@@ -70,7 +70,7 @@ async def search_patterns(
     formatted = []
     for p in patterns:
         formatted.append(
-            f"- [{p['confidence']}] {p['name']}: {p.get('pattern_text', '')[:200]}"
+            f"- [{p['confidence']}] {p['name']}: {p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
         )
     return "\n".join(formatted)
 
@@ -101,7 +101,7 @@ async def search_examples(
     formatted = []
     for e in examples:
         formatted.append(f"- [{e['content_type']}] {e['title']}")
-        preview = e.get("content", "")[:200]
+        preview = e.get("content", "")[:ctx.deps.config.pattern_preview_limit]
         if preview:
             formatted.append(f"  {preview}")
     return "\n".join(formatted)

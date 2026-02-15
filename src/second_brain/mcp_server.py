@@ -211,50 +211,49 @@ async def search_knowledge(category: str | None = None) -> str:
 
 
 @server.tool()
+async def delete_item(table: str, item_id: str) -> str:
+    """Delete an item from your Second Brain by table and ID.
+
+    Args:
+        table: Which table to delete from (pattern, experience, example, knowledge)
+        item_id: The UUID of the item to delete
+    """
+    deps = _get_deps()
+    methods = {
+        "pattern": deps.storage_service.delete_pattern,
+        "experience": deps.storage_service.delete_experience,
+        "example": deps.storage_service.delete_example,
+        "knowledge": deps.storage_service.delete_knowledge,
+    }
+    if table not in methods:
+        return f"Invalid table '{table}'. Use: pattern, experience, example, knowledge"
+    deleted = await methods[table](item_id)
+    if deleted:
+        return f"Deleted {table} with ID {item_id}"
+    return f"No {table} found with ID {item_id}"
+
+
+@server.tool()
 async def brain_health() -> str:
     """Check the health and growth metrics of your Second Brain."""
+    from second_brain.services.health import HealthService
+
     deps = _get_deps()
-    patterns = await deps.storage_service.get_patterns()
-    experiences = await deps.storage_service.get_experiences()
-
-    total_patterns = len(patterns)
-    high = len([p for p in patterns if p.get("confidence") == "HIGH"])
-    medium = len([p for p in patterns if p.get("confidence") == "MEDIUM"])
-    low = len([p for p in patterns if p.get("confidence") == "LOW"])
-
-    # Topic breakdown
-    topics: dict[str, int] = {}
-    for p in patterns:
-        t = p.get("topic", "uncategorized")
-        topics[t] = topics.get(t, 0) + 1
-    topic_lines = [f"  - {t}: {c}" for t, c in sorted(topics.items())]
-
-    # Memory count
-    try:
-        memory_count = await deps.memory_service.get_memory_count()
-    except Exception:
-        memory_count = "unavailable"
-
-    # Latest update
-    latest = patterns[0].get("date_updated", "unknown") if patterns else "no patterns yet"
-
-    # Graph status
-    graph = deps.config.graph_provider or "disabled"
+    metrics = await HealthService().compute(deps)
 
     parts = [
         "# Brain Health\n",
-        f"Memories: {memory_count}",
-        f"Patterns: {total_patterns} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})",
-        f"Experiences: {len(experiences)}",
-        f"Graph: {graph}",
-        f"Last updated: {latest}",
+        f"Memories: {metrics.memory_count}",
+        f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})",
+        f"Experiences: {metrics.experience_count}",
+        f"Graph: {metrics.graph_provider}",
+        f"Last updated: {metrics.latest_update}",
     ]
-    if topic_lines:
+    if metrics.topics:
         parts.append("\n## Patterns by Topic")
-        parts.extend(topic_lines)
-
-    status = "GROWING" if total_patterns > 5 else "BUILDING"
-    parts.append(f"\nStatus: {status}")
+        for t, c in sorted(metrics.topics.items()):
+            parts.append(f"  - {t}: {c}")
+    parts.append(f"\nStatus: {metrics.status}")
     return "\n".join(parts)
 
 

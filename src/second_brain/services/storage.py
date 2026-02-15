@@ -36,6 +36,11 @@ class StorageService:
         result = self._client.table("patterns").upsert(pattern).execute()
         return result.data[0] if result.data else {}
 
+    async def delete_pattern(self, pattern_id: str) -> bool:
+        """Delete a pattern by ID."""
+        result = self._client.table("patterns").delete().eq("id", pattern_id).execute()
+        return len(result.data) > 0
+
     # --- Experiences ---
 
     async def add_experience(self, experience: dict) -> dict:
@@ -50,6 +55,11 @@ class StorageService:
             query = query.eq("category", category)
         result = query.order("created_at", desc=True).limit(limit).execute()
         return result.data
+
+    async def delete_experience(self, experience_id: str) -> bool:
+        """Delete an experience by ID."""
+        result = self._client.table("experiences").delete().eq("id", experience_id).execute()
+        return len(result.data) > 0
 
     # --- Brain Health ---
 
@@ -98,6 +108,11 @@ class StorageService:
         result = self._client.table("examples").upsert(example).execute()
         return result.data[0] if result.data else {}
 
+    async def delete_example(self, example_id: str) -> bool:
+        """Delete an example by ID."""
+        result = self._client.table("examples").delete().eq("id", example_id).execute()
+        return len(result.data) > 0
+
     # --- Knowledge Repo ---
 
     async def get_knowledge(
@@ -112,3 +127,8 @@ class StorageService:
     async def upsert_knowledge(self, knowledge: dict) -> dict:
         result = self._client.table("knowledge_repo").upsert(knowledge).execute()
         return result.data[0] if result.data else {}
+
+    async def delete_knowledge(self, knowledge_id: str) -> bool:
+        """Delete a knowledge entry by ID."""
+        result = self._client.table("knowledge_repo").delete().eq("id", knowledge_id).execute()
+        return len(result.data) > 0
