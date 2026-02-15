@@ -32,6 +32,16 @@ def mock_config(tmp_path):
     exp_dir.mkdir(parents=True)
     (exp_dir / "plan.md").write_text("# Test Plan")
 
+    examples_dir = tmp_path / "memory" / "examples" / "linkedin"
+    examples_dir.mkdir(parents=True)
+    (examples_dir / "hooks-that-work.md").write_text("# Hooks That Work\n5 LinkedIn hooks")
+    (examples_dir / "README.md").write_text("# LinkedIn Examples")
+
+    knowledge_dir = tmp_path / "memory" / "knowledge-repo" / "frameworks"
+    knowledge_dir.mkdir(parents=True)
+    (knowledge_dir / "value-ladder.md").write_text("# Value Ladder\nFramework content")
+    (knowledge_dir / "README.md").write_text("# Frameworks")
+
     return BrainConfig(
         anthropic_api_key="test-key",
         openai_api_key="test-key",
@@ -189,3 +199,67 @@ class TestBrainMigrator:
         # Should not raise
         await migrator.migrate_patterns()
         await migrator.migrate_experiences()
+        await migrator.migrate_examples()
+        await migrator.migrate_knowledge_repo()
+
+
+class TestExamplesMigration:
+    @patch("second_brain.migrate.StorageService")
+    @patch("second_brain.migrate.MemoryService")
+    async def test_migrate_examples(self, mock_mem_cls, mock_storage_cls, mock_config):
+        mock_memory = MagicMock()
+        mock_memory.add = AsyncMock()
+        mock_mem_cls.return_value = mock_memory
+
+        mock_storage = MagicMock()
+        mock_storage.upsert_example = AsyncMock(return_value={})
+        mock_storage_cls.return_value = mock_storage
+
+        migrator = BrainMigrator(mock_config)
+        await migrator.migrate_examples()
+
+        mock_storage.upsert_example.assert_called_once()
+        call_args = mock_storage.upsert_example.call_args[0][0]
+        assert call_args["content_type"] == "linkedin"
+        assert "Hooks" in call_args["title"]
+        assert mock_memory.add.call_count == 1
+
+    @patch("second_brain.migrate.StorageService")
+    @patch("second_brain.migrate.MemoryService")
+    async def test_migrate_examples_skips_stubs(self, mock_mem_cls, mock_storage_cls, mock_config):
+        mock_memory = MagicMock()
+        mock_memory.add = AsyncMock()
+        mock_mem_cls.return_value = mock_memory
+
+        mock_storage = MagicMock()
+        mock_storage.upsert_example = AsyncMock(return_value={})
+        mock_storage_cls.return_value = mock_storage
+
+        migrator = BrainMigrator(mock_config)
+        await migrator.migrate_examples()
+
+        # README.md should be skipped — only hooks-that-work.md migrated
+        for call in mock_storage.upsert_example.call_args_list:
+            assert "README" not in call[0][0].get("title", "")
+
+
+class TestKnowledgeRepoMigration:
+    @patch("second_brain.migrate.StorageService")
+    @patch("second_brain.migrate.MemoryService")
+    async def test_migrate_knowledge_repo(self, mock_mem_cls, mock_storage_cls, mock_config):
+        mock_memory = MagicMock()
+        mock_memory.add = AsyncMock()
+        mock_mem_cls.return_value = mock_memory
+
+        mock_storage = MagicMock()
+        mock_storage.upsert_knowledge = AsyncMock(return_value={})
+        mock_storage_cls.return_value = mock_storage
+
+        migrator = BrainMigrator(mock_config)
+        await migrator.migrate_knowledge_repo()
+
+        mock_storage.upsert_knowledge.assert_called_once()
+        call_args = mock_storage.upsert_knowledge.call_args[0][0]
+        assert call_args["category"] == "frameworks"
+        assert "Value" in call_args["title"]
+        assert mock_memory.add.call_count == 1

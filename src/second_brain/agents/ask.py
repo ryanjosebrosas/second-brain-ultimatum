@@ -109,3 +109,20 @@ async def find_similar_experiences(
             )
 
     return "\n".join(formatted)
+
+
+@ask_agent.tool
+async def search_knowledge(
+    ctx: RunContext[BrainDeps], category: str | None = None
+) -> str:
+    """Search the knowledge repository for frameworks, methodologies, and playbooks."""
+    knowledge = await ctx.deps.storage_service.get_knowledge(category=category)
+    if not knowledge:
+        return "No knowledge entries found."
+    formatted = ["## Knowledge Repository"]
+    for k in knowledge:
+        formatted.append(f"- [{k['category']}] **{k['title']}**")
+        preview = k.get("content", "")[:200]
+        if preview:
+            formatted.append(f"  {preview}")
+    return "\n".join(formatted)

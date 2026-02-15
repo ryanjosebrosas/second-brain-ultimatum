@@ -82,3 +82,33 @@ class StorageService:
     async def upsert_memory_content(self, content: dict) -> dict:
         result = self._client.table("memory_content").upsert(content).execute()
         return result.data[0] if result.data else {}
+
+    # --- Examples ---
+
+    async def get_examples(
+        self, content_type: str | None = None
+    ) -> list[dict]:
+        query = self._client.table("examples").select("*")
+        if content_type:
+            query = query.eq("content_type", content_type)
+        result = query.order("created_at", desc=True).execute()
+        return result.data
+
+    async def upsert_example(self, example: dict) -> dict:
+        result = self._client.table("examples").upsert(example).execute()
+        return result.data[0] if result.data else {}
+
+    # --- Knowledge Repo ---
+
+    async def get_knowledge(
+        self, category: str | None = None
+    ) -> list[dict]:
+        query = self._client.table("knowledge_repo").select("*")
+        if category:
+            query = query.eq("category", category)
+        result = query.order("created_at", desc=True).execute()
+        return result.data
+
+    async def upsert_knowledge(self, knowledge: dict) -> dict:
+        result = self._client.table("knowledge_repo").upsert(knowledge).execute()
+        return result.data[0] if result.data else {}

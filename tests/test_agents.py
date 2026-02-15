@@ -61,6 +61,12 @@ class TestRecallAgent:
         assert "search_semantic_memory" in tool_names
         assert "search_patterns" in tool_names
         assert "search_experiences" in tool_names
+        assert "search_examples" in tool_names
+
+    def test_agent_has_examples_tool(self):
+        from second_brain.agents.recall import recall_agent
+        tool_names = list(recall_agent._function_toolset.tools.keys())
+        assert "search_examples" in tool_names
 
 
 class TestAskAgent:
@@ -78,6 +84,12 @@ class TestAskAgent:
         assert "load_brain_context" in tool_names
         assert "find_relevant_patterns" in tool_names
         assert "find_similar_experiences" in tool_names
+        assert "search_knowledge" in tool_names
+
+    def test_agent_has_knowledge_tool(self):
+        from second_brain.agents.ask import ask_agent
+        tool_names = list(ask_agent._function_toolset.tools.keys())
+        assert "search_knowledge" in tool_names
 
 
 class TestLearnResult:

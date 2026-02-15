@@ -169,6 +169,48 @@ async def learn(content: str, category: str = "general") -> str:
 
 
 @server.tool()
+async def search_examples(content_type: str | None = None) -> str:
+    """Search your Second Brain's content examples — real samples of
+    emails, LinkedIn posts, case studies, presentations, and more.
+
+    Args:
+        content_type: Filter by type (linkedin, email, case-study, etc.)
+                      or None for all examples.
+    """
+    deps = _get_deps()
+    examples = await deps.storage_service.get_examples(content_type=content_type)
+    if not examples:
+        return "No content examples found. Add examples to memory/examples/ and run migrate."
+    parts = ["# Content Examples\n"]
+    for e in examples:
+        parts.append(f"## [{e['content_type']}] {e['title']}")
+        parts.append(e.get("content", "")[:500])
+        parts.append("")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def search_knowledge(category: str | None = None) -> str:
+    """Search your Second Brain's knowledge repository — frameworks,
+    methodologies, playbooks, research, and tools.
+
+    Args:
+        category: Filter by category (framework, methodology, playbook,
+                  research, tool) or None for all.
+    """
+    deps = _get_deps()
+    knowledge = await deps.storage_service.get_knowledge(category=category)
+    if not knowledge:
+        return "No knowledge entries found. Add content to memory/knowledge-repo/ and run migrate."
+    parts = ["# Knowledge Repository\n"]
+    for k in knowledge:
+        parts.append(f"## [{k['category']}] {k['title']}")
+        parts.append(k.get("content", "")[:500])
+        parts.append("")
+    return "\n".join(parts)
+
+
+@server.tool()
 async def brain_health() -> str:
     """Check the health and growth metrics of your Second Brain."""
     deps = _get_deps()

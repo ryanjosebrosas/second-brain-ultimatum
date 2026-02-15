@@ -88,3 +88,20 @@ async def search_experiences(
         score_str = f" (score: {e['review_score']})" if e.get("review_score") else ""
         formatted.append(f"- {e['name']} [{e['category']}]{score_str}")
     return "\n".join(formatted)
+
+
+@recall_agent.tool
+async def search_examples(
+    ctx: RunContext[BrainDeps], content_type: str | None = None
+) -> str:
+    """Search content examples in the brain (emails, LinkedIn posts, case studies, etc.)."""
+    examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
+    if not examples:
+        return "No content examples found."
+    formatted = []
+    for e in examples:
+        formatted.append(f"- [{e['content_type']}] {e['title']}")
+        preview = e.get("content", "")[:200]
+        if preview:
+            formatted.append(f"  {preview}")
+    return "\n".join(formatted)

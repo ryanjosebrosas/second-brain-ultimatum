@@ -197,3 +197,91 @@ class TestStorageService:
 
         assert len(history) == 1
         assert history[0]["total_patterns"] == 32
+
+
+class TestExamplesStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_examples(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"content_type": "linkedin", "title": "Hooks That Work", "content": "..."}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        examples = await service.get_examples()
+
+        assert len(examples) == 1
+        assert examples[0]["content_type"] == "linkedin"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_examples_with_filter(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_examples(content_type="email")
+
+        mock_table.eq.assert_called_once_with("content_type", "email")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_upsert_example(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.upsert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "title": "LinkedIn Post"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.upsert_example({"title": "LinkedIn Post", "content": "..."})
+
+        assert result["title"] == "LinkedIn Post"
+
+
+class TestKnowledgeStorage:
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_knowledge(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"category": "frameworks", "title": "Value Ladder", "content": "..."}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        knowledge = await service.get_knowledge()
+
+        assert len(knowledge) == 1
+        assert knowledge[0]["category"] == "frameworks"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_knowledge_with_filter(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_knowledge(category="frameworks")
+
+        mock_table.eq.assert_called_once_with("category", "frameworks")

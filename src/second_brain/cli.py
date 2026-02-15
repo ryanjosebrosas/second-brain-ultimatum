@@ -168,6 +168,46 @@ def learn(content: str, category: str):
 
 
 @cli.command()
+@click.option("--type", "content_type", default=None, help="Filter by content type (linkedin, email, etc.)")
+def examples(content_type: str | None):
+    """Search content examples in your brain."""
+    deps = create_deps()
+
+    async def _search():
+        results = await deps.storage_service.get_examples(content_type=content_type)
+        if not results:
+            click.echo("No content examples found.")
+            return
+        for e in results:
+            click.echo(f"\n[{e['content_type']}] {e['title']}")
+            preview = e.get("content", "")[:300]
+            if preview:
+                click.echo(f"  {preview}")
+
+    asyncio.run(_search())
+
+
+@cli.command()
+@click.option("--category", default=None, help="Filter by category (framework, methodology, etc.)")
+def knowledge(category: str | None):
+    """Search the knowledge repository."""
+    deps = create_deps()
+
+    async def _search():
+        results = await deps.storage_service.get_knowledge(category=category)
+        if not results:
+            click.echo("No knowledge entries found.")
+            return
+        for k in results:
+            click.echo(f"\n[{k['category']}] {k['title']}")
+            preview = k.get("content", "")[:300]
+            if preview:
+                click.echo(f"  {preview}")
+
+    asyncio.run(_search())
+
+
+@cli.command()
 def health():
     """Check brain health and growth metrics."""
     deps = create_deps()

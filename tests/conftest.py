@@ -87,6 +87,10 @@ def mock_storage():
     storage.upsert_pattern = AsyncMock(return_value={})
     storage.add_experience = AsyncMock(return_value={})
     storage.upsert_memory_content = AsyncMock(return_value={})
+    storage.get_examples = AsyncMock(return_value=[])
+    storage.upsert_example = AsyncMock(return_value={})
+    storage.get_knowledge = AsyncMock(return_value=[])
+    storage.upsert_knowledge = AsyncMock(return_value={})
     return storage
 
 

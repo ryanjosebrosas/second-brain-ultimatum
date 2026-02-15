@@ -227,3 +227,53 @@ class TestMCPTools:
         result = await brain_health.fn()
         assert "Memories: unavailable" in result
         assert "Patterns: 1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_examples_tool(self, mock_deps_fn):
+        from second_brain.mcp_server import search_examples
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[
+            {"content_type": "linkedin", "title": "Hooks That Work", "content": "5 hooks..."},
+        ])
+        mock_deps_fn.return_value = mock_deps
+
+        result = await search_examples.fn()
+        assert "linkedin" in result
+        assert "Hooks That Work" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_examples_empty(self, mock_deps_fn):
+        from second_brain.mcp_server import search_examples
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+
+        result = await search_examples.fn()
+        assert "No content examples found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_knowledge_tool(self, mock_deps_fn):
+        from second_brain.mcp_server import search_knowledge
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_knowledge = AsyncMock(return_value=[
+            {"category": "frameworks", "title": "Value Ladder", "content": "Framework..."},
+        ])
+        mock_deps_fn.return_value = mock_deps
+
+        result = await search_knowledge.fn()
+        assert "frameworks" in result
+        assert "Value Ladder" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_knowledge_empty(self, mock_deps_fn):
+        from second_brain.mcp_server import search_knowledge
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_knowledge = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+
+        result = await search_knowledge.fn()
+        assert "No knowledge entries found" in result

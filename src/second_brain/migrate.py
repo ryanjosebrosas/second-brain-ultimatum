@@ -26,6 +26,8 @@ class BrainMigrator:
         await self.migrate_memory_content()
         await self.migrate_patterns()
         await self.migrate_experiences()
+        await self.migrate_examples()
+        await self.migrate_knowledge_repo()
         logger.info("Migration complete!")
 
     async def migrate_memory_content(self):
@@ -107,6 +109,64 @@ class BrainMigrator:
                         experience[key] = filepath.read_text(encoding="utf-8")[:5000]
                 await self.storage.add_experience(experience)
                 logger.info(f"Migrated experience: {project_dir.name}")
+
+    async def migrate_examples(self):
+        """Migrate memory/examples/ folders to Supabase examples table."""
+        examples_dir = self.data_path / "memory" / "examples"
+        if not examples_dir.exists():
+            logger.warning(f"Examples directory not found: {examples_dir}")
+            return
+
+        skip_files = {"INDEX.md", "README.md", ".gitkeep"}
+        for type_dir in examples_dir.iterdir():
+            if not type_dir.is_dir():
+                continue
+            content_type = type_dir.name
+            for md_file in type_dir.glob("*.md"):
+                if md_file.name in skip_files:
+                    continue
+                content = md_file.read_text(encoding="utf-8")
+                title = md_file.stem.replace("-", " ").title()
+                await self.memory.add(
+                    content,
+                    metadata={"type": "example", "content_type": content_type},
+                )
+                await self.storage.upsert_example({
+                    "content_type": content_type,
+                    "title": title,
+                    "content": content,
+                    "source_file": str(md_file),
+                })
+                logger.info(f"Migrated example: {content_type}/{md_file.name}")
+
+    async def migrate_knowledge_repo(self):
+        """Migrate memory/knowledge-repo/ folders to Supabase knowledge_repo table."""
+        repo_dir = self.data_path / "memory" / "knowledge-repo"
+        if not repo_dir.exists():
+            logger.warning(f"Knowledge repo directory not found: {repo_dir}")
+            return
+
+        skip_files = {"INDEX.md", "README.md", ".gitkeep", "_template.md"}
+        for category_dir in repo_dir.iterdir():
+            if not category_dir.is_dir():
+                continue
+            category = category_dir.name
+            for md_file in category_dir.glob("*.md"):
+                if md_file.name in skip_files:
+                    continue
+                content = md_file.read_text(encoding="utf-8")
+                title = md_file.stem.replace("-", " ").title()
+                await self.memory.add(
+                    content,
+                    metadata={"type": "knowledge", "category": category},
+                )
+                await self.storage.upsert_knowledge({
+                    "category": category,
+                    "title": title,
+                    "content": content,
+                    "source_file": str(md_file),
+                })
+                logger.info(f"Migrated knowledge: {category}/{md_file.name}")
 
     def _parse_patterns(self, content: str, source_file: str) -> list[dict]:
         """Parse markdown pattern file into structured pattern dicts."""
