@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from second_brain.schemas import RecallResult, AskResult, MemoryMatch
+from second_brain.schemas import RecallResult, AskResult, MemoryMatch, Relation
 
 
 class TestMCPTools:
@@ -107,3 +107,25 @@ class TestMCPTools:
         result = await brain_health.fn()
         assert "GROWING" in result
         assert "Patterns: 10" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.recall_agent")
+    async def test_recall_with_graph_relations(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import recall
+
+        mock_result = MagicMock()
+        mock_result.output = RecallResult(
+            query="content strategy",
+            matches=[MemoryMatch(content="LinkedIn tips", source="mem0")],
+            relations=[
+                Relation(source="LinkedIn", relationship="uses", target="content strategy"),
+            ],
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = MagicMock()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await recall.fn(query="content strategy")
+        assert "Graph Relationships" in result
+        assert "LinkedIn --[uses]--> content strategy" in result

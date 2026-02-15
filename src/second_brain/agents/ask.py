@@ -39,13 +39,29 @@ async def find_relevant_patterns(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
     """Find patterns relevant to the current question."""
-    results = await ctx.deps.memory_service.search(query, limit=5)
+    result = await ctx.deps.memory_service.search(query, limit=5)
     patterns = await ctx.deps.storage_service.get_patterns()
 
+    # Collect relations
+    relations = result.relations
+    if ctx.deps.graphiti_service:
+        try:
+            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            relations = relations + graphiti_rels
+        except Exception:
+            pass
+
     formatted = ["## Semantic Memory Matches"]
-    for r in results[:5]:
+    for r in result.memories[:5]:
         memory = r.get("memory", r.get("result", ""))
         formatted.append(f"- {memory}")
+
+    if relations:
+        formatted.append("\n## Graph Relationships")
+        for rel in relations:
+            formatted.append(
+                f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
+            )
 
     formatted.append("\n## Pattern Registry")
     for p in patterns[:10]:
@@ -60,10 +76,19 @@ async def find_similar_experiences(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
     """Find past work similar to the current question."""
-    results = await ctx.deps.memory_service.search(
+    result = await ctx.deps.memory_service.search(
         f"past experience: {query}", limit=5
     )
     experiences = await ctx.deps.storage_service.get_experiences(limit=5)
+
+    # Collect relations
+    relations = result.relations
+    if ctx.deps.graphiti_service:
+        try:
+            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            relations = relations + graphiti_rels
+        except Exception:
+            pass
 
     formatted = ["## Similar Past Work"]
     for e in experiences:
@@ -71,4 +96,12 @@ async def find_similar_experiences(
         formatted.append(f"- **{e['name']}** [{e['category']}]{score}")
         if e.get("learnings"):
             formatted.append(f"  Learnings: {e['learnings'][:200]}")
+
+    if relations:
+        formatted.append("\n## Graph Relationships")
+        for rel in relations:
+            formatted.append(
+                f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
+            )
+
     return "\n".join(formatted)

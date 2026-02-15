@@ -83,6 +83,10 @@ async def recall(query: str) -> str:
         parts.append("\n## Related Patterns\n")
         for p in output.patterns:
             parts.append(f"- {p}")
+    if output.relations:
+        parts.append("\n## Graph Relationships\n")
+        for rel in output.relations:
+            parts.append(f"- {rel.source} --[{rel.relationship}]--> {rel.target}")
     if output.summary:
         parts.append(f"\n## Summary\n{output.summary}")
     return "\n".join(parts)
@@ -113,6 +117,10 @@ async def ask(question: str) -> str:
         parts.append(f"\n---\nContext used: {', '.join(output.context_used)}")
     if output.patterns_applied:
         parts.append(f"Patterns applied: {', '.join(output.patterns_applied)}")
+    if output.relations:
+        parts.append("\n## Graph Relationships\n")
+        for rel in output.relations:
+            parts.append(f"- {rel.source} --[{rel.relationship}]--> {rel.target}")
     if output.next_action:
         parts.append(f"\nSuggested next: {output.next_action}")
     return "\n".join(parts)

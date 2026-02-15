@@ -22,14 +22,36 @@ async def search_semantic_memory(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
     """Search Mem0 semantic memory for relevant content."""
-    results = await ctx.deps.memory_service.search(query, limit=10)
-    if not results:
+    result = await ctx.deps.memory_service.search(query, limit=10)
+
+    # Collect relations from Mem0 graph
+    relations = result.relations
+
+    # Also check Graphiti if available
+    if ctx.deps.graphiti_service:
+        try:
+            graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
+            relations = relations + graphiti_rels
+        except Exception:
+            pass  # Graphiti failure shouldn't break recall
+
+    if not result.memories and not relations:
         return "No semantic matches found."
+
     formatted = []
-    for r in results:
+    for r in result.memories:
         memory = r.get("memory", r.get("result", ""))
         score = r.get("score", 0)
         formatted.append(f"- [{score:.2f}] {memory}")
+
+    if relations:
+        formatted.append("\nGraph Relationships:")
+        for rel in relations:
+            src = rel.get("source", "?")
+            relationship = rel.get("relationship", "?")
+            tgt = rel.get("target", "?")
+            formatted.append(f"- {src} --[{relationship}]--> {tgt}")
+
     return "\n".join(formatted)
 
 

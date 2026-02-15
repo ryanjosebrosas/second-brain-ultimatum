@@ -75,6 +75,10 @@ def recall(query: str):
             click.echo("\n## Related Patterns\n")
             for p in output.patterns:
                 click.echo(f"  - {p}")
+        if output.relations:
+            click.echo("\n## Graph Relationships\n")
+            for rel in output.relations:
+                click.echo(f"  {rel.source} --[{rel.relationship}]--> {rel.target}")
         if output.summary:
             click.echo(f"\n## Summary\n{output.summary}")
 
@@ -104,6 +108,10 @@ def ask(question: str):
             click.echo(f"Context: {', '.join(output.context_used)}")
         if output.patterns_applied:
             click.echo(f"Patterns: {', '.join(output.patterns_applied)}")
+        if output.relations:
+            click.echo("\n## Graph Relationships\n")
+            for rel in output.relations:
+                click.echo(f"  {rel.source} --[{rel.relationship}]--> {rel.target}")
         if output.next_action:
             click.echo(f"\nNext: {output.next_action}")
 
