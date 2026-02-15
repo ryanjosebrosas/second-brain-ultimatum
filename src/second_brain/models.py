@@ -12,19 +12,22 @@ def get_model(config: BrainConfig) -> Model:
 
     Tries: Anthropic Claude -> Ollama (local)
     """
-    # Try primary model (Anthropic Claude)
-    try:
-        from pydantic_ai.models.anthropic import AnthropicModel
-        from pydantic_ai.providers.anthropic import AnthropicProvider
+    # Try primary model (Anthropic Claude) — only if API key is set
+    if config.anthropic_api_key:
+        try:
+            from pydantic_ai.models.anthropic import AnthropicModel
+            from pydantic_ai.providers.anthropic import AnthropicProvider
 
-        model = AnthropicModel(
-            config.primary_model.replace("anthropic:", ""),
-            provider=AnthropicProvider(api_key=config.anthropic_api_key),
-        )
-        logger.info(f"Using primary model: {config.primary_model}")
-        return model
-    except Exception as e:
-        logger.warning(f"Primary model unavailable: {e}")
+            model = AnthropicModel(
+                config.primary_model.replace("anthropic:", ""),
+                provider=AnthropicProvider(api_key=config.anthropic_api_key),
+            )
+            logger.info(f"Using primary model: {config.primary_model}")
+            return model
+        except Exception as e:
+            logger.warning(f"Primary model unavailable: {e}")
+    else:
+        logger.info("No Anthropic API key set, skipping primary model")
 
     # Try fallback (Ollama via OpenAI-compatible API)
     try:
@@ -35,6 +38,7 @@ def get_model(config: BrainConfig) -> Model:
             config.ollama_model,
             provider=OllamaProvider(
                 base_url=f"{config.ollama_base_url}/v1",
+                api_key=config.ollama_api_key,
             ),
         )
         logger.info(f"Using fallback model: {config.fallback_model}")

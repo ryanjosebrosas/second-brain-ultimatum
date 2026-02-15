@@ -2,8 +2,13 @@
 
 import asyncio
 import logging
+import sys
 
 import click
+
+# Fix Windows terminal encoding for Unicode (emoji etc.)
+if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from second_brain.config import BrainConfig
 from second_brain.deps import BrainDeps

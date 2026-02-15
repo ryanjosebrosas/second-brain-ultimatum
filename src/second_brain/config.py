@@ -9,11 +9,18 @@ class BrainConfig(BaseSettings):
     """Configuration for the AI Second Brain."""
 
     # LLM providers
-    anthropic_api_key: str = Field(..., description="Anthropic API key")
-    openai_api_key: str = Field(..., description="OpenAI API key for embeddings")
+    anthropic_api_key: str | None = Field(
+        default=None, description="Anthropic API key (None = skip, use Ollama)"
+    )
+    openai_api_key: str | None = Field(
+        default=None, description="OpenAI API key for Mem0 embeddings"
+    )
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama server URL",
+    )
+    ollama_api_key: str | None = Field(
+        default=None, description="Ollama API key for cloud access"
     )
     ollama_model: str = Field(
         default="llama3.1:8b",

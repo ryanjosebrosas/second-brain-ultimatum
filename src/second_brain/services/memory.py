@@ -53,9 +53,20 @@ class MemoryService:
         )
         return result
 
+    @property
+    def _is_cloud(self) -> bool:
+        return type(self._client).__name__ == "MemoryClient"
+
     async def search(self, query: str, limit: int = 10) -> list[dict]:
         """Semantic search across memories."""
-        results = self._client.search(query, user_id=self.user_id)
+        kwargs = {"user_id": self.user_id}
+        # Mem0 Cloud v2 requires explicit filters for search
+        if self._is_cloud:
+            kwargs["filters"] = {"user_id": self.user_id}
+        results = self._client.search(query, **kwargs)
+        # v2 returns {"results": [...]}, v1 returns a list
+        if isinstance(results, dict):
+            results = results.get("results", [])
         return results[:limit] if isinstance(results, list) else []
 
     async def get_all(self) -> list[dict]:

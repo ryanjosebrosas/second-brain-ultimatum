@@ -13,6 +13,7 @@ def brain_config(tmp_path):
     return BrainConfig(
         anthropic_api_key="test-key",
         openai_api_key="test-key",
+        mem0_api_key=None,
         supabase_url="https://test.supabase.co",
         supabase_key="test-key",
         brain_data_path=tmp_path,
