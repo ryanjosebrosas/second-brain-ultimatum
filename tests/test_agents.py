@@ -805,3 +805,86 @@ class TestSemanticPatternSync:
 
         # Should call search_with_filters for semantic search
         mock_deps.memory_service.search_with_filters.assert_called_once()
+
+
+class TestMemoryGraduation:
+    """Test memory consolidation and graduation tools."""
+
+    def test_consolidate_tool_exists(self):
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "consolidate_memories" in tool_names
+
+    def test_tag_graduated_tool_exists(self):
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "tag_graduated_memories" in tool_names
+
+    async def test_consolidate_no_memories(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.memory_service.get_all = AsyncMock(return_value=[])
+        tool_fn = learn_agent._function_toolset.tools["consolidate_memories"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(mock_ctx)
+        assert "No memories found" in result
+
+    async def test_consolidate_all_categorized(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.memory_service.get_all = AsyncMock(return_value=[
+            {"memory": "Pattern: Hook First", "metadata": {"category": "pattern"}},
+            {"memory": "Graduated memory", "metadata": {"category": "graduated"}},
+        ])
+        tool_fn = learn_agent._function_toolset.tools["consolidate_memories"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(mock_ctx)
+        assert "All memories are already categorized" in result
+
+    async def test_consolidate_finds_uncategorized(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.memory_service.get_all = AsyncMock(return_value=[
+            {"memory": "Writing tip 1", "metadata": {"category": "learning"}},
+            {"memory": "Writing tip 2", "metadata": {}},
+            {"memory": "Pattern: Hook", "metadata": {"category": "pattern"}},
+        ])
+        tool_fn = learn_agent._function_toolset.tools["consolidate_memories"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(mock_ctx)
+        assert "2 uncategorized memories" in result
+
+    async def test_tag_graduated_success(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        tool_fn = learn_agent._function_toolset.tools["tag_graduated_memories"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(
+            mock_ctx,
+            memory_ids=["mem-1", "mem-2"],
+            pattern_name="Hook First",
+        )
+
+        assert "Tagged 2/2" in result
+        assert mock_deps.memory_service.update_memory.call_count == 2
+
+    async def test_tag_graduated_partial_failure(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.memory_service.update_memory = AsyncMock(
+            side_effect=[None, Exception("Mem0 error"), None]
+        )
+        tool_fn = learn_agent._function_toolset.tools["tag_graduated_memories"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(
+            mock_ctx,
+            memory_ids=["mem-1", "mem-2", "mem-3"],
+            pattern_name="Test",
+        )
+
+        assert "Tagged 2/3" in result

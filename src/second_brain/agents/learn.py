@@ -260,3 +260,87 @@ async def store_experience(
     }
     await ctx.deps.storage_service.add_experience(experience_data)
     return f"Recorded experience '{name}' (category: {category})."
+
+
+@learn_agent.tool
+async def consolidate_memories(
+    ctx: RunContext[BrainDeps],
+    min_cluster_size: int | None = None,
+) -> str:
+    """Review accumulated Mem0 memories and identify recurring themes
+    that could become patterns. Returns a summary of memory clusters.
+
+    After reviewing, use store_pattern for new themes and
+    reinforce_existing_pattern for themes matching existing patterns.
+
+    Args:
+        min_cluster_size: Minimum memories in a cluster to suggest graduation.
+            Defaults to config.graduation_min_memories (3).
+    """
+    min_size = min_cluster_size or ctx.deps.config.graduation_min_memories
+
+    # Fetch all memories
+    all_memories = await ctx.deps.memory_service.get_all()
+    if not all_memories:
+        return "No memories found in Mem0. Nothing to consolidate."
+
+    # Filter out already-categorized memories (patterns, graduated)
+    uncategorized = []
+    for mem in all_memories:
+        metadata = mem.get("metadata", {})
+        category = metadata.get("category", "")
+        if category not in ("pattern", "pattern_reinforcement", "graduated"):
+            uncategorized.append(mem)
+
+    if not uncategorized:
+        return "All memories are already categorized. Nothing to consolidate."
+
+    # Format memories for LLM analysis
+    formatted = [f"Found {len(uncategorized)} uncategorized memories (of {len(all_memories)} total):\n"]
+    for i, mem in enumerate(uncategorized[:50], 1):  # Limit to 50 for context
+        memory_text = mem.get("memory", mem.get("result", ""))
+        metadata = mem.get("metadata", {})
+        category = metadata.get("category", "uncategorized")
+        formatted.append(f"{i}. [{category}] {memory_text}")
+
+    formatted.append(f"\n---\nMinimum cluster size for graduation: {min_size}")
+    formatted.append(
+        f"Analyze these memories for recurring themes. For each theme "
+        f"appearing in {min_size}+ memories:\n"
+        "1. Check if it matches an existing pattern (use search_existing_patterns)\n"
+        "2. If match: use reinforce_existing_pattern\n"
+        "3. If new: use store_pattern to create it\n"
+        "Report what you found and what actions you took."
+    )
+
+    return "\n".join(formatted)
+
+
+@learn_agent.tool
+async def tag_graduated_memories(
+    ctx: RunContext[BrainDeps],
+    memory_ids: list[str],
+    pattern_name: str,
+) -> str:
+    """Tag memories as graduated after they've been promoted to a pattern.
+    This prevents re-processing in future consolidation runs.
+
+    Args:
+        memory_ids: List of Mem0 memory IDs to tag.
+        pattern_name: Name of the pattern they graduated into.
+    """
+    tagged = 0
+    for memory_id in memory_ids:
+        try:
+            await ctx.deps.memory_service.update_memory(
+                memory_id=memory_id,
+                metadata={
+                    "category": "graduated",
+                    "graduated_to_pattern": pattern_name,
+                },
+            )
+            tagged += 1
+        except Exception as e:
+            logger.debug("Failed to tag memory %s as graduated: %s", memory_id, e)
+
+    return f"Tagged {tagged}/{len(memory_ids)} memories as graduated to pattern '{pattern_name}'."

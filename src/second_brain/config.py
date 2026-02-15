@@ -86,6 +86,16 @@ class BrainConfig(BaseSettings):
         default=5, description="Default limit for experience retrieval"
     )
 
+    # Graduation settings
+    graduation_min_memories: int = Field(
+        default=3,
+        description="Minimum memories in a cluster to graduate to a pattern",
+    )
+    graduation_lookback_days: int = Field(
+        default=30,
+        description="Number of days of memories to consider for graduation",
+    )
+
     # Display limits
     content_preview_limit: int = Field(
         default=1000, description="Character limit for content previews in agent context"

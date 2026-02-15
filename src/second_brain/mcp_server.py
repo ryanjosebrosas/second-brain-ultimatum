@@ -361,6 +361,43 @@ async def brain_health() -> str:
 
 
 @server.tool()
+async def consolidate_brain(min_cluster_size: int = 3) -> str:
+    """Consolidate accumulated memories into patterns. Reviews recent Mem0
+    memories, identifies recurring themes, and promotes them to structured
+    patterns in the pattern registry.
+
+    Args:
+        min_cluster_size: Minimum memories needed to form a pattern cluster (default: 3)
+    """
+    deps = _get_deps()
+    model = _get_model()
+    result = await learn_agent.run(
+        f"Run memory consolidation with min_cluster_size={min_cluster_size}. "
+        f"Use the consolidate_memories tool to review accumulated memories, "
+        f"then use store_pattern and reinforce_existing_pattern to act on findings. "
+        f"Tag graduated memories with tag_graduated_memories when done.",
+        deps=deps,
+        model=model,
+    )
+    output = result.output
+
+    parts = [f"# Brain Consolidation\n", f"**Summary**: {output.input_summary}\n"]
+
+    if output.patterns_extracted:
+        parts.append("## Patterns Identified\n")
+        for p in output.patterns_extracted:
+            marker = "(reinforced)" if p.is_reinforcement else "(new)"
+            parts.append(f"- [{p.confidence}] {p.name} {marker}")
+
+    parts.append(
+        f"\n**Results**: {output.patterns_new} new, "
+        f"{output.patterns_reinforced} reinforced"
+    )
+
+    return "\n".join(parts)
+
+
+@server.tool()
 async def growth_report(days: int = 30) -> str:
     """Get a growth report for your Second Brain showing pattern creation,
     reinforcement, confidence upgrades, and review score trends.
