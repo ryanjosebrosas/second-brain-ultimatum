@@ -1,6 +1,7 @@
 """Structured storage via Supabase for patterns, experiences, metrics."""
 
 import logging
+from datetime import date
 
 from supabase import create_client, Client
 
@@ -34,6 +35,59 @@ class StorageService:
 
     async def upsert_pattern(self, pattern: dict) -> dict:
         result = self._client.table("patterns").upsert(pattern).execute()
+        return result.data[0] if result.data else {}
+
+    async def get_pattern_by_name(self, name: str) -> dict | None:
+        """Find a pattern by exact name. Returns the pattern dict or None."""
+        result = (
+            self._client.table("patterns")
+            .select("*")
+            .eq("name", name)
+            .limit(1)
+            .execute()
+        )
+        return result.data[0] if result.data else None
+
+    async def reinforce_pattern(
+        self, pattern_id: str, new_evidence: list[str] | None = None
+    ) -> dict:
+        """Atomically reinforce a pattern: increment use_count, upgrade confidence, append evidence."""
+        # Fetch current state
+        current = (
+            self._client.table("patterns")
+            .select("*")
+            .eq("id", pattern_id)
+            .limit(1)
+            .execute()
+        )
+        if not current.data:
+            return {}
+        pattern = current.data[0]
+
+        new_use_count = pattern.get("use_count", 1) + 1
+        # Confidence thresholds: 1→LOW, 2-4→MEDIUM, 5+→HIGH
+        if new_use_count >= 5:
+            new_confidence = "HIGH"
+        elif new_use_count >= 2:
+            new_confidence = "MEDIUM"
+        else:
+            new_confidence = "LOW"
+
+        existing_evidence = pattern.get("evidence") or []
+        merged_evidence = existing_evidence + (new_evidence or [])
+
+        update_data = {
+            "use_count": new_use_count,
+            "confidence": new_confidence,
+            "evidence": merged_evidence,
+            "date_updated": str(date.today()),
+        }
+        result = (
+            self._client.table("patterns")
+            .update(update_data)
+            .eq("id", pattern_id)
+            .execute()
+        )
         return result.data[0] if result.data else {}
 
     async def delete_pattern(self, pattern_id: str) -> bool:

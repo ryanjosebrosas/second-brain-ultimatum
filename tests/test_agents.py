@@ -150,3 +150,16 @@ class TestLearnAgent:
         # @agent.instructions appends callables to _instructions list
         dynamic = [i for i in learn_agent._instructions if callable(i)]
         assert len(dynamic) > 0
+
+
+class TestPatternReinforcement:
+    def test_learn_agent_has_reinforce_tool(self):
+        from second_brain.agents.learn import learn_agent
+        tool_names = list(learn_agent._function_toolset.tools)
+        assert "reinforce_existing_pattern" in tool_names
+
+    def test_reinforce_pattern_tool_exists(self):
+        from second_brain.agents.learn import learn_agent
+        tools = learn_agent._function_toolset.tools
+        assert "reinforce_existing_pattern" in tools
+        assert "store_pattern" in tools

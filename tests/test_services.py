@@ -444,3 +444,128 @@ class TestHealthService:
         assert metrics.status == "GROWING"
         assert metrics.total_patterns == 6
         assert metrics.graph_provider == "mem0"
+
+
+class TestStorageReinforcement:
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_by_name_exists(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "name": "Short > Structured", "use_count": 3}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_pattern_by_name("Short > Structured")
+
+        assert result is not None
+        assert result["name"] == "Short > Structured"
+        mock_table.eq.assert_called_once_with("name", "Short > Structured")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_by_name_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_pattern_by_name("Nonexistent Pattern")
+
+        assert result is None
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_increments_use_count(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        # First call: select to fetch current pattern
+        mock_select_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 1,
+                   "confidence": "LOW", "evidence": []}]
+        )
+        # Second call: update result
+        mock_update_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 2,
+                   "confidence": "MEDIUM", "evidence": []}]
+        )
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.update.return_value = mock_table
+        mock_table.execute.side_effect = [mock_select_result, mock_update_result]
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.reinforce_pattern("uuid-1")
+
+        assert result["use_count"] == 2
+        assert result["confidence"] == "MEDIUM"
+        mock_table.update.assert_called_once()
+        update_args = mock_table.update.call_args[0][0]
+        assert update_args["use_count"] == 2
+        assert update_args["confidence"] == "MEDIUM"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_upgrades_to_high(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_select_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 4,
+                   "confidence": "MEDIUM", "evidence": ["e1", "e2"]}]
+        )
+        mock_update_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 5,
+                   "confidence": "HIGH", "evidence": ["e1", "e2"]}]
+        )
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.update.return_value = mock_table
+        mock_table.execute.side_effect = [mock_select_result, mock_update_result]
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.reinforce_pattern("uuid-1")
+
+        assert result["use_count"] == 5
+        assert result["confidence"] == "HIGH"
+        update_args = mock_table.update.call_args[0][0]
+        assert update_args["confidence"] == "HIGH"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_appends_evidence(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_select_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 1,
+                   "confidence": "LOW", "evidence": ["e1"]}]
+        )
+        mock_update_result = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 2,
+                   "confidence": "MEDIUM", "evidence": ["e1", "e2"]}]
+        )
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.update.return_value = mock_table
+        mock_table.execute.side_effect = [mock_select_result, mock_update_result]
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.reinforce_pattern("uuid-1", new_evidence=["e2"])
+
+        assert result["evidence"] == ["e1", "e2"]
+        update_args = mock_table.update.call_args[0][0]
+        assert update_args["evidence"] == ["e1", "e2"]

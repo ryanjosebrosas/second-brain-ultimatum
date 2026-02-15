@@ -14,7 +14,9 @@ learn_agent = Agent(
         "You are a learning extraction agent for an AI Second Brain. "
         "Your job: analyze raw text from work sessions and extract structured learnings. "
         "ALWAYS search for existing patterns first to avoid duplicates. "
-        "If an input reinforces an existing pattern, mark is_reinforcement=True and upgrade its confidence. "
+        "If an input reinforces an existing pattern, mark is_reinforcement=True and "
+        "use the reinforce_existing_pattern tool, NOT store_pattern. "
+        "Only use store_pattern for genuinely new patterns. "
         "Confidence rules: LOW (new, 1st use), MEDIUM (2-4 uses), HIGH (5+ uses). "
         "Extract anti-patterns when the input describes what NOT to do. "
         "Store every extracted pattern and add key learnings to semantic memory. "
@@ -73,8 +75,15 @@ async def store_pattern(
     context: str = "",
     source_experience: str = "",
 ) -> str:
-    """Store an extracted pattern in the Supabase pattern registry.
-    Use confidence='LOW' for new patterns, 'MEDIUM' for reinforced (2+ uses), 'HIGH' for proven (5+ uses)."""
+    """Store a NEW pattern in the Supabase pattern registry.
+    Only use for genuinely new patterns. For reinforcement, use reinforce_existing_pattern."""
+    existing = await ctx.deps.storage_service.get_pattern_by_name(name)
+    if existing:
+        return (
+            f"Pattern '{name}' already exists (use_count: {existing.get('use_count', 1)}, "
+            f"confidence: {existing.get('confidence', 'LOW')}). "
+            f"Use reinforce_existing_pattern instead."
+        )
     pattern_data = {
         "name": name,
         "topic": topic,
@@ -87,7 +96,31 @@ async def store_pattern(
         "date_updated": str(date.today()),
     }
     await ctx.deps.storage_service.upsert_pattern(pattern_data)
-    return f"Stored pattern '{name}' (confidence: {confidence}) in registry."
+    return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
+
+
+@learn_agent.tool
+async def reinforce_existing_pattern(
+    ctx: RunContext[BrainDeps],
+    pattern_name: str,
+    new_evidence: list[str] | None = None,
+    additional_context: str = "",
+) -> str:
+    """Reinforce an existing pattern: increment use_count, upgrade confidence, append evidence.
+    Use this when is_reinforcement=True instead of store_pattern."""
+    pattern = await ctx.deps.storage_service.get_pattern_by_name(pattern_name)
+    if not pattern:
+        return (
+            f"No existing pattern named '{pattern_name}'. "
+            f"Use store_pattern to create it instead."
+        )
+    updated = await ctx.deps.storage_service.reinforce_pattern(
+        pattern["id"], new_evidence
+    )
+    return (
+        f"Reinforced pattern '{pattern_name}' → "
+        f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
+    )
 
 
 @learn_agent.tool

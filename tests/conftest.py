@@ -91,6 +91,11 @@ def mock_storage():
     storage.upsert_example = AsyncMock(return_value={})
     storage.get_knowledge = AsyncMock(return_value=[])
     storage.upsert_knowledge = AsyncMock(return_value={})
+    storage.get_pattern_by_name = AsyncMock(return_value=None)
+    storage.reinforce_pattern = AsyncMock(return_value={
+        "id": "pattern-123", "name": "Test Pattern",
+        "use_count": 2, "confidence": "MEDIUM",
+    })
     storage.delete_pattern = AsyncMock(return_value=True)
     storage.delete_experience = AsyncMock(return_value=True)
     storage.delete_example = AsyncMock(return_value=True)
