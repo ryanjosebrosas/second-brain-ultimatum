@@ -74,7 +74,7 @@ This skill provides the methodology for transforming feature requests into compr
 ## Key Rules
 
 1. **Template is the control mechanism**: All research fills specific sections of `templates/STRUCTURED-PLAN-TEMPLATE.md`. Nothing is missed because the template specifies exactly what's needed.
-2. **500-700 lines**: The completed plan must be 500-700 lines. Concise but comprehensive.
+2. **700-1000 lines**: The completed plan must be 700-1000 lines. Comprehensive with feature-specific content in every section. Sub-plans in decomposed mode must be 500-700 lines.
 3. **Parallel research**: Phases 2 and 3 run simultaneously (40-50% faster). Launch two Task agents.
 4. **No code in planning**: We do NOT write code in this phase. Goal is a context-rich plan for one-pass implementation.
 5. **Agent-to-agent optimization**: The plan is consumed by `/execute` in a fresh conversation. It must contain ALL information needed — patterns, file paths with line numbers, exact commands.

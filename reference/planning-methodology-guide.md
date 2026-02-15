@@ -19,7 +19,7 @@ This is the planning revolution. You're not learning new tools or automation —
 - **Vertical Slice Architecture (VSA)** — the core/shared/features decision framework for AI codebases
 - **Tool docstrings for agents** — writing documentation that LLMs use for tool selection
 - **Research prompt design** — specific vs vague prompts and the 5 qualities that produce actionable results
-- **Plan quality constraints** — why 500-700 lines, per-task format, and template-driven completeness
+- **Plan quality constraints** — why 700-1000 lines, per-task format, and template-driven completeness
 - **Measuring planning success** — before/after metrics proving the transformation
 
 ### The Core Insight
@@ -469,15 +469,16 @@ Plans follow this exact section structure (see `templates/STRUCTURED-PLAN-TEMPLA
 - Validation Commands (5 levels)
 - Acceptance Criteria → Completion Checklist → Notes (decisions, confidence score)
 
-### The 500-700 Line Constraint
+### The 700-1000 Line Constraint
 
-Plans should be **500-700 lines**. Not 200 (too shallow) and not 1500+ (information overload).
+Plans should be **700-1000 lines**. Not 300 (too shallow) and not 1500+ (information overload). Sub-plans in decomposed mode should be **500-700 lines**.
 
 **Why this range matters**:
-- **Forces prioritization** — you must decide what's essential vs nice-to-have
+- **700 is the floor** — below 700, template sections get generic placeholders instead of feature-specific content with file:line references and code examples
 - **Prevents information overload** — agents have limited context windows too
 - **Stays scannable** — humans can review the plan in one sitting
 - **Fits context** — leaves room for implementation context alongside the plan
+- **Sub-plans need 500+** — each sub-plan must be self-contained since the execution agent has no memory of previous sub-plans
 
 ### How to Achieve Conciseness
 
@@ -632,11 +633,11 @@ The planning command should be:
 
 **Long answer**: Phases 2 and 3 are the most tempting to skip ("I already know the codebase" or "I'll research during implementation"). But these are precisely the phases that prevent mid-implementation research. Phase 2 discovers patterns you forgot about and integration points you missed. Phase 3 finds gotchas and version incompatibilities. The 40% → 85%+ success rate improvement comes primarily from not skipping research.
 
-### "What if my plan exceeds 700 lines?"
+### "What if my plan exceeds 1000 lines?"
 
 **Short answer**: Tighten with tables, file references, and documentation links instead of inline content.
 
-**Long answer**: Reference files with line numbers instead of copying code blocks (saves 10-30 lines per reference). Use tables for structured data instead of paragraph descriptions. Link to external documentation instead of pasting it. Replace narrative explanations with concise bullet points. If the plan is still over 700 lines after tightening, the feature may be too large for a single PIV loop — consider splitting into two smaller features.
+**Long answer**: Reference files with line numbers instead of copying code blocks (saves 10-30 lines per reference). Use tables for structured data instead of paragraph descriptions. Link to external documentation instead of pasting it. Replace narrative explanations with concise bullet points. If the plan is still over 1000 lines after tightening, the feature may be too large for a single PIV loop — consider decomposing into sub-plans (500-700 lines each) or splitting into two smaller features.
 
 ### "Should I use the template-driven or mission-driven approach?"
 
@@ -675,7 +676,7 @@ The planning command should be:
 - The Three-Feature Rule for when to extract shared code
 - Writing tool docstrings for agent comprehension (7 required elements)
 - Research prompt design — 5 qualities that produce actionable results
-- Plan quality constraints — 500-700 lines, per-task format, template-driven
+- Plan quality constraints — 700-1000 lines (500-700 sub-plans), per-task format, template-driven
 - The per-task IMPLEMENT/PATTERN/IMPORTS/GOTCHA/VALIDATE format
 - Measuring success — 40% → 85%+ first-pass implementation rate
 - Building your own planning command (template-driven vs mission-driven)

@@ -240,7 +240,7 @@ Once you've explored the approach through vibe planning, create a structured pla
 
 Use `templates/STRUCTURED-PLAN-TEMPLATE.md` as your guide.
 
-**Target length**: 500-700 lines. Concise but comprehensive. You've failed if outside this range.
+**Target length**: 700-1000 lines. Comprehensive with feature-specific content. You've failed if under 700 lines. Complex features target 1000. Sub-plans (decomposed mode) target 500-700 lines.
 
 **Save location**: `requests/{feature}-plan.md`
 

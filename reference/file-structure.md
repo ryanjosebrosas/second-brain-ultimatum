@@ -6,6 +6,7 @@ LICENSE                                # MIT License
 .gitignore                             # Protects secrets, personal config, plans
 .coderabbit.yaml                       # CodeRabbit config template (copy to project root)
 memory.md                              # Cross-session memory (optional, from MEMORY-TEMPLATE.md)
+opencode.json                          # OpenCode CLI configuration (MCP servers, model settings)
 sections/                              # Auto-loaded rule sections (every session)
   01_core_principles.md                #   YAGNI, KISS, DRY, Limit AI Assumptions, ABP
   02_piv_loop.md                       #   Plan, Implement, Validate methodology (slim)
@@ -19,6 +20,7 @@ reference/                             # On-demand guides (loaded when needed)
   validation-strategy.md               #   5-level validation pyramid, linting, tests
   file-structure.md                    #   This file — project directory layout
   command-design-overview.md           #   Slash commands & INPUT→PROCESS→OUTPUT
+  cross-cli-orchestration.md           #   Cross-CLI orchestration via tmux (Claude + OpenCode + Codex)
   github-integration.md                #   GitHub Actions, remote agents, orchestration
   remote-system-overview.md            #   Remote Agentic Coding System, orchestrator
   mcp-skills-overview.md               #   MCP protocol, cloud skills, progressive loading
@@ -39,6 +41,7 @@ reference/                             # On-demand guides (loaded when needed)
   git-worktrees-parallel.md            #   Git worktrees, parallel implementation, vertical slices
   remote-system-guide.md               #   Setup & deployment guide for remote coding agent
   subagents-guide.md                   #   Subagent creation, frontmatter, output patterns
+  tmux-recommended-config.md           #   Recommended .tmux.conf for AI CLI workflows
   multi-model-strategy.md              #   When to use Haiku/Sonnet/Opus for cost optimization
   github-workflows/                    #   Example GitHub Action YAML files
     claude-fix.yml                     #     Claude Code issue fix/create workflow
@@ -53,7 +56,7 @@ reference/                             # On-demand guides (loaded when needed)
 templates/
   PRD-TEMPLATE.md                      # Template for Layer 1 PRD (what to build)
   STRUCTURED-PLAN-TEMPLATE.md          # Template for Layer 2 plans (per feature)
-  SUB-PLAN-TEMPLATE.md                 # Individual sub-plan template (150-250 lines, self-contained)
+  SUB-PLAN-TEMPLATE.md                 # Individual sub-plan template (500-700 lines, self-contained)
   VIBE-PLANNING-GUIDE.md              # Example prompts for vibe planning
   IMPLEMENTATION-PROMPT.md             # Reusable prompt for implementation phase
   VALIDATION-PROMPT.md                 # Reusable prompt for validation phase
@@ -73,6 +76,9 @@ templates/
 requests/
   .gitkeep                             # Preserves directory in git (plans are gitignored)
   {feature}-plan.md                    # Layer 2: Feature plans go here
+scripts/                               # Utility scripts
+  cross-cli-setup.sh                   #   tmux session setup for multi-CLI workspace
+  tmux-health-check.sh                 #   tmux workspace health check (session, panes, CLIs)
 .claude/commands/                      # Slash commands (reusable prompts)
   agents.md                            #   /agents — generate subagent definition files
   init-c.md                            # /init-c — generate CLAUDE.md for a new project
@@ -84,6 +90,7 @@ requests/
   implement-fix.md                     # /implement-fix — fix from RCA document
   end-to-end-feature.md                # /end-to-end-feature — autonomous workflow
   create-prd.md                        # /create-prd — generate PRD from conversation
+  delegate.md                          #   /delegate — delegate task to OpenCode/Codex via tmux
   code-review.md                       # /code-review — technical code review
   code-review-fix.md                   # /code-review-fix — fix issues from code review
   execution-report.md                  # /execution-report — implementation report
@@ -113,6 +120,11 @@ requests/
     references/                        #   Detailed docs (Tier 3, on-demand)
       contract-first-spawning.md       #     Contract-first spawning deep dive
       tmux-wsl-setup.md               #     WSL + tmux installation guide
+  cross-cli-orchestration/             #   Cross-CLI tmux orchestration skill
+    SKILL.md                           #     Skill entry point (when to use, quick reference)
+    references/
+      tmux-patterns.md                 #     tmux send-keys, capture-pane, wait-for patterns
+      cli-capabilities.md              #     OpenCode & Codex CLI reference (flags, modes)
   github-automation/                   #   GitHub Actions setup methodology
     SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
     references/                        #   Detailed docs (Tier 3, on-demand)

@@ -22,12 +22,13 @@ Read these files to understand plan requirements:
 ## Approach
 
 1. **Section Completeness**: Verify ALL template sections exist and are non-empty: Feature Description, User Story, Problem Statement, Solution Statement, Feature Metadata, Context References (Codebase Files, New Files, Memories, Documentation, Patterns), Implementation Plan (phases), Step-by-Step Tasks, Testing Strategy, Validation Commands, Acceptance Criteria, Completion Checklist, Notes
-2. **Task Field Validation**: For each task in "Step-by-Step Tasks", verify all 7 required fields are present: ACTION keyword (CREATE/UPDATE/ADD/REMOVE/REFACTOR/MIRROR), TARGET file path, IMPLEMENT description, PATTERN reference with file:line, IMPORTS (or explicit N/A), GOTCHA warning, VALIDATE command
-3. **File Reference Check**: Use Glob to verify that file paths referenced in PATTERN fields are plausible (file exists or parent directory exists for new files)
-4. **Task Ordering**: Verify tasks are in dependency order — no task references a file created by a later task
-5. **Validation Commands**: Verify the Validation Commands section has commands at Levels 1-4 minimum
-6. **Acceptance Criteria**: Verify acceptance criteria are specific and measurable, not generic
-7. **Quality Scoring**: Score the plan 1-10 based on: section completeness (3pts), task detail (3pts), file references accuracy (2pts), validation coverage (2pts)
+2. **Line Count Validation**: Count total lines in the plan. Main/single plans must be ≥700 lines (target ≥1000 for High complexity features). Sub-plans (detected by `Sub-Plan {NN}` in the header) must be ≥500 lines (target ≥700 for High complexity). Plans under minimum are flagged as **Critical** — the plan is incomplete, not concise, and must be expanded with richer context before execution.
+3. **Task Field Validation**: For each task in "Step-by-Step Tasks", verify all 7 required fields are present: ACTION keyword (CREATE/UPDATE/ADD/REMOVE/REFACTOR/MIRROR), TARGET file path, IMPLEMENT description, PATTERN reference with file:line, IMPORTS (or explicit N/A), GOTCHA warning, VALIDATE command
+4. **File Reference Check**: Use Glob to verify that file paths referenced in PATTERN fields are plausible (file exists or parent directory exists for new files)
+5. **Task Ordering**: Verify tasks are in dependency order — no task references a file created by a later task
+6. **Validation Commands**: Verify the Validation Commands section has commands at Levels 1-4 minimum
+7. **Acceptance Criteria**: Verify acceptance criteria are specific and measurable, not generic
+8. **Quality Scoring**: Score the plan 1-10 based on: section completeness (2pts), line count compliance (1pt), task detail (3pts), file references accuracy (2pts), validation coverage (2pts)
 
 ## Output Format
 
@@ -56,7 +57,8 @@ I am validating plan structure against the STRUCTURED-PLAN-TEMPLATE requirements
 - **[Ordering]** — Task N could benefit from [reordering]
 
 ### Quality Score: X/10
-- Section completeness: X/3
+- Section completeness: X/2
+- Line count compliance: X/1
 - Task detail: X/3
 - File reference accuracy: X/2
 - Validation coverage: X/2

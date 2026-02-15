@@ -19,7 +19,7 @@ Transform this feature request into a **comprehensive implementation plan** thro
 
 **Key Philosophy**: Context is King. The plan must contain ALL information needed for implementation - patterns, mandatory reading, documentation, validation commands - so the execution agent succeeds on the first attempt.
 
-**HARD CONSTRAINT**: The final plan MUST be between 500-700 lines total. Be concise while comprehensive. Reference patterns instead of repeating them. Group related tasks. Remove redundancy.
+**HARD CONSTRAINT**: The final plan MUST be between 700-1000 lines total. Complex features should target 1000. Every section must contain feature-specific content — not generic placeholders. Reference patterns with file:line citations. Sub-plans (decomposed mode) must be 500-700 lines.
 
 ## Planning Process
 

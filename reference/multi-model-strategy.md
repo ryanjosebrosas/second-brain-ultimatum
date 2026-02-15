@@ -219,7 +219,7 @@ Sequential Execution (Sonnet):
   > /execute requests/complex-feature-plan-03-integration.md
 ```
 
-**Why this works**: Each sub-plan is 150-250 lines (vs 500-700 for a single plan). The execution agent loads less plan context, leaving more room for codebase files and implementation. Context quality stays high throughout execution.
+**Why this works**: Each sub-plan is 500-700 lines (vs 700-1000 for a single plan). Sub-plans are self-contained with full context, patterns, and task details — the execution agent has no memory of previous sub-plans. Decomposition distributes the work, not the context depth.
 
 **When to use**: Features with 15+ tasks, 4+ implementation phases, or 3+ systems affected. The `/planning` command detects this automatically at Phase 4.5.
 
@@ -409,6 +409,46 @@ test-generator → Suggests test cases from changed code (Haiku)
 4. **Escalate to Opus** — For non-planning tasks, only when Sonnet fails or task is genuinely complex
 5. **Parallel savings** — Multiple Haiku agents can be cheaper than one Sonnet doing sequential work
 6. **Don't over-optimize** — Saving $0.01 by using Haiku for main conversation loses quality worth $1.00
+
+---
+
+## Cross-Provider Strategy
+
+> Beyond Anthropic's Haiku/Sonnet/Opus, the system supports delegating to external CLI tools via tmux.
+
+### Available CLI Tools
+
+| CLI Tool | Provider | Best For | Billing |
+|----------|----------|----------|---------|
+| Claude Code | Anthropic | Planning, orchestration, deep reasoning | MAX subscription |
+| OpenCode | Multi-provider (75+) | Bulk implementation, flexible model routing | Varies |
+| Codex | OpenAI | Code review, quick fixes, test generation | ChatGPT subscription |
+
+### Cross-Provider Task Routing
+
+```
+Task arrives
+|
++-- Deep reasoning needed? --> Claude Code (Opus 4.6)
++-- Pattern matching / review? --> Codex (codex-1 / gpt-5.3)
++-- Bulk / token-heavy? --> OpenCode (choose cheapest model)
+```
+
+### Setup & Usage
+
+See `reference/cross-cli-orchestration.md` for:
+- tmux workspace setup (`scripts/cross-cli-setup.sh`)
+- `/delegate` command for sending tasks
+- tmux communication patterns
+- CLI capabilities reference
+
+### Integration with Internal Strategy
+
+Cross-provider routing extends (not replaces) the internal model strategy:
+
+1. **Within Claude Code**: Use Haiku/Sonnet/Opus per existing guidance
+2. **Across CLIs**: Route between Claude Code / OpenCode / Codex based on task type
+3. **Both strategies compose**: Claude Code (Opus) orchestrates, delegates bulk work externally, uses internal Haiku agents for review
 
 ---
 

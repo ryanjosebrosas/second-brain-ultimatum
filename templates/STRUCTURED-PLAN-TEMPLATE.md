@@ -3,9 +3,10 @@
 > Use this template when creating a feature plan (Layer 2 of the PIV Loop).
 > Save to `requests/{feature}-plan.md` and fill in every section.
 >
-> **Target Length**: The completed plan should be **500-700 lines**. You have failed
-> if the plan is outside this range. Be concise but comprehensive — cover everything
-> without being verbose.
+> **Target Length**: The completed plan should be **700-1000 lines**. You have failed
+> if the plan is under 700 lines. Complex or comprehensive features should target 1000.
+> Every section must contain feature-specific content — not generic placeholders.
+> Reference guides, code snippets, and file:line citations are context, not filler.
 >
 > **Core Principle**: This template is the control mechanism. The `/planning` command's
 > 6 phases exist to fill these sections systematically. Nothing is missed because

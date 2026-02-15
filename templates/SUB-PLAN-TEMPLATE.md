@@ -5,6 +5,11 @@
 > **Phase**: {Phase Name}
 > **Tasks**: {N}
 > **Estimated Context Load**: {Low / Medium}
+>
+> **Target Length**: This sub-plan should be **500-700 lines**. Sub-plans must be
+> self-contained — the execution agent has no memory of previous sub-plans. Every section
+> must contain feature-specific content. Include full context references, pattern examples
+> with code snippets, and detailed task specifications. Complex phases should target 700 lines.
 
 ---
 

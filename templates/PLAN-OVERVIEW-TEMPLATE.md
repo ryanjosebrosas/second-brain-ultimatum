@@ -87,8 +87,10 @@ As a {user type}, I want to {action}, so that {benefit}.
 | 02 | {phase-name} | `requests/{feature}-plan-02-{phase}.md` | {N} | {Low/Medium} |
 | 03 | {phase-name} | `requests/{feature}-plan-03-{phase}.md` | {N} | {Low/Medium} |
 
-> Each sub-plan targets 5-8 tasks and 150-250 lines. Context load estimates
-> help decide instance assignment (Low = minimal codebase reads, Medium = several files).
+> Each sub-plan targets 5-8 tasks and **500-700 lines**. Sub-plans must be self-contained —
+> the execution agent has no memory of previous sub-plans. Include full context references,
+> pattern examples, and detailed task specifications. Context load estimates help decide
+> instance assignment (Low = minimal codebase reads, Medium = several files).
 
 ---
 

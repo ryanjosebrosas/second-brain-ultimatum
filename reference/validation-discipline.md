@@ -456,14 +456,14 @@ Always prefer plan updates. One-off fixes solve today; system updates solve fore
 
 ### Practical Example
 
-**Problem**: AI keeps writing 1500-line plans when you want 500-700.
+**Problem**: AI keeps writing 1500-line plans when you want 700-1000.
 
 **Bad response**: "Make this plan shorter" (one-off fix)
 
 **Good response**:
 1. Ask the AI to analyze WHY the plan is long (meta-reasoning)
 2. AI identifies: "The planning command has no line constraint, and the template encourages detailed task descriptions"
-3. Add a `CRITICAL: Plan must be 500-700 lines` constraint to the planning command
+3. Add a `CRITICAL: Plan must be 700-1000 lines` constraint to the planning command
 4. Add a conciseness guideline to the structured plan template
 5. Now every future plan respects the constraint
 

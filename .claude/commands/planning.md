@@ -17,7 +17,7 @@ Transform this feature request into a **comprehensive implementation plan** thro
 
 **Key Rules**:
 - We do NOT write code in this phase. Create a context-rich plan that enables one-pass implementation.
-- The completed plan MUST be **500-700 lines**. You have failed if outside this range.
+- The completed plan MUST be **700-1000 lines minimum**. You have failed if under 700 lines. Complex features should target 1000. Every section must have feature-specific content, not placeholders.
 
 ## Determine Feature Name
 
@@ -151,7 +151,7 @@ Cross-check key findings — do code patterns still exist? Are library versions 
 3. Assign shared context to overview, per-phase context to sub-plans
 4. Proceed to Phase 5 in "decomposed mode"
 
-**If NOT decomposing** (default): Proceed to Phase 5 normally (single plan, 500-700 lines).
+**If NOT decomposing** (default): Proceed to Phase 5 normally (single plan, 700-1000 lines).
 
 ---
 

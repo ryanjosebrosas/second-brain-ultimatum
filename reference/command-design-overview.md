@@ -56,6 +56,9 @@ Every command should answer:
 **Agent Teams (requires proven worktree + parallel commands):**
 - `/team [feature-description or plan-path]` — Orchestrate Agent Teams for contract-first multi-agent implementation with auto-worktrees, delegate mode, and contract relay
 
+**Cross-CLI Orchestration (requires tmux workspace):**
+- `/delegate <opencode|codex> "task" [--fire|--wait|--capture]` — Delegate task to OpenCode or Codex via tmux with optional output capture and context forwarding
+
 All core commands integrate with `memory.md` (if it exists) for cross-session memory. `/prime` and `/planning` read, `/commit` updates.
 
 ### Skills vs Commands
@@ -104,7 +107,7 @@ Commands are designed to work independently AND as workflows:
 ### Trust Progression
 
 ```
-Manual Prompts → Commands → Chained → Subagents → Worktrees → Agent Teams → Remote
+Manual → Commands → Chained → Subagents → Worktrees → Teams / Cross-CLI → Remote
      ↑ trust & verify ↑  ↑ trust & verify ↑  ↑ trust & verify ↑  ↑ trust & verify ↑
 ```
 
@@ -120,7 +123,7 @@ Don't skip stages. Prematurely chaining commands leads to unpredictable results 
 
 When a command produces suboptimal output, **update the command itself** — don't just one-off fix it. This compounds learning over time. Every mistake is an opportunity to make the system better.
 
-Example: If `/planning` creates a 1500-line plan when you wanted 500-700, don't just ask it to shorten. Add the line constraint to the planning command so every future plan respects it.
+Example: If `/planning` creates a 1500-line plan when you wanted 700-1000, don't just ask it to shorten. Add the line constraint to the planning command so every future plan respects it.
 
 **Two types of improvements:**
 - **Plan updates** — fix the command/template for all future runs

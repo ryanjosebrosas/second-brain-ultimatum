@@ -15,19 +15,3 @@ worktrees/
 # Environment files
 .env
 .env.local
-
-# Python
-__pycache__/
-*.pyc
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-
-# Mem0 local storage
-/tmp/qdrant/
-
-# IDE
-.vscode/
-.idea/

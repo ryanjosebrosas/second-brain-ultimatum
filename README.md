@@ -1,328 +1,736 @@
-# AI Second Brain
+# My Coding System
 
-A Python-powered AI Second Brain that migrates a markdown-based knowledge system into a semantic, searchable, and structured architecture. Built with Pydantic AI agents, Mem0 semantic memory, and Supabase structured storage.
+**Stop guessing. Start engineering.**
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
+A complete development methodology that turns AI from an unpredictable autocomplete into a disciplined engineering partner. Built for [Claude Code](https://claude.com/claude-code), powered by the PIV Loop, and battle-tested across real projects.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## What It Does
+## The Problem
 
-Your Second Brain stores business knowledge — patterns, experiences, examples, and knowledge entries — across two complementary backends:
+AI coding tools are powerful, but without structure they produce inconsistent results. Give the AI too little context and it guesses. Give it too much and it drowns. Ask it to build a feature without a plan and you get code that works in isolation but breaks everything around it.
 
-- **Mem0** — Semantic memory with auto fact extraction. Ask natural language questions and get relevant context back, ranked by relevance.
-- **Supabase** — Structured storage for patterns (with confidence levels), experiences, content examples, and a knowledge repository.
+Most developers use AI like a magic 8-ball: ask a question, hope for a good answer, and manually clean up when it isn't.
 
-Three AI agents sit on top and do the thinking:
+**This system fixes that.** It manages context automatically, enforces a plan-first workflow, and gives you quality gates at every stage.
 
-| Agent | Purpose |
+---
+
+## What This Is (and Isn't)
+
+This is **not** an application. There's no source code, no build system, no runtime.
+
+This is a **development methodology** — a structured collection of slash commands, templates, reference guides, and automation that wraps around Claude Code and turns it into a reliable development workflow. You clone this system, then build your applications inside it (or copy it into existing projects).
+
+### Who Is This For?
+
+- **Solo developers using Claude Code** who want consistent, production-grade output instead of trial-and-error prompting
+- **Teams adopting AI workflows** who need a repeatable methodology, not ad-hoc prompting
+- **Anyone tired of AI inconsistency** — the difference between 30% and 88% code acceptance is context clarity, not AI intelligence
+
+### What You Get
+
+- 21 slash commands that automate every phase of development — from planning to commit
+- 19 templates for plans, PRDs, agents, and validation reports — enforcing consistency across features
+- 26 reference guides loaded on-demand — deep knowledge without wasting context tokens
+- 12 pre-built AI subagents for parallel research, code review, and specialist tasks — 4x faster reviews
+- 5 cloud skills for parallel implementation and GitHub automation — scale beyond single-agent workflows
+- 3 GitHub Action workflows for AI-assisted issue resolution — 24/7 automation
+- A token-conscious architecture that keeps <10K tokens of system context, leaving the rest for your actual work
+
+---
+
+## The PIV Loop
+
+Every feature follows the same cycle: **Plan**, **Implement**, **Validate**, then iterate.
+
+```mermaid
+graph LR
+    subgraph "PIV Loop"
+        direction LR
+        P["PLAN<br/>/planning<br/><i>Opus recommended</i>"]
+        I["IMPLEMENT<br/>/execute<br/><i>Sonnet recommended</i>"]
+        V["VALIDATE<br/>/code-review<br/><i>4 Haiku agents</i>"]
+        C["COMMIT<br/>/commit"]
+
+        P --> I --> V
+        V -->|"Issues found"| FIX["/code-review-fix"]
+        FIX --> V
+        V -->|"All clear"| C
+    end
+
+    VIBE["Vibe Planning<br/>conversation"] -->|"distill"| P
+    P -->|"produces"| PLAN["requests/<br/>feature-plan.md"]
+    PLAN -->|"fresh session"| I
+    C -->|"iterate"| NEXT["Next PIV Loop"]
+
+    style P fill:#4a90d9,color:#fff
+    style I fill:#7b68ee,color:#fff
+    style V fill:#e67e22,color:#fff
+    style C fill:#27ae60,color:#fff
+```
+
+**Why fresh sessions matter.** Planning creates exploration context — options considered, tradeoffs weighed, research gathered. Execution needs clean context, not exploration baggage. The plan distills exploration into execution instructions. A fresh session with only the plan means the AI focuses on building, not rediscovering. *Vibe planning is good, vibe coding is not.*
+
+**Multiple small loops.** Don't build entire features in one pass. Each PIV loop covers one feature slice, built completely before moving on. Complex features (15+ tasks, 4+ phases) auto-decompose into sub-plans via `/planning`, each getting their own loop.
+
+**The handoff.** The plan is the bridge between thinking and building — 700-1000 lines capturing architecture decisions, file paths, code patterns, gotchas, and atomic tasks. Each task has 7 fields (ACTION, TARGET, IMPLEMENT, PATTERN, IMPORTS, GOTCHA, VALIDATE) so the execution agent has zero ambiguity.
+
+---
+
+## Context Engineering: How the AI Gets It Right
+
+The difference between 30% and 88% code acceptance isn't AI intelligence — it's context clarity. Every structured plan is built on four pillars that ensure the AI has exactly what it needs.
+
+```mermaid
+graph TD
+    subgraph "4 Pillars of Context"
+        MEM["Memory<br/>memory.md + vibe planning"]
+        RAG["RAG<br/>docs + codebase patterns"]
+        PE["Prompt Engineering<br/>explicit decisions"]
+        TM["Task Management<br/>7-field atomic tasks"]
+    end
+    MEM --> PLAN["Structured Plan<br/>700-1000 lines"]
+    RAG --> PLAN
+    PE --> PLAN
+    TM --> PLAN
+    PLAN --> EXEC["Fresh Session<br/>/execute"]
+    EXEC --> CODE["Production Code"]
+
+    style MEM fill:#4a90d9,color:#fff
+    style RAG fill:#7b68ee,color:#fff
+    style PE fill:#e67e22,color:#fff
+    style TM fill:#27ae60,color:#fff
+    style PLAN fill:#8e44ad,color:#fff
+    style EXEC fill:#2c3e50,color:#fff
+    style CODE fill:#27ae60,color:#fff
+```
+
+**Memory** — Past decisions prevent repeated mistakes. `memory.md` persists across sessions: read at `/prime`, appended at `/commit`. Vibe planning conversations add short-term memory within a session.
+
+**RAG** — External docs and codebase patterns ensure the AI doesn't reinvent existing code. Archon MCP adds curated knowledge base search (optional). Always cite specific sections, not just "see the docs."
+
+**Prompt Engineering** — Explicit solution statements and decisions from vibe planning eliminate guesswork. Bad context: "Add authentication." Good context: "Add JWT auth following the pattern in `src/auth/jwt.py:45-62`, storing tokens in HttpOnly cookies with 24-hour expiration."
+
+**Task Management** — 7-field atomic tasks (ACTION, TARGET, IMPLEMENT, PATTERN, IMPORTS, GOTCHA, VALIDATE) ensure zero ambiguity. Top-to-bottom execution, no backtracking.
+
+**The template is the control mechanism.** The structured plan template (`templates/STRUCTURED-PLAN-TEMPLATE.md`) maps each pillar to specific sections, so nothing gets missed. Memory maps to Related Memories. RAG maps to Relevant Documentation. Prompt Engineering maps to Solution Statement. Task Management maps to Step-by-Step Tasks.
+
+---
+
+## System Architecture
+
+Context is organized in layers. Auto-loaded context stays minimal so the AI has maximum context window for actual work. Deep guides load on-demand only when relevant.
+
+```mermaid
+graph TD
+    subgraph "Auto-Loaded Context (~2K tokens)"
+        CLAUDE["CLAUDE.md"] --> S["sections/<br/>6 core rules"]
+    end
+
+    subgraph "On-Demand Context (loaded when needed)"
+        R["reference/<br/>26 deep guides"]
+        T["templates/<br/>19 templates"]
+    end
+
+    subgraph "Automation Layer"
+        CMD[".claude/commands/<br/>21 slash commands"]
+        AG[".claude/agents/<br/>12 subagents"]
+        SK[".claude/skills/<br/>5 cloud skills"]
+    end
+
+    subgraph "External Integrations"
+        MEM["memory.md<br/>cross-session context"]
+        ARCHON["Archon MCP<br/>(optional)<br/>tasks + RAG"]
+        GH["GitHub Actions<br/>3 workflows<br/>8 prompt templates"]
+    end
+
+    CLAUDE -.->|"on-demand"| R
+    CLAUDE -.->|"on-demand"| T
+    CMD -->|"reads"| T
+    CMD -->|"spawns"| AG
+    SK -.->|"loads"| R
+    MEM -.-> CMD
+    ARCHON -.-> CMD
+    CMD -->|"produces"| REQ["requests/<br/>feature plans"]
+    REQ -->|"/execute"| IMPL["Implementation"]
+    IMPL -->|"/code-review"| AG
+    IMPL -->|"/commit"| GIT["Git Save Points"]
+    GIT -->|"push"| GH
+
+    style CLAUDE fill:#4a90d9,color:#fff
+    style CMD fill:#7b68ee,color:#fff
+    style AG fill:#e67e22,color:#fff
+    style IMPL fill:#27ae60,color:#fff
+```
+
+### Token Budget
+
+Auto-loading everything would waste 20-30K tokens before any real work begins. The system keeps core rules always available (~2K tokens) and loads deep guides only when a command needs them.
+
+| Layer | Token Cost | Loading |
+|-------|-----------|---------|
+| `CLAUDE.md` + 6 sections | ~2K tokens | Auto-loaded every session |
+| Slash commands | varies | Loaded only when invoked |
+| Reference guides (26) | varies | On-demand only |
+| Templates (19) | varies | On-demand only |
+| **Typical session total** | **<10K tokens** | Leaves ~100K+ for implementation |
+
+### How Context Flows
+
+```mermaid
+graph LR
+    PRIME["/prime<br/>memory + structure<br/>~2K baseline"] --> PLANNING["/planning<br/>templates + research<br/>heavy context"]
+    PLANNING --> EXECUTE["/execute<br/>plan file only<br/>clean context"]
+    EXECUTE --> COMMIT["/commit<br/>lessons to memory<br/>persistence"]
+    COMMIT -->|"next feature"| PRIME
+
+    style PRIME fill:#4a90d9,color:#fff
+    style PLANNING fill:#8e44ad,color:#fff
+    style EXECUTE fill:#7b68ee,color:#fff
+    style COMMIT fill:#27ae60,color:#fff
+```
+
+Each command loads only what it needs. `/prime` establishes baseline context. `/planning` pulls in templates, spawns research agents, and references external docs — heavy context, but isolated to the planning session. `/execute` starts fresh with only the plan file — clean context for focused implementation. `/commit` appends lessons learned to `memory.md` for cross-session persistence.
+
+---
+
+## Model Strategy
+
+The system separates thinking from doing. Use the right model for each phase:
+
+```mermaid
+graph LR
+    PLAN["Planning<br/>Opus"] --> EXEC["Execution<br/>Sonnet"]
+    EXEC --> REV["Code Review<br/>4x Haiku agents"]
+    REV --> COM["Commit<br/>Sonnet"]
+
+    style PLAN fill:#4a90d9,color:#fff
+    style EXEC fill:#7b68ee,color:#fff
+    style REV fill:#e67e22,color:#fff
+    style COM fill:#27ae60,color:#fff
+```
+
+**Why this separation matters.** Planning is the highest-leverage phase — a bad plan guarantees bad implementation. Opus's deeper reasoning produces better feature scoping, more thorough codebase analysis, and higher-confidence implementation plans. The ~3x usage increase pays for itself by reducing implementation retries. Code review uses 4 parallel Haiku agents — pattern matching at ~40% the cost of one Sonnet review.
+
+| Phase | Recommended Model | Why |
+|-------|-------------------|-----|
+| `/planning` | **Opus** (`claude --model opus`) | Deep reasoning produces better plans |
+| `/execute` | **Sonnet** (`claude` default) | Balanced — follows plans well at lower cost |
+| `/code-review` | **Haiku** (via subagents) | Pattern matching at a fraction of the cost |
+| `/commit`, `/prime` | **Sonnet** (`claude` default) | General-purpose tasks |
+
+```bash
+# Planning session (Opus for deep reasoning)
+claude --model opus
+> /planning my-feature
+
+# Execution session (Sonnet for focused implementation)
+claude
+> /execute requests/my-feature-plan.md
+```
+
+See `reference/multi-model-strategy.md` for the full cost optimization guide.
+
+---
+
+## Learning Path: Trust Progression
+
+Don't try everything at once. The system unlocks capabilities progressively — each tier amplifies both good patterns and bad ones.
+
+```mermaid
+graph TD
+    M["Manual Prompts<br/><i>Start here</i>"] --> CMD["Slash Commands<br/>/prime, /planning, /execute"]
+    CMD --> CHAIN["Chained Workflows<br/>/end-to-end-feature"]
+    CHAIN --> SUB["Subagents<br/>Parallel research + review"]
+    SUB --> TEAM["Agent Teams<br/>Coordinated multi-agent"]
+    TEAM --> WT["Worktrees + Parallel<br/>Multi-branch development"]
+    WT --> REMOTE["Remote Automation<br/>GitHub Actions"]
+
+    style M fill:#85c1e9,color:#000
+    style CMD fill:#5dade2,color:#fff
+    style CHAIN fill:#3498db,color:#fff
+    style SUB fill:#2e86c1,color:#fff
+    style TEAM fill:#2874a6,color:#fff
+    style WT fill:#21618c,color:#fff
+    style REMOTE fill:#1b4f72,color:#fff
+```
+
+- **Manual Prompts** — Use Claude Code with good prompts. Understand the base tool before adding structure.
+- **Slash Commands** — Structured reusable prompts. Master the core cycle: `/prime` → `/planning` → `/execute` → `/commit`.
+- **Chained Workflows** — `/end-to-end-feature` chains the full PIV Loop autonomously. Only use after individual commands are trusted.
+- **Subagents** — Parallel research (5-10 agents) and code review (4 agents). Results flow one-way back to the main agent.
+- **Agent Teams** — Two-way communication between Claude instances. Contract-first spawning ensures parallel agents build against verified interfaces.
+- **Worktrees + Parallel** — Git isolation for independent features across multiple instances. `/parallel-e2e` runs multiple features simultaneously.
+- **Remote Automation** — GitHub Actions with AI-assisted issue resolution. `@claude-fix` on any issue triggers autonomous investigation and fix.
+
+**When to move up:** Prove the current tier works reliably across 5+ features before advancing. See `reference/system-foundations.md` for the full trust model.
+
+---
+
+## Validation: The 5-Level Pyramid
+
+Validation isn't an afterthought — it's the third pillar of the PIV Loop. A 5-level gated pyramid catches problems from syntax errors to architectural violations.
+
+```mermaid
+graph TD
+    L1["Level 1: Syntax & Style<br/><i>Linting, formatting</i>"] --> L2["Level 2: Type Safety<br/><i>Type checking</i>"]
+    L2 --> L3["Level 3: Unit Tests<br/><i>Isolated logic</i>"]
+    L3 --> L4["Level 4: Integration Tests<br/><i>System behavior</i>"]
+    L4 --> L5["Level 5: Human Review<br/><i>Alignment with intent</i>"]
+
+    style L1 fill:#27ae60,color:#fff
+    style L2 fill:#2ecc71,color:#fff
+    style L3 fill:#f39c12,color:#fff
+    style L4 fill:#e67e22,color:#fff
+    style L5 fill:#e74c3c,color:#fff
+```
+
+**Each level gates the next.** Don't run expensive integration tests when a linting error would catch the issue in seconds. Don't request human review until automated checks pass clean.
+
+**Parallel Code Review.** `/code-review` launches 4 specialized Haiku agents simultaneously — type safety, security, architecture, and performance — each focused on one concern with its entire context window:
+
+```mermaid
+graph LR
+    MAIN["Main Agent"] --> TS["Type Safety"]
+    MAIN --> SEC["Security"]
+    MAIN --> ARCH["Architecture"]
+    MAIN --> PERF["Performance"]
+    TS --> REPORT["Unified Report"]
+    SEC --> REPORT
+    ARCH --> REPORT
+    PERF --> REPORT
+
+    style MAIN fill:#7b68ee,color:#fff
+    style TS fill:#3498db,color:#fff
+    style SEC fill:#e74c3c,color:#fff
+    style ARCH fill:#f39c12,color:#fff
+    style PERF fill:#e67e22,color:#fff
+    style REPORT fill:#27ae60,color:#fff
+```
+
+40-50% faster than sequential review at ~40% the cost of a single Sonnet agent. Each agent catches issues a general reviewer might miss.
+
+**System evolution insight.** When validation catches an issue, don't just fix the code — fix the system that allowed the bug. Update the command, template, or rule that let it through. One-off fixes solve today; system updates solve forever. See `reference/validation-discipline.md` for the full methodology.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- [Claude Code CLI](https://claude.com/claude-code) installed
+- Git configured
+
+### Setup
+
+1. **Clone** this repo:
+   ```bash
+   git clone https://github.com/ryanjosebrosas/my-coding-system-claude.git
+   cd my-coding-system-claude
+   ```
+
+2. **Create your memory file** from the template:
+   ```bash
+   cp templates/MEMORY-TEMPLATE.md memory.md
+   ```
+
+3. **Start Claude Code** and prime the system:
+   ```bash
+   claude
+   > /prime
+   ```
+
+4. **Plan your first feature**:
+   ```
+   > /planning user-authentication
+   ```
+
+5. **Execute the plan** (in a fresh session for clean context):
+   ```
+   > /execute requests/user-authentication-plan.md
+   ```
+
+6. **Review and commit**:
+   ```
+   > /code-review
+   > /commit
+   ```
+
+### What Happens Next?
+
+Each feature gets its own PIV loop. Small loops, built completely before moving on. Plan, implement, validate, iterate — then start the next feature. The system compounds: lessons from each loop feed into `memory.md`, informing future plans.
+
+### First Time?
+Start with `/prime` to load context, then try `/planning` on a small feature. Read `reference/file-structure.md` for a full map of everything included.
+
+---
+
+## Adopting for Your Project
+
+### Option A: Use as Your Project Base (Recommended for new projects)
+Fork or clone this repo, then build your application inside it. All slash commands, templates, and reference guides are ready to go.
+
+### Option B: Copy Into an Existing Project
+```bash
+cp -r sections/ reference/ templates/ requests/ your-project/
+cp CLAUDE.md AGENTS.md .coderabbit.yaml your-project/
+cp -r .claude/ your-project/
+cp templates/MEMORY-TEMPLATE.md your-project/memory.md
+```
+
+Then run `/init-c` to customize `CLAUDE.md` for your project's tech stack.
+
+### After Setup
+- `memory.md` — Created from template, gitignored. Each developer maintains their own.
+- `requests/*.md` — Feature plans, gitignored. Ephemeral by design.
+- `.claude/settings.local.json` — Personal Claude Code settings, gitignored.
+
+---
+
+## All 21 Slash Commands
+
+21 slash commands automate every phase. The core 6 cover 90% of daily development — expand below for advanced workflows and utilities.
+
+### Core Workflow
+
+| Command | What It Does | When to Use |
+|---------|-------------|-------------|
+| `/prime` | Loads codebase context, reads memory, checks active tasks | Start of every session |
+| `/planning [feature]` | 6-phase deep analysis producing a structured plan document | Before building any feature |
+| `/execute [plan]` | Implements a plan file task-by-task with validation | After planning, in a fresh session |
+| `/commit` | Creates a conventional-format git commit | After implementation passes review |
+| `/code-review` | Runs 4 parallel review agents (type safety, security, architecture, performance) | After implementation |
+| `/code-review-fix` | Applies fixes from code review findings | After code review surfaces issues |
+
+<details>
+<summary>Advanced Workflows (5 commands)</summary>
+
+| Command | What It Does | When to Use |
+|---------|-------------|-------------|
+| `/end-to-end-feature` | Full autonomous pipeline: plan, implement, review, commit | Trusted, well-defined features |
+| `/team [plan]` | Coordinates multiple Claude instances with contract-first spawning | Complex features needing parallel agents |
+| `/new-worktree` | Creates isolated git worktrees for parallel branches | Multi-feature parallel development |
+| `/merge-worktrees` | Merges worktree branches back with validation gates | After parallel implementation |
+| `/parallel-e2e` | Runs multiple end-to-end features in parallel via worktrees | Batch feature development |
+
+</details>
+
+<details>
+<summary>Utilities (10 commands)</summary>
+
+| Command | What It Does | When to Use |
+|---------|-------------|-------------|
+| `/rca [issue]` | Root cause analysis for a GitHub issue | Investigating bugs |
+| `/implement-fix` | Implements a fix based on an RCA document | After root cause analysis |
+| `/create-prd` | Generates a Product Requirements Document from conversation | Defining a new product or major feature |
+| `/create-pr` | Creates a GitHub Pull Request with AI-generated description | After pushing a branch |
+| `/execution-report` | Generates a post-implementation report for system review | Reviewing what was built vs. what was planned |
+| `/init-c` | Generates a customized `CLAUDE.md` for a new project | New project setup |
+| `/agents` | Creates a new custom subagent definition file | Extending the system with new agents |
+| `/system-review` | Audits system state for divergence between plan and reality | Periodic system health checks |
+| `/setup-github-automation` | Full GitHub Actions and secrets configuration | First-time GitHub automation setup |
+| `/quick-github-setup` | Streamlined GitHub automation using existing scripts | Fast GitHub setup |
+
+</details>
+
+---
+
+## 12 Subagents
+
+12 subagents run in isolation with their own context windows. Research agents explore in parallel. Code review agents check 4 dimensions simultaneously. Specialist agents bring domain expertise.
+
+Each agent is a markdown file with a system prompt in `.claude/agents/`. The main agent delegates via the Task tool, and agents return structured results without polluting your implementation context.
+
+<details>
+<summary>All 12 agents — Research, Code Review, Utility, Specialist</summary>
+
+### Research Agents
+
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `research-codebase` | Haiku | Parallel codebase exploration — finds files, extracts patterns, reports findings |
+| `research-external` | Sonnet | Documentation search, best practices, version compatibility checks |
+
+### Code Review Agents
+
+These four run in parallel during `/code-review`, each checking a different dimension:
+
+| Agent | Model | What It Catches |
+|-------|-------|----------------|
+| `code-review-type-safety` | Haiku | Missing type hints, type checking errors, unsafe casts |
+| `code-review-security` | Haiku | SQL injection, XSS, exposed secrets, insecure data handling |
+| `code-review-architecture` | Haiku | Pattern violations, layer breaches, convention drift |
+| `code-review-performance` | Haiku | N+1 queries, inefficient algorithms, memory leaks, unnecessary computation |
+
+### Utility Agents
+
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `plan-validator` | Haiku | Validates plan structure and completeness before `/execute` |
+| `test-generator` | Haiku | Analyzes changed code and suggests test cases following project patterns |
+
+### Specialist Agents
+
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `specialist-devops` | Sonnet | CI/CD pipelines, Docker, IaC, monitoring, deployments |
+| `specialist-data` | Sonnet | Database design, migrations, queries, data pipelines |
+| `specialist-copywriter` | Sonnet | UI copy, microcopy, error messages, UX writing |
+| `specialist-tech-writer` | Sonnet | API docs, READMEs, changelogs, architecture documentation |
+
+</details>
+
+See `reference/subagents-overview.md` for creating your own agents.
+
+---
+
+## System Components
+
+<details>
+<summary>5 Cloud Skills</summary>
+
+| Skill | Purpose |
 |-------|---------|
-| **RecallAgent** | Semantic memory search across Mem0 + Supabase. Returns ranked matches with sources and graph relationships. |
-| **AskAgent** | Contextual help powered by accumulated knowledge. Applies patterns, references past work, suggests next actions. |
-| **LearnAgent** | Extracts patterns and insights from raw work session text. Auto-detects reinforcements of existing patterns. |
+| `agent-teams` | Coordinated multi-agent implementation with contract-first spawning |
+| `planning-methodology` | 6-phase systematic planning with parallel research |
+| `worktree-management` | Git worktree lifecycle for parallel feature branches |
+| `parallel-implementation` | End-to-end parallel development via worktrees and headless instances |
+| `github-automation` | GitHub Actions setup, CodeRabbit integration, workflow configuration |
 
-Two interfaces expose everything:
+</details>
 
-- **CLI** (`brain` command) — For terminal use
-- **MCP Server** — For Claude Code integration, making your brain available as tools during development
+<details>
+<summary>19 Templates</summary>
 
----
+### Planning & Requirements
+| Template | Purpose |
+|----------|---------|
+| `STRUCTURED-PLAN-TEMPLATE.md` | Main planning template — covers all 4 Context Engineering pillars |
+| `SUB-PLAN-TEMPLATE.md` | Sub-feature plans for complex decomposition |
+| `PLAN-OVERVIEW-TEMPLATE.md` | High-level plan overview |
+| `PRD-TEMPLATE.md` | Product Requirements Document |
+| `VIBE-PLANNING-GUIDE.md` | Guide for casual-to-structured planning conversations |
 
-## Architecture
+### Validation
+| Template | Purpose |
+|----------|---------|
+| `VALIDATION-PROMPT.md` | Validation execution prompt |
+| `VALIDATION-REPORT-TEMPLATE.md` | Structured findings report |
+| `META-REASONING-CHECKLIST.md` | Reasoning checklist for plan review |
+| `BASELINE-ASSESSMENT-TEMPLATE.md` | Project baseline assessment |
 
-```
-src/second_brain/
-├── config.py            # BrainConfig — Pydantic Settings, loads .env
-├── models.py            # get_model() — LLM provider factory (Claude → Ollama)
-├── deps.py              # BrainDeps — injected into all agents
-├── schemas.py           # Pydantic output models (RecallResult, AskResult, LearnResult)
-├── cli.py               # Click CLI (8 commands)
-├── mcp_server.py        # FastMCP server (9 tools)
-├── migrate.py           # Markdown → Mem0 + Supabase migration
-├── agents/
-│   ├── recall.py        # RecallAgent — semantic memory search
-│   ├── ask.py           # AskAgent — contextual help
-│   └── learn.py         # LearnAgent — pattern extraction
-└── services/
-    ├── memory.py        # MemoryService — Mem0 wrapper (cloud + local)
-    ├── storage.py       # StorageService — Supabase CRUD + delete
-    ├── health.py        # HealthService — brain health metrics
-    ├── search_result.py # SearchResult — typed search results
-    └── graphiti.py      # GraphitiService — Neo4j graph memory (optional)
-```
+### System Extension
+| Template | Purpose |
+|----------|---------|
+| `AGENT-TEMPLATE.md` | Create custom subagent definitions |
+| `COMMAND-TEMPLATE.md` | Create new slash commands |
+| `SKILL-TEMPLATE.md` | Create MCP cloud skills |
+| `TOOL-DOCSTRING-TEMPLATE.md` | Document tool parameters |
+| `CREATE-REFERENCE-GUIDE-PROMPT.md` | Generate new reference guides |
 
-### Data Flow
+### Project Setup
+| Template | Purpose |
+|----------|---------|
+| `MEMORY-TEMPLATE.md` | Cross-session memory file |
+| `NEW-PROJECT-CHECKLIST.md` | New project setup steps |
+| `GITHUB-SETUP-CHECKLIST.md` | GitHub Actions and CodeRabbit setup |
+| `IMPLEMENTATION-PROMPT.md` | Implementation work prompt |
+| `TEAM-SPAWN-PROMPTS.md` | Agent Teams coordination prompts |
 
-```
-CLI / MCP → Agent.run(deps=BrainDeps) → Agent tools → Services → Mem0 / Supabase
-```
+</details>
 
-### LLM Fallback Chain
+<details>
+<summary>26 Reference Guides</summary>
 
-The system tries Anthropic Claude first. If unavailable, it falls back to Ollama for local inference. Model is resolved at runtime, not import time.
+### Core Methodology
+| Guide | What It Covers |
+|-------|---------------|
+| `system-foundations.md` | Why this system exists, baseline assessment, trust progression |
+| `piv-loop-practice.md` | PIV Loop in practice with real examples |
+| `planning-methodology-guide.md` | 6-phase planning methodology, PRD, Vertical Slice Architecture |
+| `implementation-discipline.md` | `/execute` design, Navigate-Implement-Verify, save states |
+| `validation-strategy.md` | Validation planning and structure |
+| `validation-discipline.md` | 5-level validation pyramid |
+| `global-rules-optimization.md` | Layer 1 optimization, `@sections` modular organization |
 
----
+### Context & Architecture
+| Guide | What It Covers |
+|-------|---------------|
+| `layer1-guide.md` | Setting up CLAUDE.md for a new project |
+| `file-structure.md` | Complete file location reference |
+| `multi-model-strategy.md` | Model selection and cost optimization |
 
-## Features
+### Agents & Extensions
+| Guide | What It Covers |
+|-------|---------------|
+| `subagents-overview.md` | Creating and managing subagents |
+| `subagents-guide.md` | Detailed subagent creation guide |
+| `subagents-deep-dive.md` | Parallel execution and context isolation |
+| `agent-teams-overview.md` | Multi-agent coordination and `/team` command |
+| `command-design-overview.md` | Slash command design philosophy |
+| `command-design-framework.md` | INPUT-PROCESS-OUTPUT command framework |
+| `mcp-skills-overview.md` | MCP servers and cloud skill configuration |
+| `mcp-skills-archon.md` | MCP, skills, and Archon integration |
 
-### Agents
+### DevOps & Automation
+| Guide | What It Covers |
+|-------|---------------|
+| `github-integration.md` | GitHub Actions and CodeRabbit setup |
+| `github-orchestration.md` | GitHub as AI orchestration layer, 3 integration approaches |
+| `git-worktrees-overview.md` | Parallel implementation with worktrees |
+| `git-worktrees-parallel.md` | Deep worktree guide with parallelization patterns |
+| `archon-workflow.md` | Archon task management and RAG search |
 
-**RecallAgent** — Search across all memory backends simultaneously:
-- Mem0 semantic search (configurable result limit)
-- Supabase pattern registry with confidence levels
-- Past experiences with category filtering
-- Content examples (emails, LinkedIn posts, case studies)
-- Graph relationships via Mem0 graph or Graphiti/Neo4j
+### Remote & Advanced
+| Guide | What It Covers |
+|-------|---------------|
+| `remote-system-overview.md` | Remote coding agent architecture |
+| `remote-system-guide.md` | Remote system setup and deployment |
+| `remote-agentic-system.md` | Remote AI coding system design |
 
-**AskAgent** — Contextual help grounded in your brain's knowledge:
-- Loads core context (company info, customer profiles, positioning)
-- Finds relevant patterns and applies them to your question
-- Surfaces similar past experiences with learnings
-- Searches the knowledge repository for frameworks and methodologies
-
-**LearnAgent** — Extracts structured knowledge from raw text:
-- Searches existing patterns before creating duplicates
-- Marks reinforcements vs. new patterns with confidence escalation
-- Extracts anti-patterns (what NOT to do)
-- Records complete work experiences with outcomes
-- Adds key insights to semantic memory for future recall
-
-### Storage
-
-**6 Supabase tables:**
-
-| Table | Purpose |
-|-------|---------|
-| `patterns` | Pattern registry with name, topic, confidence (LOW/MEDIUM/HIGH), evidence, anti-patterns |
-| `experiences` | Work session records with outcomes, learnings, and review scores |
-| `examples` | Content examples (LinkedIn posts, emails, case studies, presentations) |
-| `knowledge_repo` | Frameworks, methodologies, playbooks, research, tools |
-| `memory_content` | Core brain context (company info, personal data, customer profiles) |
-| `brain_health` | Health metric snapshots for tracking growth over time |
-
-Full CRUD operations — get, upsert, and delete for patterns, experiences, examples, and knowledge entries.
-
-### Memory Management
-
-- **Delete operations** for all 4 content tables (patterns, experiences, examples, knowledge)
-- Delete via CLI: `brain delete pattern <uuid>`
-- Delete via MCP: `delete_item` tool with table and ID parameters
-- Hard delete (no soft-delete) — KISS for a single-user brain
-
-### Configurable Limits
-
-All search limits and content truncation values are tunable via `.env`:
-
-| Config Field | Default | Purpose |
-|-------------|---------|---------|
-| `MEMORY_SEARCH_LIMIT` | 10 | Semantic memory search results |
-| `GRAPH_SEARCH_LIMIT` | 5 | Graph relationship search results |
-| `PATTERN_CONTEXT_LIMIT` | 30 | Patterns injected into LearnAgent context |
-| `EXPERIENCE_LIMIT` | 5 | Experience retrieval limit |
-| `CONTENT_PREVIEW_LIMIT` | 1000 | Character limit for content previews |
-| `PATTERN_PREVIEW_LIMIT` | 200 | Character limit for pattern text in results |
-
-### Health Metrics
-
-A dedicated `HealthService` computes brain health from a single source of truth:
-- Total memories, patterns (by confidence), and experiences
-- Topic breakdown across patterns
-- Graph provider status
-- Growth status (BUILDING vs. GROWING based on pattern count)
-
-### Graph Memory (Optional)
-
-Two graph memory providers for entity relationship tracking:
-
-- **Mem0 Graph** — Cloud-based, enabled via `GRAPH_PROVIDER=mem0`. Extracts entity relationships during memory add/search.
-- **Graphiti + Neo4j** — Local graph database via `GRAPH_PROVIDER=graphiti`. Requires `graphiti-core` and a Neo4j instance.
+</details>
 
 ---
 
-## Installation
+## Agent Teams
+
+For features too complex for a single Claude instance, Agent Teams coordinates multiple instances with **contract-first spawning** — upstream agents publish interfaces before downstream agents start building, ensuring parallel agents build against verified contracts instead of assumptions.
 
 ```bash
-# Clone the repo
-git clone <repo-url>
-cd ai-second-brain
+# Plan the feature (Opus recommended for deep reasoning)
+claude --model opus
+> /planning my-feature
 
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Optional: Ollama fallback support
-pip install -e ".[ollama]"
-
-# Optional: Graphiti graph memory
-pip install -e ".[graphiti]"
+# Execute with a coordinated team (Sonnet recommended for speed)
+> /team requests/my-feature-plan.md
 ```
 
-### Configuration
+The system handles team sizing, task decomposition, spawn prompts, and WSL+tmux orchestration automatically. See `reference/agent-teams-overview.md` for the full architecture.
 
-Create a `.env` file:
+---
 
-```env
-# Required
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-BRAIN_DATA_PATH=/path/to/markdown/data
+## GitHub Automation
 
-# LLM (at least one required)
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...          # For Mem0 embeddings
+### Included Workflows
 
-# Optional: Mem0 Cloud
-MEM0_API_KEY=m0-...
+| Workflow | Trigger | What It Does |
+|----------|---------|-------------|
+| `claude-fix.yml` | `@claude-fix` comment on issue/PR | AI investigates and fixes the issue on a branch |
+| `coderabbit-approval-notify.yml` | CodeRabbit approves a PR | Notifies when automated review passes |
+| `coderabbit-auto-merge.yml` | CodeRabbit submits review | Auto-merges PRs that pass automated review |
 
-# Optional: Graph memory
-GRAPH_PROVIDER=none            # none, mem0, or graphiti
-NEO4J_URL=neo4j+s://...
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=...
+<details>
+<summary>8 Workflow Prompt Templates</summary>
 
-# Optional: Ollama fallback
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1:8b
+Pre-built prompts in `.github/workflows/prompts/` that give GitHub Actions Claude instances the same structured methodology:
 
-# Optional: Tuning
-MEMORY_SEARCH_LIMIT=10
-GRAPH_SEARCH_LIMIT=5
-PATTERN_CONTEXT_LIMIT=30
-EXPERIENCE_LIMIT=5
-CONTENT_PREVIEW_LIMIT=1000
-PATTERN_PREVIEW_LIMIT=200
+`prime-github.md` | `plan-feature-github.md` | `execute-github.md` | `rca-github.md` | `implement-fix-github.md` | `bug-fix-github.md` | `code-review-github.md` | `end-to-end-feature-github.md`
+
+</details>
+
+### Setup
+
+1. Add `CLAUDE_CODE_OAUTH_TOKEN` to repo secrets
+2. Add `AUTHORIZED_USERS` as a repository variable: `["your-username"]`
+3. Copy workflows to `.github/workflows/`
+4. Optionally configure `.coderabbit.yaml` for automated PR reviews
+
+See `reference/github-integration.md` for the full setup guide, or run `/setup-github-automation` for automated configuration.
+
+---
+
+## Optional: Archon MCP
+
+[Archon MCP](https://github.com/coleam00/archon) provides task management and RAG search across sessions. **Completely optional** — all commands work without it. When available, it adds:
+
+- Persistent task tracking across planning and execution sessions
+- RAG search over curated documentation sources
+- Project and version management
+
+See `reference/archon-workflow.md` for setup instructions.
+
+---
+
+## Project Structure
+
 ```
-
-### Database Setup
-
-Apply the Supabase migration to create tables:
-
-```bash
-supabase db push
-# or apply manually: supabase/migrations/001_initial_schema.sql
+My-Coding-System/
+├── CLAUDE.md                          # Auto-loaded rules (~2K tokens)
+├── AGENTS.md                          # Agent guidance for AI assistants
+├── LICENSE                            # MIT License
+├── .coderabbit.yaml                   # CodeRabbit PR review configuration
+├── .gitignore                         # Protects secrets, memory, plans
+├── memory.md                          # Cross-session memory (gitignored)
+│
+├── sections/                          # Core methodology (6 files, auto-loaded)
+│   ├── 01_core_principles.md          #   YAGNI, KISS, DRY, ABP
+│   ├── 02_piv_loop.md                 #   Plan-Implement-Validate cycle
+│   ├── 03_context_engineering.md      #   4 pillars of context
+│   ├── 04_git_save_points.md          #   Commit strategy
+│   ├── 05_decision_framework.md       #   Autonomy vs. ask
+│   └── 06_archon_workflow.md          #   Task management integration
+│
+├── reference/                         # Deep guides (26 files, on-demand)
+│   ├── system-foundations.md
+│   ├── planning-methodology-guide.md
+│   ├── multi-model-strategy.md
+│   ├── ...22 more guides...
+│   └── github-workflows/              # Workflow reference files
+│
+├── templates/                         # Reusable templates (19 files)
+│   ├── STRUCTURED-PLAN-TEMPLATE.md
+│   ├── PRD-TEMPLATE.md
+│   ├── AGENT-TEMPLATE.md
+│   └── ...16 more templates...
+│
+├── requests/                          # Feature plans (gitignored)
+│
+├── .claude/
+│   ├── commands/                      # Slash commands (21 commands)
+│   │   ├── prime.md
+│   │   ├── planning.md
+│   │   ├── execute.md
+│   │   ├── commit.md
+│   │   └── ...17 more commands...
+│   ├── agents/                        # Custom subagents (12 agents)
+│   │   ├── research-codebase.md
+│   │   ├── code-review-security.md
+│   │   ├── specialist-devops.md
+│   │   └── ...9 more agents...
+│   └── skills/                        # Cloud skills (5 skills)
+│       ├── agent-teams/
+│       ├── planning-methodology/
+│       ├── worktree-management/
+│       ├── parallel-implementation/
+│       └── github-automation/
+│
+└── .github/
+    └── workflows/                     # GitHub Actions automation
+        ├── claude-fix.yml
+        ├── coderabbit-approval-notify.yml
+        ├── coderabbit-auto-merge.yml
+        └── prompts/                   # 8 workflow prompt templates
 ```
 
 ---
 
-## Usage
+## By the Numbers
 
-### CLI
-
-```bash
-# Search memory
-brain recall "content writing patterns"
-
-# Get contextual help
-brain ask "Help me write a follow-up email"
-
-# Extract learnings from a work session
-brain learn "We tested 3 LinkedIn hooks today..." --category content
-
-# Browse content examples
-brain examples --type linkedin
-
-# Browse knowledge repository
-brain knowledge --category framework
-
-# Delete an item
-brain delete pattern <uuid>
-brain delete experience <uuid>
-brain delete example <uuid>
-brain delete knowledge <uuid>
-
-# Check brain health
-brain health
-
-# Migrate markdown data
-brain migrate
-```
-
-### MCP Server (Claude Code Integration)
-
-The MCP server exposes all agents as tools callable from Claude Code:
-
-```bash
-# Run the server
-python -m second_brain.mcp_server
-```
-
-Add to `.mcp.json` for auto-connection:
-
-```json
-{
-  "mcpServers": {
-    "second-brain": {
-      "command": "python",
-      "args": ["-m", "second_brain.mcp_server"]
-    }
-  }
-}
-```
-
-**Available MCP tools:**
-
-| Tool | Description |
-|------|-------------|
-| `recall` | Search semantic memory for context and patterns |
-| `ask` | Get contextual help powered by brain knowledge |
-| `learn` | Extract patterns from work session text |
-| `search_examples` | Browse content examples by type |
-| `search_knowledge` | Browse knowledge repository by category |
-| `delete_item` | Delete an item by table and ID |
-| `brain_health` | Check brain health and growth metrics |
-
----
-
-## Testing
-
-```bash
-# Run all tests
-python -m pytest tests/ -v
-
-# Run specific test files
-python -m pytest tests/test_services.py -v    # Services + HealthService
-python -m pytest tests/test_agents.py -v      # Agent schemas + tools
-python -m pytest tests/test_mcp_server.py -v  # MCP tool functions
-python -m pytest tests/test_migrate.py -v     # Migration tool
-python -m pytest tests/test_graph.py -v       # Graph memory
-```
-
-**89 tests** covering services, agents, MCP tools, migration, and graph memory. All external services (Mem0, Supabase, LLMs) are mocked.
-
----
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Language | Python 3.11+ |
-| Agent Framework | Pydantic AI |
-| Semantic Memory | Mem0 (cloud + local) |
-| Structured Storage | Supabase (PostgreSQL + pgvector) |
-| LLM Primary | Anthropic Claude |
-| LLM Fallback | Ollama |
-| MCP Server | FastMCP |
-| CLI | Click |
-| Config | Pydantic Settings |
-| Testing | pytest + pytest-asyncio |
-| Build | setuptools with `src/` layout |
-
----
-
-## Development
-
-```bash
-# Verify imports
-python -c "from second_brain import __version__; print(f'v{__version__}')"
-python -c "from second_brain.config import BrainConfig; print('Config OK')"
-python -c "from second_brain.agents import recall_agent, ask_agent; print('Agents OK')"
-
-# Check available CLI commands
-python -c "from second_brain.cli import cli; print([c.name for c in cli.commands.values()])"
-
-# Check available MCP tools
-python -c "from second_brain.mcp_server import server; print('MCP OK')"
-```
+| Component | Count |
+|-----------|-------|
+| Core methodology sections | 6 |
+| Reference guides | 26 |
+| Reusable templates | 19 |
+| Slash commands | 21 |
+| Subagents | 12 |
+| Cloud skills | 5 |
+| GitHub Action workflows | 3 |
+| Workflow prompt templates | 8 |
+| **Total system files** | **~100** |
+| Auto-loaded context cost | ~2K tokens |
+| Typical session context | <10K tokens |
 
 ---
 

@@ -219,7 +219,7 @@ Step 4 is critical — don't accept all AI suggestions blindly. Human judgment s
 
 ### Concrete Example: Plan Length
 
-**Problem**: Plan was 1,752 lines (target: 500-700).
+**Problem**: Plan was 1,752 lines (target: 700-1000).
 
 **Meta-reasoning revealed**: No hard constraint on plan length existed in the planning command.
 
@@ -229,7 +229,7 @@ Step 4 is critical — don't accept all AI suggestions blindly. Human judgment s
 
 **System fix applied**:
 ```markdown
-CRITICAL CONSTRAINT: The final structured plan must be between 500-700 lines long.
+CRITICAL CONSTRAINT: The final structured plan must be between 700-1000 lines long.
 ```
 
 **Then fix the immediate output**: "Make this plan between 500 and 700 lines long."
@@ -332,7 +332,7 @@ As you evolve commands through meta-reasoning, they often become project-specifi
 
 | Evolution Type | Scope | Example | Keep in Template? |
 |---------------|-------|---------|-------------------|
-| Universal fix | All projects | Plan length constraint (500-700 lines) | Yes |
+| Universal fix | All projects | Plan length constraint (700-1000 lines) | Yes |
 | Domain fix | Similar projects | Pydantic AI streaming validation | No (project-specific) |
 | Project fix | Single project | Specific file naming convention | No (project-specific) |
 

@@ -308,7 +308,7 @@ Issue context is auto-injected at this point (the first AI assistant call). The 
 ```
 
 Result:
-- Structured plan created (622 lines, within 500-700 constraint)
+- Structured plan created (622 lines, within 700-1000 constraint)
 - Saved to `.agents/plans/brave-web-search-plan.md`
 - Feature branch `feature/brave-web-search` created and pushed
 - Plan committed to branch

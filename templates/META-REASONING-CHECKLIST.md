@@ -14,7 +14,7 @@
 
 State the problem specifically and measurably:
 - **What went wrong?** {specific description}
-- **How bad is it?** {measurable impact — e.g., "plan is 1700 lines, target was 500-700"}
+- **How bad is it?** {measurable impact — e.g., "plan is 1700 lines, target was 700-1000"}
 - **Is this the first time?** {one-off or recurring pattern}
 
 ### Step 2: Ask for Analysis
@@ -85,7 +85,7 @@ When deciding where to fix, ask these 5 questions:
 
 ## Concrete Example: Plan Length
 
-**Problem**: Plan was 1,752 lines (target: 500-700).
+**Problem**: Plan was 1,752 lines (target: 700-1000).
 
 **Meta-reasoning revealed**: No hard constraint on plan length existed in the planning command.
 
@@ -95,7 +95,7 @@ When deciding where to fix, ask these 5 questions:
 
 **System fix**: Added to planning command:
 ```markdown
-CRITICAL CONSTRAINT: The final structured plan must be between 500-700 lines long.
+CRITICAL CONSTRAINT: The final structured plan must be between 700-1000 lines long.
 ```
 
 **Then fixed immediate output**: "Make this plan between 500 and 700 lines long."

@@ -20,8 +20,13 @@ Rule of thumb from Cole Medin: **"Subagents for research, Agent Teams for implem
 | Approach | Communication | Coordination | File Isolation | Token Cost | Best For |
 |----------|---------------|--------------|----------------|------------|----------|
 | **Subagents** | One-way (to main) | Main agent manages | None | Low | Research, focused tasks |
+| **Cross-CLI (`/delegate`)** | One-way (send→capture) | `/delegate` command | None (same FS) | Low (external tokens) | Bulk work, review, cost optimization |
 | **Agent Teams** | Two-way (mailbox) | Shared task list | Via worktrees | 2-4x higher | Coordinated implementation |
 | **Worktrees + `claude -p`** | None | Manual | Full (git) | Low | Independent parallel tasks |
+
+**Cross-CLI orchestration** uses tmux to delegate tasks to OpenCode and Codex. Unlike
+Agent Teams (multiple Claude Code instances), cross-CLI leverages different providers
+for cost optimization and capability routing. See `reference/cross-cli-orchestration.md`.
 
 **Use Agent Teams when**: Multiple agents need to coordinate on shared interfaces (DB schema → API → frontend). The coordination overhead is justified by preventing interface divergence.
 
