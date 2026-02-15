@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, Relation, LearnResult, PatternExtract,
-    CreateResult, DimensionScore, ReviewResult,
+    CreateResult, DimensionScore, ReviewResult, ContentTypeConfig,
 )
 
 
@@ -329,7 +329,18 @@ class TestMCPTools:
             notes="Verify the product name",
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
-        mock_deps_fn.return_value = MagicMock()
+
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+
+        mock_deps = MagicMock()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
 
         result = await create_content.fn(
@@ -340,8 +351,19 @@ class TestMCPTools:
         assert "AI automation" in result
         assert "85" in result
 
-    async def test_create_content_invalid_type(self):
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_create_content_invalid_type(self, mock_deps_fn, mock_model_fn):
         from second_brain.mcp_server import create_content
+
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=None)
+        mock_registry.slugs = AsyncMock(return_value=["linkedin", "email"])
+
+        mock_deps = MagicMock()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
 
         result = await create_content.fn(
             prompt="test",

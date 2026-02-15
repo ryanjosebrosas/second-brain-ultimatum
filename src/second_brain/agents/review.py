@@ -6,7 +6,10 @@ import logging
 from pydantic_ai import Agent, RunContext
 
 from second_brain.deps import BrainDeps
-from second_brain.schemas import DimensionScore, ReviewResult, REVIEW_DIMENSIONS
+from second_brain.schemas import (
+    DimensionScore, ReviewResult, REVIEW_DIMENSIONS,
+    DEFAULT_REVIEW_DIMENSIONS, ReviewDimensionConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,18 +83,38 @@ async def run_full_review(
     model,
     content_type: str | None = None,
 ) -> ReviewResult:
-    """Run all 6 dimension reviews in parallel and aggregate into a ReviewResult."""
+    """Run dimension reviews in parallel and aggregate into a ReviewResult.
+
+    If the content type has custom review_dimensions, only enabled dimensions
+    are scored and weights are applied to the overall score.
+    """
+    # Determine which dimensions to use and their weights
+    dim_configs: list[ReviewDimensionConfig] = list(DEFAULT_REVIEW_DIMENSIONS)
+
+    if content_type:
+        registry = deps.get_content_type_registry()
+        type_config = await registry.get(content_type)
+        if type_config and type_config.review_dimensions:
+            dim_configs = [d for d in type_config.review_dimensions if d.enabled]
+
+    # Build prompts only for enabled dimensions
+    dim_details = {d["name"]: d for d in REVIEW_DIMENSIONS}
     prompts = []
-    for dim in REVIEW_DIMENSIONS:
+    active_configs: list[ReviewDimensionConfig] = []
+    for dc in dim_configs:
+        detail = dim_details.get(dc.name)
+        if not detail:
+            continue
         prompt = (
-            f"Review the following content for the **{dim['name']}** dimension.\n"
-            f"Focus: {dim['focus']}\n"
-            f"Checks: {dim['checks']}\n\n"
+            f"Review the following content for the **{detail['name']}** dimension.\n"
+            f"Focus: {detail['focus']}\n"
+            f"Checks: {detail['checks']}\n\n"
             f"Content to review:\n{content}"
         )
         if content_type:
             prompt += f"\nContent type: {content_type}"
         prompts.append(prompt)
+        active_configs.append(dc)
 
     results = await asyncio.gather(
         *[review_agent.run(prompt, deps=deps, model=model) for prompt in prompts],
@@ -101,9 +124,9 @@ async def run_full_review(
     scores: list[DimensionScore] = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            logger.warning("Dimension %s failed: %s", REVIEW_DIMENSIONS[i]["name"], result)
+            logger.warning("Dimension %s failed: %s", active_configs[i].name, result)
             scores.append(DimensionScore(
-                dimension=REVIEW_DIMENSIONS[i]["name"],
+                dimension=active_configs[i].name,
                 score=0,
                 status="issue",
                 issues=[f"Review failed: {result}"],
@@ -111,8 +134,17 @@ async def run_full_review(
         else:
             scores.append(result.output)
 
-    valid_scores = [s.score for s in scores if s.score > 0]
-    overall_score = round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else 0.0
+    # Compute weighted overall score
+    valid_scores = [
+        (s.score, active_configs[i].weight)
+        for i, s in enumerate(scores) if s.score > 0
+    ]
+    if valid_scores:
+        weighted_sum = sum(score * weight for score, weight in valid_scores)
+        weight_total = sum(weight for _, weight in valid_scores)
+        overall_score = round(weighted_sum / weight_total, 1) if weight_total > 0 else 0.0
+    else:
+        overall_score = 0.0
 
     low_count = sum(1 for s in scores if s.score < 5)
     if overall_score >= 8 and all(s.score >= 6 for s in scores):

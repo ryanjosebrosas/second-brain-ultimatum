@@ -173,7 +173,7 @@ def learn(content: str, category: str):
     "--type",
     "content_type",
     default="linkedin",
-    help="Content type (linkedin, email, landing-page, comment, case-study, proposal, one-pager, presentation, instagram)",
+    help="Content type slug (run 'brain types list' to see available types)",
 )
 @click.option(
     "--mode",
@@ -184,29 +184,29 @@ def learn(content: str, category: str):
 def create(prompt: str, content_type: str, mode: str | None):
     """Draft content in your voice using brain knowledge."""
     from second_brain.agents.create import create_agent
-    from second_brain.schemas import CONTENT_TYPES
-
-    if content_type not in CONTENT_TYPES:
-        available = ", ".join(CONTENT_TYPES.keys())
-        click.echo(f"Unknown content type '{content_type}'. Available: {available}")
-        return
-
-    type_config = CONTENT_TYPES[content_type]
-    effective_mode = mode or type_config.default_mode
 
     deps = create_deps()
     model = get_model(deps.config)
-
-    enhanced = (
-        f"Content type: {type_config.name} ({content_type})\n"
-        f"Communication mode: {effective_mode}\n"
-        f"Structure: {type_config.structure_hint}\n"
-    )
-    if type_config.max_words:
-        enhanced += f"Target length: ~{type_config.max_words} words\n"
-    enhanced += f"\nRequest: {prompt}"
+    registry = deps.get_content_type_registry()
 
     async def run():
+        type_config = await registry.get(content_type)
+        if not type_config:
+            available = await registry.slugs()
+            click.echo(f"Unknown content type '{content_type}'. Available: {', '.join(available)}")
+            return
+
+        effective_mode = mode or type_config.default_mode
+
+        enhanced = (
+            f"Content type: {type_config.name} ({content_type})\n"
+            f"Communication mode: {effective_mode}\n"
+            f"Structure: {type_config.structure_hint}\n"
+        )
+        if type_config.max_words:
+            enhanced += f"Target length: ~{type_config.max_words} words\n"
+        enhanced += f"\nRequest: {prompt}"
+
         result = await create_agent.run(enhanced, deps=deps, model=model)
         output = result.output
 
@@ -391,6 +391,90 @@ def growth(days: int):
                 click.echo(f"  {t}: {c}")
 
     asyncio.run(_growth())
+
+
+@cli.group()
+def types():
+    """Manage content types in your brain."""
+    pass
+
+
+@types.command("list")
+def types_list():
+    """List all available content types."""
+    deps = create_deps()
+    registry = deps.get_content_type_registry()
+
+    async def _list():
+        all_types = await registry.get_all()
+        if not all_types:
+            click.echo("No content types found.")
+            return
+        click.echo(f"\n{'Slug':<20} {'Name':<25} {'Mode':<15} {'Words':<8} {'Built-in'}")
+        click.echo("-" * 80)
+        for slug, config in sorted(all_types.items()):
+            builtin = "yes" if config.is_builtin else "no"
+            click.echo(f"{slug:<20} {config.name:<25} {config.default_mode:<15} {config.max_words:<8} {builtin}")
+            if config.review_dimensions:
+                enabled = [d.name for d in config.review_dimensions if d.enabled]
+                click.echo(f"  Review dims: {', '.join(enabled)}")
+
+    asyncio.run(_list())
+
+
+@types.command("add")
+@click.argument("slug")
+@click.argument("name")
+@click.option("--mode", default="professional", help="Default mode: casual, professional, formal")
+@click.option("--structure", required=True, help="Structure hint (e.g., 'Hook -> Body -> CTA')")
+@click.option("--max-words", default=500, type=int, help="Target word count")
+@click.option("--description", default="", help="Type description")
+def types_add(slug: str, name: str, mode: str, structure: str, max_words: int, description: str):
+    """Add a new content type. SLUG should be lowercase kebab-case (e.g., newsletter, blog-post)."""
+    deps = create_deps()
+
+    async def _add():
+        row = {
+            "slug": slug,
+            "name": name,
+            "default_mode": mode,
+            "structure_hint": structure,
+            "example_type": slug,
+            "max_words": max_words,
+            "description": description,
+            "is_builtin": False,
+        }
+        result = await deps.storage_service.upsert_content_type(row)
+        if result:
+            click.echo(f"Added content type '{slug}' ({name})")
+        else:
+            click.echo(f"Failed to add content type '{slug}'")
+
+    asyncio.run(_add())
+
+
+@types.command("remove")
+@click.argument("slug")
+@click.option("--force", is_flag=True, help="Skip confirmation for built-in types")
+def types_remove(slug: str, force: bool):
+    """Remove a content type by slug."""
+    deps = create_deps()
+
+    async def _remove():
+        existing = await deps.storage_service.get_content_type_by_slug(slug)
+        if not existing:
+            click.echo(f"No content type found with slug '{slug}'")
+            return
+        if existing.get("is_builtin") and not force:
+            click.echo(f"'{slug}' is a built-in type. Use --force to remove it.")
+            return
+        deleted = await deps.storage_service.delete_content_type(slug)
+        if deleted:
+            click.echo(f"Removed content type '{slug}'")
+        else:
+            click.echo(f"Failed to remove '{slug}'")
+
+    asyncio.run(_remove())
 
 
 @cli.command()

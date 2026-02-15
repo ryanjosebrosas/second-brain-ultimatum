@@ -18,7 +18,6 @@ from second_brain.agents.ask import ask_agent
 from second_brain.agents.learn import learn_agent
 from second_brain.agents.create import create_agent
 from second_brain.agents.review import run_full_review
-from second_brain.schemas import CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -182,19 +181,21 @@ async def create_content(
     Args:
         prompt: What to write about — e.g., "Announce our new AI automation product"
         content_type: Content type — linkedin, email, landing-page, comment,
-                      case-study, proposal, one-pager, presentation, or instagram.
+                      case-study, proposal, one-pager, presentation, instagram,
+                      or any custom type you've added.
         mode: Communication mode — casual, professional, or formal.
               Defaults to the content type's default mode.
     """
-    if content_type not in CONTENT_TYPES:
-        available = ", ".join(CONTENT_TYPES.keys())
-        return f"Unknown content type '{content_type}'. Available: {available}"
-
-    type_config = CONTENT_TYPES[content_type]
-    effective_mode = mode or type_config.default_mode
-
     deps = _get_deps()
     model = _get_model()
+    registry = deps.get_content_type_registry()
+
+    type_config = await registry.get(content_type)
+    if not type_config:
+        available = await registry.slugs()
+        return f"Unknown content type '{content_type}'. Available: {', '.join(available)}"
+
+    effective_mode = mode or type_config.default_mode
 
     enhanced = (
         f"Content type: {type_config.name} ({content_type})\n"
@@ -228,12 +229,15 @@ async def create_content(
 
 @server.tool()
 async def review_content(content: str, content_type: str | None = None) -> str:
-    """Review content quality across 6 dimensions. Returns a structured
+    """Review content quality with adaptive dimension scoring. Returns a structured
     scorecard with per-dimension scores, overall score, and verdict.
+    When content_type is provided, review dimensions are adapted to that type
+    (e.g., a comment skips 'Data Accuracy', a case study weights it heavily).
 
     Args:
         content: The content to review (draft text, email, post, etc.)
-        content_type: Optional content type for context (linkedin, email, etc.)
+        content_type: Optional content type for adaptive dimension scoring
+                     (linkedin, email, etc.)
     """
     deps = _get_deps()
     model = _get_model()
@@ -400,6 +404,81 @@ async def growth_report(days: int = 30) -> str:
             parts.append(f"  - {t}: {c}")
 
     return "\n".join(parts)
+
+
+@server.tool()
+async def list_content_types() -> str:
+    """List all available content types in the Second Brain.
+    Shows built-in and custom types with their configuration."""
+    deps = _get_deps()
+    registry = deps.get_content_type_registry()
+    all_types = await registry.get_all()
+    if not all_types:
+        return "No content types available."
+
+    parts = ["# Content Types\n"]
+    parts.append("| Slug | Name | Mode | Words | Built-in |")
+    parts.append("|------|------|------|-------|----------|")
+    for slug, config in sorted(all_types.items()):
+        builtin = "yes" if config.is_builtin else "no"
+        parts.append(f"| {slug} | {config.name} | {config.default_mode} | {config.max_words} | {builtin} |")
+
+    return "\n".join(parts)
+
+
+@server.tool()
+async def manage_content_type(
+    action: str,
+    slug: str,
+    name: str = "",
+    default_mode: str = "professional",
+    structure_hint: str = "",
+    max_words: int = 500,
+    description: str = "",
+) -> str:
+    """Add or remove a content type from the Second Brain.
+
+    Args:
+        action: 'add' to create/update a content type, 'remove' to delete it
+        slug: Content type slug in kebab-case (e.g., 'newsletter', 'blog-post')
+        name: Human-readable name (required for 'add')
+        default_mode: Communication mode — casual, professional, or formal
+        structure_hint: Composition guide (required for 'add', e.g., 'Hook -> Body -> CTA')
+        max_words: Target word count (default 500)
+        description: Brief description of the content type
+    """
+    deps = _get_deps()
+    registry = deps.get_content_type_registry()
+
+    if action == "add":
+        if not name or not structure_hint:
+            return "Both 'name' and 'structure_hint' are required for adding a content type."
+        row = {
+            "slug": slug,
+            "name": name,
+            "default_mode": default_mode,
+            "structure_hint": structure_hint,
+            "example_type": slug,
+            "max_words": max_words,
+            "description": description,
+            "is_builtin": False,
+        }
+        await deps.storage_service.upsert_content_type(row)
+        registry.invalidate()
+        return f"Added content type '{slug}' ({name})"
+
+    elif action == "remove":
+        existing = await deps.storage_service.get_content_type_by_slug(slug)
+        if not existing:
+            return f"No content type found with slug '{slug}'"
+        deleted = await deps.storage_service.delete_content_type(slug)
+        if deleted:
+            registry.invalidate()
+            return f"Removed content type '{slug}'"
+        return f"Failed to remove '{slug}'"
+
+    else:
+        return f"Unknown action '{action}'. Use 'add' or 'remove'."
 
 
 if __name__ == "__main__":
