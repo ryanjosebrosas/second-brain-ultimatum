@@ -111,7 +111,11 @@ class BrainMigrator:
                 logger.info(f"Migrated experience: {project_dir.name}")
 
     async def migrate_examples(self):
-        """Migrate memory/examples/ folders to Supabase examples table."""
+        """Migrate memory/examples/ folders to Supabase examples table.
+
+        Supports any content type subdirectory — content_type is derived from
+        the directory name (e.g., memory/examples/case-study/ → content_type="case-study").
+        """
         examples_dir = self.data_path / "memory" / "examples"
         if not examples_dir.exists():
             logger.warning(f"Examples directory not found: {examples_dir}")

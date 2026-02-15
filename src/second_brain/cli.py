@@ -173,7 +173,7 @@ def learn(content: str, category: str):
     "--type",
     "content_type",
     default="linkedin",
-    help="Content type (linkedin, email, landing-page, comment)",
+    help="Content type (linkedin, email, landing-page, comment, case-study, proposal, one-pager, presentation, instagram)",
 )
 @click.option(
     "--mode",

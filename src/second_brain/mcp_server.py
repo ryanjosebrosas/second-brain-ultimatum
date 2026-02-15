@@ -181,7 +181,8 @@ async def create_content(
 
     Args:
         prompt: What to write about — e.g., "Announce our new AI automation product"
-        content_type: Content type — linkedin, email, landing-page, or comment.
+        content_type: Content type — linkedin, email, landing-page, comment,
+                      case-study, proposal, one-pager, presentation, or instagram.
         mode: Communication mode — casual, professional, or formal.
               Defaults to the content type's default mode.
     """

@@ -243,6 +243,80 @@ class TestExamplesMigration:
             assert "README" not in call[0][0].get("title", "")
 
 
+class TestNewContentTypeMigration:
+    @patch("second_brain.migrate.StorageService")
+    @patch("second_brain.migrate.MemoryService")
+    async def test_migrate_examples_handles_new_types(self, mock_mem_cls, mock_storage_cls, tmp_path):
+        """Verify migration picks up new content type directories."""
+        # Create example directories for new content types
+        examples_dir = tmp_path / "memory" / "examples"
+        for content_type in ["case-study", "proposal", "one-pager", "presentation", "instagram"]:
+            type_dir = examples_dir / content_type
+            type_dir.mkdir(parents=True)
+            (type_dir / "sample.md").write_text(f"# Sample {content_type} content")
+
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+        )
+
+        mock_memory = MagicMock()
+        mock_memory.add = AsyncMock()
+        mock_mem_cls.return_value = mock_memory
+
+        mock_storage = MagicMock()
+        mock_storage.upsert_example = AsyncMock()
+        mock_storage_cls.return_value = mock_storage
+
+        migrator = BrainMigrator(config)
+        await migrator.migrate_examples()
+
+        # Should have migrated 5 examples (one per type)
+        assert mock_storage.upsert_example.call_count == 5
+        assert mock_memory.add.call_count == 5
+
+        # Verify content types are correct
+        call_args = [
+            call.args[0]["content_type"]
+            for call in mock_storage.upsert_example.call_args_list
+        ]
+        for ct in ["case-study", "proposal", "one-pager", "presentation", "instagram"]:
+            assert ct in call_args, f"Missing content_type: {ct}"
+
+    @patch("second_brain.migrate.StorageService")
+    @patch("second_brain.migrate.MemoryService")
+    async def test_migrate_examples_skips_readme_in_new_types(self, mock_mem_cls, mock_storage_cls, tmp_path):
+        """Verify migration skips README.md in new content type directories."""
+        examples_dir = tmp_path / "memory" / "examples" / "case-study"
+        examples_dir.mkdir(parents=True)
+        (examples_dir / "README.md").write_text("# Index")
+        (examples_dir / "real-example.md").write_text("# Real content")
+
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+        )
+
+        mock_memory = MagicMock()
+        mock_memory.add = AsyncMock()
+        mock_mem_cls.return_value = mock_memory
+
+        mock_storage = MagicMock()
+        mock_storage.upsert_example = AsyncMock()
+        mock_storage_cls.return_value = mock_storage
+
+        migrator = BrainMigrator(config)
+        await migrator.migrate_examples()
+
+        # Only real-example.md should be migrated, not README.md
+        assert mock_storage.upsert_example.call_count == 1
+        call_args = mock_storage.upsert_example.call_args_list[0].args[0]
+        assert call_args["content_type"] == "case-study"
+        assert call_args["title"] == "Real Example"
+
+
 class TestKnowledgeRepoMigration:
     @patch("second_brain.migrate.StorageService")
     @patch("second_brain.migrate.MemoryService")
