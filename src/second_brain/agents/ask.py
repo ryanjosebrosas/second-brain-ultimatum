@@ -1,9 +1,13 @@
 """AskAgent — contextual help using brain knowledge."""
 
+import logging
+
 from pydantic_ai import Agent, RunContext
 
 from second_brain.deps import BrainDeps
 from second_brain.schemas import AskResult
+
+logger = logging.getLogger(__name__)
 
 ask_agent = Agent(
     deps_type=BrainDeps,
@@ -48,8 +52,8 @@ async def find_relevant_patterns(
         try:
             graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
             relations = relations + graphiti_rels
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Graphiti search failed (non-critical): %s", e)
 
     formatted = ["## Semantic Memory Matches"]
     for r in result.memories[:5]:
@@ -87,8 +91,8 @@ async def find_similar_experiences(
         try:
             graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
             relations = relations + graphiti_rels
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Graphiti search failed (non-critical): %s", e)
 
     formatted = ["## Similar Past Work"]
     for e in experiences:

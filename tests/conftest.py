@@ -53,6 +53,7 @@ def mock_memory():
     ))
     memory.add = AsyncMock(return_value={"id": "test-id"})
     memory.get_all = AsyncMock(return_value=[])
+    memory.get_memory_count = AsyncMock(return_value=0)
     return memory
 
 
@@ -71,6 +72,7 @@ def mock_memory_graph():
     ))
     memory.add = AsyncMock(return_value={"id": "test-id"})
     memory.get_all = AsyncMock(return_value=[])
+    memory.get_memory_count = AsyncMock(return_value=0)
     return memory
 
 

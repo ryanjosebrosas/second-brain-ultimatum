@@ -168,6 +168,47 @@ def learn(content: str, category: str):
 
 
 @cli.command()
+def health():
+    """Check brain health and growth metrics."""
+    deps = create_deps()
+
+    async def _health():
+        patterns = await deps.storage_service.get_patterns()
+        experiences = await deps.storage_service.get_experiences()
+        total = len(patterns)
+        high = len([p for p in patterns if p.get("confidence") == "HIGH"])
+        medium = len([p for p in patterns if p.get("confidence") == "MEDIUM"])
+        low = len([p for p in patterns if p.get("confidence") == "LOW"])
+
+        # Topic breakdown
+        topics: dict[str, int] = {}
+        for p in patterns:
+            t = p.get("topic", "uncategorized")
+            topics[t] = topics.get(t, 0) + 1
+
+        try:
+            memory_count = await deps.memory_service.get_memory_count()
+        except Exception:
+            memory_count = "unavailable"
+
+        latest = patterns[0].get("date_updated", "unknown") if patterns else "none"
+        graph = deps.config.graph_provider or "disabled"
+
+        click.echo(f"Memories: {memory_count}")
+        click.echo(f"Patterns: {total} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})")
+        click.echo(f"Experiences: {len(experiences)}")
+        click.echo(f"Graph: {graph}")
+        click.echo(f"Last updated: {latest}")
+        if topics:
+            click.echo("\nPatterns by Topic:")
+            for t, c in sorted(topics.items()):
+                click.echo(f"  {t}: {c}")
+        click.echo(f"\nStatus: {'GROWING' if total > 5 else 'BUILDING'}")
+
+    asyncio.run(_health())
+
+
+@cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""
     from second_brain.migrate import run_migration

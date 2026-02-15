@@ -66,17 +66,23 @@ class TestMCPTools:
 
         mock_deps = MagicMock()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
-            {"confidence": "HIGH"}, {"confidence": "MEDIUM"}, {"confidence": "LOW"}
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
+            {"confidence": "MEDIUM", "topic": "messaging", "date_updated": "2026-02-14"},
+            {"confidence": "LOW", "topic": "content", "date_updated": "2026-02-13"},
         ])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[
             {"name": "test"}
         ])
-        mock_deps.storage_service.get_health_history = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=42)
+        mock_deps.config.graph_provider = "none"
         mock_deps_fn.return_value = mock_deps
 
         result = await brain_health.fn()
         assert "Patterns: 3" in result
         assert "Experiences: 1" in result
+        assert "Memories: 42" in result
+        assert "Graph: none" in result
+        assert "Last updated: 2026-02-15" in result
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
@@ -100,10 +106,12 @@ class TestMCPTools:
 
         mock_deps = MagicMock()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
-            {"confidence": "HIGH"} for _ in range(10)
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"}
+            for _ in range(10)
         ])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
-        mock_deps.storage_service.get_health_history = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=5)
+        mock_deps.config.graph_provider = "none"
         mock_deps_fn.return_value = mock_deps
 
         result = await brain_health.fn()
@@ -162,3 +170,60 @@ class TestMCPTools:
         assert "LinkedIn post session" in result
         assert "Use Exact Words" in result
         assert "New: 1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_brain_health_with_topics(self, mock_deps_fn):
+        from second_brain.mcp_server import brain_health
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
+            {"confidence": "LOW", "topic": "content", "date_updated": "2026-02-14"},
+            {"confidence": "MEDIUM", "topic": "messaging", "date_updated": "2026-02-13"},
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=10)
+        mock_deps.config.graph_provider = "mem0"
+        mock_deps_fn.return_value = mock_deps
+
+        result = await brain_health.fn()
+        assert "content: 2" in result
+        assert "messaging: 1" in result
+        assert "Graph: mem0" in result
+        assert "Last updated: 2026-02-15" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_brain_health_with_memory_count(self, mock_deps_fn):
+        from second_brain.mcp_server import brain_health
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=99)
+        mock_deps.config.graph_provider = None
+        mock_deps_fn.return_value = mock_deps
+
+        result = await brain_health.fn()
+        assert "Memories: 99" in result
+        assert "Graph: disabled" in result
+        assert "Last updated: no patterns yet" in result
+        assert "BUILDING" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_brain_health_memory_unavailable(self, mock_deps_fn):
+        from second_brain.mcp_server import brain_health
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
+        ])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps.memory_service.get_memory_count = AsyncMock(
+            side_effect=Exception("Mem0 unavailable")
+        )
+        mock_deps.config.graph_provider = "none"
+        mock_deps_fn.return_value = mock_deps
+
+        result = await brain_health.fn()
+        assert "Memories: unavailable" in result
+        assert "Patterns: 1" in result

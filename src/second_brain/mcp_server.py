@@ -172,22 +172,48 @@ async def learn(content: str, category: str = "general") -> str:
 async def brain_health() -> str:
     """Check the health and growth metrics of your Second Brain."""
     deps = _get_deps()
-    # Quick health check from Supabase
     patterns = await deps.storage_service.get_patterns()
     experiences = await deps.storage_service.get_experiences()
-    health = await deps.storage_service.get_health_history(limit=1)
 
     total_patterns = len(patterns)
     high = len([p for p in patterns if p.get("confidence") == "HIGH"])
     medium = len([p for p in patterns if p.get("confidence") == "MEDIUM"])
     low = len([p for p in patterns if p.get("confidence") == "LOW"])
 
-    return (
-        f"# Brain Health\n\n"
-        f"Patterns: {total_patterns} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})\n"
-        f"Experiences: {len(experiences)}\n"
-        f"Status: {'GROWING' if total_patterns > 5 else 'BUILDING'}\n"
-    )
+    # Topic breakdown
+    topics: dict[str, int] = {}
+    for p in patterns:
+        t = p.get("topic", "uncategorized")
+        topics[t] = topics.get(t, 0) + 1
+    topic_lines = [f"  - {t}: {c}" for t, c in sorted(topics.items())]
+
+    # Memory count
+    try:
+        memory_count = await deps.memory_service.get_memory_count()
+    except Exception:
+        memory_count = "unavailable"
+
+    # Latest update
+    latest = patterns[0].get("date_updated", "unknown") if patterns else "no patterns yet"
+
+    # Graph status
+    graph = deps.config.graph_provider or "disabled"
+
+    parts = [
+        "# Brain Health\n",
+        f"Memories: {memory_count}",
+        f"Patterns: {total_patterns} (HIGH: {high}, MEDIUM: {medium}, LOW: {low})",
+        f"Experiences: {len(experiences)}",
+        f"Graph: {graph}",
+        f"Last updated: {latest}",
+    ]
+    if topic_lines:
+        parts.append("\n## Patterns by Topic")
+        parts.extend(topic_lines)
+
+    status = "GROWING" if total_patterns > 5 else "BUILDING"
+    parts.append(f"\nStatus: {status}")
+    return "\n".join(parts)
 
 
 if __name__ == "__main__":

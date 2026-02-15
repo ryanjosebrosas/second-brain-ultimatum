@@ -79,6 +79,20 @@ class TestMemoryService:
         assert len(results) == 2
 
     @patch("mem0.Memory")
+    async def test_get_memory_count(self, mock_memory_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.get_all.return_value = [
+            {"id": "1", "memory": "a"},
+            {"id": "2", "memory": "b"},
+            {"id": "3", "memory": "c"},
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        count = await service.get_memory_count()
+        assert count == 3
+
+    @patch("mem0.Memory")
     async def test_delete(self, mock_memory_cls, mock_config):
         mock_client = MagicMock()
         mock_memory_cls.from_config.return_value = mock_client

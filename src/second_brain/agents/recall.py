@@ -1,9 +1,13 @@
 """RecallAgent — semantic memory search across Mem0 and Supabase."""
 
+import logging
+
 from pydantic_ai import Agent, RunContext
 
 from second_brain.deps import BrainDeps
 from second_brain.schemas import RecallResult
+
+logger = logging.getLogger(__name__)
 
 recall_agent = Agent(
     deps_type=BrainDeps,
@@ -32,8 +36,8 @@ async def search_semantic_memory(
         try:
             graphiti_rels = await ctx.deps.graphiti_service.search(query, limit=5)
             relations = relations + graphiti_rels
-        except Exception:
-            pass  # Graphiti failure shouldn't break recall
+        except Exception as e:
+            logger.debug("Graphiti search failed (non-critical): %s", e)
 
     if not result.memories and not relations:
         return "No semantic matches found."

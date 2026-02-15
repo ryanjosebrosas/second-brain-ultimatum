@@ -114,6 +114,11 @@ class MemoryService:
             return results.get("results", [])
         return results
 
+    async def get_memory_count(self) -> int:
+        """Get total memory count for the user."""
+        memories = await self.get_all()
+        return len(memories)
+
     async def delete(self, memory_id: str) -> None:
         """Delete a specific memory."""
         self._client.delete(memory_id)
