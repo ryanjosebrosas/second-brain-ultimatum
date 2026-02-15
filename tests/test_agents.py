@@ -1,5 +1,8 @@
 """Tests for agent schemas and registration."""
 
+import pytest
+from unittest.mock import MagicMock, AsyncMock
+
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
 )
@@ -163,3 +166,92 @@ class TestPatternReinforcement:
         tools = learn_agent._function_toolset.tools
         assert "reinforce_existing_pattern" in tools
         assert "store_pattern" in tools
+
+    async def test_reinforce_tool_calls_storage_methods(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Short > Structured", "use_count": 2,
+        })
+        mock_deps.storage_service.reinforce_pattern = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Short > Structured",
+            "use_count": 3, "confidence": "MEDIUM",
+        })
+        tool_fn = learn_agent._function_toolset.tools["reinforce_existing_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(mock_ctx, pattern_name="Short > Structured", new_evidence=["e1"])
+        mock_deps.storage_service.get_pattern_by_name.assert_called_once_with("Short > Structured")
+        mock_deps.storage_service.reinforce_pattern.assert_called_once_with("uuid-1", ["e1"])
+        assert "use_count: 3" in result
+        assert "MEDIUM" in result
+
+    async def test_reinforce_tool_pattern_not_found(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        tool_fn = learn_agent._function_toolset.tools["reinforce_existing_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(mock_ctx, pattern_name="Nonexistent")
+        assert "No existing pattern" in result
+        assert "store_pattern" in result
+        mock_deps.storage_service.reinforce_pattern.assert_not_called()
+
+    async def test_reinforce_tool_handles_value_error(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Test",
+        })
+        mock_deps.storage_service.reinforce_pattern = AsyncMock(
+            side_effect=ValueError("not found"),
+        )
+        tool_fn = learn_agent._function_toolset.tools["reinforce_existing_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(mock_ctx, pattern_name="Test")
+        assert "Error" in result
+
+    async def test_store_pattern_guards_duplicate(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value={
+            "id": "uuid-1", "name": "Existing", "use_count": 2, "confidence": "MEDIUM",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(
+            mock_ctx, name="Existing", topic="Test",
+            pattern_text="text", confidence="LOW",
+        )
+        assert "already exists" in result
+        assert "reinforce_existing_pattern" in result
+        mock_deps.storage_service.insert_pattern.assert_not_called()
+
+    async def test_store_pattern_creates_new(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "New Pattern",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+        result = await tool_fn.function(
+            mock_ctx, name="New Pattern", topic="Test",
+            pattern_text="text", confidence="LOW",
+        )
+        assert "Stored new pattern" in result
+        mock_deps.storage_service.insert_pattern.assert_called_once()
+
+    def test_confidence_type_validation(self):
+        with pytest.raises(Exception):
+            PatternExtract(
+                name="test", topic="t", pattern_text="p",
+                confidence="INVALID",
+            )
+
+    def test_confidence_type_accepts_valid(self):
+        for level in ("LOW", "MEDIUM", "HIGH"):
+            p = PatternExtract(
+                name="test", topic="t", pattern_text="p", confidence=level,
+            )
+            assert p.confidence == level

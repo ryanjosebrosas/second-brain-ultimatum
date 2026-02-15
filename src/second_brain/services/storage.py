@@ -6,6 +6,7 @@ from datetime import date
 from supabase import create_client, Client
 
 from second_brain.config import BrainConfig
+from second_brain.schemas import ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +38,17 @@ class StorageService:
         result = self._client.table("patterns").upsert(pattern).execute()
         return result.data[0] if result.data else {}
 
+    async def insert_pattern(self, pattern: dict) -> dict:
+        """Insert a new pattern. Raises on duplicate name (DB UNIQUE constraint)."""
+        result = self._client.table("patterns").insert(pattern).execute()
+        return result.data[0] if result.data else {}
+
     async def get_pattern_by_name(self, name: str) -> dict | None:
-        """Find a pattern by exact name. Returns the pattern dict or None."""
+        """Find a pattern by name (case-insensitive). Returns the pattern dict or None."""
         result = (
             self._client.table("patterns")
             .select("*")
-            .eq("name", name)
+            .ilike("name", name)
             .limit(1)
             .execute()
         )
@@ -61,11 +67,13 @@ class StorageService:
             .execute()
         )
         if not current.data:
-            return {}
+            logger.warning("reinforce_pattern: pattern_id=%s not found", pattern_id)
+            raise ValueError(f"Pattern '{pattern_id}' not found for reinforcement")
         pattern = current.data[0]
 
         new_use_count = pattern.get("use_count", 1) + 1
         # Confidence thresholds: 1→LOW, 2-4→MEDIUM, 5+→HIGH
+        new_confidence: ConfidenceLevel
         if new_use_count >= 5:
             new_confidence = "HIGH"
         elif new_use_count >= 2:
@@ -88,7 +96,14 @@ class StorageService:
             .eq("id", pattern_id)
             .execute()
         )
-        return result.data[0] if result.data else {}
+        if not result.data:
+            logger.error("reinforce_pattern: update failed for pattern_id=%s", pattern_id)
+            raise ValueError(f"Failed to update pattern '{pattern_id}'")
+        logger.info(
+            "Reinforced pattern '%s': use_count=%d, confidence=%s",
+            pattern.get("name", pattern_id), new_use_count, new_confidence,
+        )
+        return result.data[0]
 
     async def delete_pattern(self, pattern_id: str) -> bool:
         """Delete a pattern by ID."""

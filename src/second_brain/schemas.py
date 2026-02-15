@@ -1,6 +1,10 @@
 """Pydantic output models for Second Brain agent responses."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+ConfidenceLevel = Literal["LOW", "MEDIUM", "HIGH"]
 
 
 class Relation(BaseModel):
@@ -57,7 +61,7 @@ class AskResult(BaseModel):
         default_factory=list,
         description="Entity relationships from graph memory",
     )
-    confidence: str = Field(
+    confidence: ConfidenceLevel = Field(
         default="MEDIUM",
         description="Confidence in the response: HIGH/MEDIUM/LOW",
     )
@@ -74,7 +78,7 @@ class PatternExtract(BaseModel):
     topic: str = Field(
         description="Category: Messaging, Content, Process, Positioning, or custom"
     )
-    confidence: str = Field(
+    confidence: ConfidenceLevel = Field(
         default="LOW",
         description="LOW for new patterns, MEDIUM if reinforcing existing (2+ uses), HIGH if proven (5+ uses)",
     )

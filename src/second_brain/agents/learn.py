@@ -1,8 +1,11 @@
 """LearnAgent — extract patterns, insights, and experiences from raw text."""
 
+import logging
 from datetime import date
 
 from pydantic_ai import Agent, RunContext
+
+logger = logging.getLogger(__name__)
 
 from second_brain.deps import BrainDeps
 from second_brain.schemas import LearnResult
@@ -95,7 +98,11 @@ async def store_pattern(
         "source_experience": source_experience,
         "date_updated": str(date.today()),
     }
-    await ctx.deps.storage_service.upsert_pattern(pattern_data)
+    try:
+        await ctx.deps.storage_service.insert_pattern(pattern_data)
+    except Exception as e:
+        logger.exception("Failed to insert pattern '%s'", name)
+        return f"Error storing pattern '{name}': {e}"
     return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
 
 
@@ -104,7 +111,6 @@ async def reinforce_existing_pattern(
     ctx: RunContext[BrainDeps],
     pattern_name: str,
     new_evidence: list[str] | None = None,
-    additional_context: str = "",
 ) -> str:
     """Reinforce an existing pattern: increment use_count, upgrade confidence, append evidence.
     Use this when is_reinforcement=True instead of store_pattern."""
@@ -114,9 +120,13 @@ async def reinforce_existing_pattern(
             f"No existing pattern named '{pattern_name}'. "
             f"Use store_pattern to create it instead."
         )
-    updated = await ctx.deps.storage_service.reinforce_pattern(
-        pattern["id"], new_evidence
-    )
+    try:
+        updated = await ctx.deps.storage_service.reinforce_pattern(
+            pattern["id"], new_evidence
+        )
+    except ValueError as e:
+        logger.exception("Failed to reinforce pattern '%s'", pattern_name)
+        return f"Error reinforcing pattern '{pattern_name}': {e}"
     return (
         f"Reinforced pattern '{pattern_name}' → "
         f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"

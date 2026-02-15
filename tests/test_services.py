@@ -1,5 +1,6 @@
 """Unit tests for MemoryService, StorageService, and HealthService."""
 
+import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.services.memory import MemoryService
@@ -452,7 +453,7 @@ class TestStorageReinforcement:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
-        mock_table.eq.return_value = mock_table
+        mock_table.ilike.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[{"id": "uuid-1", "name": "Short > Structured", "use_count": 3}]
@@ -465,14 +466,14 @@ class TestStorageReinforcement:
 
         assert result is not None
         assert result["name"] == "Short > Structured"
-        mock_table.eq.assert_called_once_with("name", "Short > Structured")
+        mock_table.ilike.assert_called_once_with("name", "Short > Structured")
 
     @patch("second_brain.services.storage.create_client")
     async def test_get_pattern_by_name_not_found(self, mock_create, mock_config):
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
-        mock_table.eq.return_value = mock_table
+        mock_table.ilike.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(data=[])
         mock_client.table.return_value = mock_table
@@ -569,3 +570,100 @@ class TestStorageReinforcement:
         assert result["evidence"] == ["e1", "e2"]
         update_args = mock_table.update.call_args[0][0]
         assert update_args["evidence"] == ["e1", "e2"]
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        with pytest.raises(ValueError, match="not found"):
+            await service.reinforce_pattern("nonexistent-id")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_update_fails(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_select = MagicMock(data=[{
+            "id": "uuid-1", "name": "Test", "use_count": 1,
+            "confidence": "LOW", "evidence": [],
+        }])
+        mock_update = MagicMock(data=[])
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.update.return_value = mock_table
+        mock_table.execute.side_effect = [mock_select, mock_update]
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        with pytest.raises(ValueError, match="Failed to update"):
+            await service.reinforce_pattern("uuid-1")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_null_evidence(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_select = MagicMock(data=[{
+            "id": "uuid-1", "name": "Test", "use_count": 1,
+            "confidence": "LOW", "evidence": None,
+        }])
+        mock_update = MagicMock(data=[{
+            "id": "uuid-1", "use_count": 2, "confidence": "MEDIUM",
+            "evidence": ["new"],
+        }])
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.update.return_value = mock_table
+        mock_table.execute.side_effect = [mock_select, mock_update]
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.reinforce_pattern("uuid-1", new_evidence=["new"])
+        update_args = mock_table.update.call_args[0][0]
+        assert update_args["evidence"] == ["new"]
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_by_name_case_insensitive(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.ilike.return_value = mock_table
+        mock_table.limit.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "name": "Short > Structured"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_pattern_by_name("short > structured")
+
+        assert result is not None
+        mock_table.ilike.assert_called_once_with("name", "short > structured")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_insert_pattern(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "uuid-new", "name": "New Pattern", "confidence": "LOW"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.insert_pattern({"name": "New Pattern", "confidence": "LOW"})
+
+        assert result["id"] == "uuid-new"
+        mock_table.insert.assert_called_once()
