@@ -104,6 +104,121 @@ class TestMemoryService:
         mock_client.delete.assert_called_once_with("mem-123")
 
 
+class TestMemoryServiceMetadata:
+    """Tests for metadata-aware MemoryService methods."""
+
+    @patch("mem0.Memory")
+    async def test_add_with_metadata(self, mock_memory_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.add.return_value = {"id": "mem-meta-1"}
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        result = await service.add_with_metadata(
+            "Pattern: Hook First — Start LinkedIn posts with a compelling hook",
+            metadata={"category": "pattern", "pattern_name": "Hook First", "topic": "Content"},
+        )
+
+        mock_client.add.assert_called_once()
+        call_kwargs = mock_client.add.call_args
+        assert call_kwargs[1]["metadata"]["category"] == "pattern"
+        assert result == {"id": "mem-meta-1"}
+
+    @patch("mem0.Memory")
+    async def test_add_with_metadata_graph_enabled(self, mock_memory_cls, mock_config):
+        """Local client with graph enabled does not pass enable_graph."""
+        mock_client = MagicMock()
+        mock_client.add.return_value = {"id": "mem-meta-2"}
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        await service.add_with_metadata(
+            "Pattern content",
+            metadata={"category": "pattern"},
+            enable_graph=True,
+        )
+        # Local client doesn't pass enable_graph (only cloud does)
+        mock_client.add.assert_called_once()
+        call_kwargs = mock_client.add.call_args[1]
+        assert "enable_graph" not in call_kwargs
+
+    @patch("mem0.Memory")
+    async def test_search_with_filters_simple(self, mock_memory_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
+            {"memory": "Hook First pattern", "score": 0.9}
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        result = await service.search_with_filters(
+            "content patterns",
+            metadata_filters={"category": "pattern"},
+        )
+
+        assert len(result.memories) == 1
+        assert result.search_filters == {"category": "pattern"}
+
+    @patch("mem0.Memory")
+    async def test_search_with_filters_none(self, mock_memory_cls, mock_config):
+        """Search without filters behaves like regular search."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = [{"memory": "test", "score": 0.5}]
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        result = await service.search_with_filters("test query")
+
+        assert len(result.memories) == 1
+        assert result.search_filters == {}
+
+    @patch("mem0.Memory")
+    async def test_search_with_filters_respects_limit(self, mock_memory_cls, mock_config):
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
+            {"memory": f"result {i}", "score": 0.9 - i * 0.1}
+            for i in range(5)
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        result = await service.search_with_filters("test", limit=2)
+
+        assert len(result.memories) == 2
+
+    @patch("mem0.Memory")
+    async def test_search_with_filters_fallback_on_type_error(self, mock_memory_cls, mock_config):
+        """If client doesn't support filters kwarg, fall back gracefully."""
+        mock_client = MagicMock()
+        # First call with filters raises TypeError, second without works
+        mock_client.search.side_effect = [
+            TypeError("unexpected keyword argument 'filters'"),
+            [{"memory": "fallback result", "score": 0.7}],
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        result = await service.search_with_filters(
+            "test",
+            metadata_filters={"category": "pattern"},
+        )
+
+        assert len(result.memories) == 1
+        assert mock_client.search.call_count == 2
+
+    @patch("mem0.Memory")
+    async def test_update_memory_local(self, mock_memory_cls, mock_config):
+        mock_client = MagicMock()
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(mock_config)
+        await service.update_memory("mem-123", content="Updated content")
+
+        mock_client.update.assert_called_once_with(
+            memory_id="mem-123", data="Updated content"
+        )
+
+
 class TestStorageService:
     @patch("second_brain.services.storage.create_client")
     def test_init(self, mock_create, mock_config):

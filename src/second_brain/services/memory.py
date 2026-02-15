@@ -68,6 +68,33 @@ class MemoryService:
         result = self._client.add(messages, **kwargs)
         return result
 
+    async def add_with_metadata(
+        self,
+        content: str,
+        metadata: dict,
+        enable_graph: bool | None = None,
+    ) -> dict:
+        """Add a memory with required structured metadata for filtered retrieval.
+
+        Unlike add(), this method requires metadata and formats the content
+        as a declarative statement (not a conversation) for better extraction.
+
+        Args:
+            content: The memory content as a declarative statement.
+            metadata: Required metadata dict (category, etc.). Must be <2KB.
+            enable_graph: Override graph setting. None = use config default.
+        """
+        messages = [{"role": "user", "content": content}]
+        kwargs: dict = {
+            "user_id": self.user_id,
+            "metadata": metadata,
+        }
+        use_graph = enable_graph if enable_graph is not None else self.enable_graph
+        if use_graph and self._is_cloud:
+            kwargs["enable_graph"] = True
+        result = self._client.add(messages, **kwargs)
+        return result
+
     @property
     def _is_cloud(self) -> bool:
         return type(self._client).__name__ == "MemoryClient"
@@ -104,6 +131,99 @@ class MemoryService:
             return SearchResult(memories=memories, relations=relations)
         memories = results[:limit] if isinstance(results, list) else []
         return SearchResult(memories=memories, relations=[])
+
+    async def search_with_filters(
+        self,
+        query: str,
+        metadata_filters: dict | None = None,
+        limit: int | None = None,
+        enable_graph: bool | None = None,
+    ) -> SearchResult:
+        """Semantic search with metadata filtering.
+
+        Args:
+            query: The semantic search query.
+            metadata_filters: Mem0 metadata filter dict. Supports operators:
+                Simple: {"category": "pattern"}
+                Comparison: {"priority": {"gte": 7}}
+                List: {"category": {"in": ["pattern", "experience"]}}
+                Logical: {"AND": [{"category": "pattern"}, {"topic": "Content"}]}
+            limit: Max results (defaults to config.memory_search_limit).
+            enable_graph: Override graph setting. None = use config default.
+        """
+        limit = limit if limit is not None else self.config.memory_search_limit
+        kwargs: dict = {"user_id": self.user_id}
+        use_graph = enable_graph if enable_graph is not None else self.enable_graph
+
+        if self._is_cloud:
+            # Cloud client merges user_id into filters
+            base_filters: dict = {"user_id": self.user_id}
+            if metadata_filters:
+                # Combine user filter with metadata filters using AND
+                base_filters = {
+                    "AND": [
+                        {"user_id": self.user_id},
+                        metadata_filters,
+                    ]
+                }
+            kwargs["filters"] = base_filters
+            if use_graph:
+                kwargs["enable_graph"] = True
+        else:
+            # Local client: pass filters directly if supported
+            if metadata_filters:
+                kwargs["filters"] = metadata_filters
+
+        try:
+            results = self._client.search(query, **kwargs)
+        except TypeError:
+            logger.warning("Mem0 client doesn't support filters, falling back to unfiltered search")
+            kwargs.pop("filters", None)
+            results = self._client.search(query, **kwargs)
+
+        if isinstance(results, dict):
+            memories = results.get("results", [])
+            relations = results.get("relations", [])
+            memories = memories[:limit] if isinstance(memories, list) else []
+            return SearchResult(
+                memories=memories,
+                relations=relations,
+                search_filters=metadata_filters or {},
+            )
+        memories = results[:limit] if isinstance(results, list) else []
+        return SearchResult(
+            memories=memories,
+            relations=[],
+            search_filters=metadata_filters or {},
+        )
+
+    async def update_memory(
+        self,
+        memory_id: str,
+        content: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Update an existing memory's content and/or metadata.
+
+        Args:
+            memory_id: The Mem0 memory ID to update.
+            content: New content text (None = keep existing).
+            metadata: New metadata dict (None = keep existing).
+        """
+        if self._is_cloud:
+            kwargs: dict = {}
+            if content is not None:
+                kwargs["text"] = content
+            if metadata is not None:
+                kwargs["metadata"] = metadata
+            if kwargs:
+                self._client.update(memory_id=memory_id, **kwargs)
+        else:
+            # Local client only supports data= parameter
+            if content is not None:
+                self._client.update(memory_id=memory_id, data=content)
+            elif metadata is not None:
+                logger.warning("Local Mem0 client doesn't support metadata-only updates")
 
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""

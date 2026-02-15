@@ -52,6 +52,13 @@ def mock_memory():
         relations=[],
     ))
     memory.add = AsyncMock(return_value={"id": "test-id"})
+    memory.add_with_metadata = AsyncMock(return_value={"id": "test-meta-id"})
+    memory.search_with_filters = AsyncMock(return_value=SearchResult(
+        memories=[{"memory": "Test pattern memory", "score": 0.85}],
+        relations=[],
+        search_filters={"category": "pattern"},
+    ))
+    memory.update_memory = AsyncMock(return_value=None)
     memory.get_all = AsyncMock(return_value=[])
     memory.get_memory_count = AsyncMock(return_value=0)
     return memory
@@ -71,6 +78,15 @@ def mock_memory_graph():
         ],
     ))
     memory.add = AsyncMock(return_value={"id": "test-id"})
+    memory.add_with_metadata = AsyncMock(return_value={"id": "test-meta-id"})
+    memory.search_with_filters = AsyncMock(return_value=SearchResult(
+        memories=[{"memory": "Pattern: Hook First for LinkedIn", "score": 0.9}],
+        relations=[
+            {"source": "Hook First", "relationship": "applies_to", "target": "LinkedIn"},
+        ],
+        search_filters={"category": "pattern"},
+    ))
+    memory.update_memory = AsyncMock(return_value=None)
     memory.get_all = AsyncMock(return_value=[])
     memory.get_memory_count = AsyncMock(return_value=0)
     return memory

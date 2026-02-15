@@ -9,3 +9,4 @@ class SearchResult:
 
     memories: list[dict] = field(default_factory=list)
     relations: list[dict] = field(default_factory=list)
+    search_filters: dict = field(default_factory=dict)
