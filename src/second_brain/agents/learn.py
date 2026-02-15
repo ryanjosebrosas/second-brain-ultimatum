@@ -128,6 +128,9 @@ async def store_pattern(
             mem0_content = f"Pattern: {name} — {pattern_text}"
             if context:
                 mem0_content += f". Context: {context}"
+            # Add content type relationships for graph extraction
+            if applicable_content_types:
+                mem0_content += f". Applies to: {', '.join(applicable_content_types)}"
             await ctx.deps.memory_service.add_with_metadata(
                 content=mem0_content,
                 metadata={
@@ -137,6 +140,7 @@ async def store_pattern(
                     "confidence": confidence,
                     "applicable_content_types": applicable_content_types,
                 },
+                enable_graph=True,  # Let Mem0 extract entities/relationships
             )
         except Exception:
             logger.debug("Failed to sync pattern '%s' to Mem0", name)
@@ -259,6 +263,24 @@ async def store_experience(
         "patterns_extracted": patterns_extracted or [],
     }
     await ctx.deps.storage_service.add_experience(experience_data)
+
+    # Dual-write: sync experience to Mem0 for graph relationships
+    try:
+        mem0_content = f"Experience: {name} (category: {category}). {output_summary}"
+        if patterns_extracted:
+            mem0_content += f". Patterns used: {', '.join(patterns_extracted)}"
+        await ctx.deps.memory_service.add_with_metadata(
+            content=mem0_content,
+            metadata={
+                "category": "experience",
+                "experience_name": name,
+                "experience_category": category,
+            },
+            enable_graph=True,
+        )
+    except Exception:
+        logger.debug("Failed to sync experience '%s' to Mem0", name)
+
     return f"Recorded experience '{name}' (category: {category})."
 
 

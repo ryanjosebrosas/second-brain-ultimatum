@@ -724,6 +724,132 @@ class TestDynamicContentTypes:
         assert specific.applicable_content_types == ["email"]  # specific
 
 
+class TestGraphIntegration:
+    """Test graph memory integration across agents."""
+
+    async def test_store_pattern_passes_enable_graph(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Hook First",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(
+            mock_ctx, name="Hook First", topic="Content",
+            pattern_text="Start with a hook",
+            applicable_content_types=["linkedin"],
+        )
+
+        # Verify enable_graph=True is passed
+        mock_deps.memory_service.add_with_metadata.assert_called_once()
+        call_kwargs = mock_deps.memory_service.add_with_metadata.call_args[1]
+        assert call_kwargs.get("enable_graph") is True
+
+    async def test_store_pattern_includes_content_types_in_content(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.storage_service.get_pattern_by_name = AsyncMock(return_value=None)
+        mock_deps.storage_service.insert_pattern = AsyncMock(return_value={
+            "id": "uuid-new", "name": "Hook First",
+        })
+        tool_fn = learn_agent._function_toolset.tools["store_pattern"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(
+            mock_ctx, name="Hook First", topic="Content",
+            pattern_text="Start with a hook",
+            applicable_content_types=["linkedin", "instagram"],
+        )
+
+        call_kwargs = mock_deps.memory_service.add_with_metadata.call_args[1]
+        assert "Applies to: linkedin, instagram" in call_kwargs["content"]
+
+    async def test_store_experience_syncs_to_mem0(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        tool_fn = learn_agent._function_toolset.tools["store_experience"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(
+            mock_ctx,
+            name="Q4 Campaign",
+            category="content",
+            output_summary="Launched Q4 email campaign",
+            learnings="Hooks work better than questions",
+            patterns_extracted=["Hook First"],
+        )
+
+        # Verify Mem0 dual-write was called with graph enabled
+        mock_deps.memory_service.add_with_metadata.assert_called_once()
+        call_kwargs = mock_deps.memory_service.add_with_metadata.call_args[1]
+        assert call_kwargs.get("enable_graph") is True
+        assert "Q4 Campaign" in call_kwargs.get("content", "")
+        assert "Hook First" in call_kwargs.get("content", "")
+
+    async def test_store_experience_succeeds_if_mem0_fails(self, mock_deps):
+        from second_brain.agents.learn import learn_agent
+        mock_deps.memory_service.add_with_metadata = AsyncMock(
+            side_effect=Exception("Mem0 unavailable")
+        )
+        tool_fn = learn_agent._function_toolset.tools["store_experience"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(
+            mock_ctx,
+            name="Test",
+            category="general",
+            output_summary="Test output",
+            learnings="Test learnings",
+        )
+
+        # Experience should still be stored despite Mem0 failure
+        assert "Recorded experience" in result
+        mock_deps.storage_service.add_experience.assert_called_once()
+
+    async def test_recall_search_patterns_requests_graph(self, mock_deps):
+        from second_brain.agents.recall import recall_agent
+        tool_fn = recall_agent._function_toolset.tools["search_patterns"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(mock_ctx, topic="Content")
+
+        # Verify search_with_filters was called with enable_graph=True
+        mock_deps.memory_service.search_with_filters.assert_called_once()
+        call_kwargs = mock_deps.memory_service.search_with_filters.call_args[1]
+        assert call_kwargs.get("enable_graph") is True
+
+    async def test_create_find_patterns_requests_graph(self, mock_deps):
+        from second_brain.agents.create import create_agent
+        tool_fn = create_agent._function_toolset.tools["find_applicable_patterns"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(mock_ctx, topic="hooks", content_type="linkedin")
+
+        # Verify search_with_filters was called with enable_graph=True
+        mock_deps.memory_service.search_with_filters.assert_called_once()
+        call_kwargs = mock_deps.memory_service.search_with_filters.call_args[1]
+        assert call_kwargs.get("enable_graph") is True
+
+    async def test_ask_find_experiences_passes_graph(self, mock_deps):
+        from second_brain.agents.ask import ask_agent
+        tool_fn = ask_agent._function_toolset.tools["find_similar_experiences"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(mock_ctx, query="email campaigns")
+
+        # Verify search was called with enable_graph=True
+        mock_deps.memory_service.search.assert_called()
+        call_kwargs = mock_deps.memory_service.search.call_args[1]
+        assert call_kwargs.get("enable_graph") is True
+
+
 class TestSemanticPatternSync:
     """Test dual-write from learn_agent to Mem0."""
 

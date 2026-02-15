@@ -74,6 +74,7 @@ async def find_applicable_patterns(
 
     # Semantic search for patterns (optionally filtered by content type)
     pattern_memories = []
+    pattern_relations = []
     try:
         if content_type:
             filters = {
@@ -88,8 +89,10 @@ async def find_applicable_patterns(
             topic,
             metadata_filters=filters,
             limit=10,
+            enable_graph=True,  # Request graph relationships
         )
         pattern_memories = pattern_result.memories
+        pattern_relations = pattern_result.relations
     except Exception:
         logger.debug("Semantic pattern search failed in create_agent")
 
@@ -137,6 +140,15 @@ async def find_applicable_patterns(
             memory = m.get("memory", m.get("result", ""))
             mem_lines.append(f"- {memory}")
         sections.append("\n".join(mem_lines))
+
+    if pattern_relations:
+        rel_lines = ["## Entity Relationships"]
+        for rel in pattern_relations:
+            src = rel.get("source", rel.get("entity", "?"))
+            relationship = rel.get("relationship", "?")
+            tgt = rel.get("target", rel.get("connected_to", "?"))
+            rel_lines.append(f"- {src} --[{relationship}]--> {tgt}")
+        sections.append("\n".join(rel_lines))
 
     return "\n\n".join(sections) if sections else "No applicable patterns found."
 

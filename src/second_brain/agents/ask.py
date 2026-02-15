@@ -105,7 +105,8 @@ async def find_similar_experiences(
 ) -> str:
     """Find past work similar to the current question."""
     result = await ctx.deps.memory_service.search(
-        f"past experience: {query}"
+        f"past experience: {query}",
+        enable_graph=True,  # Request graph relationships
     )
     experiences = await ctx.deps.storage_service.get_experiences(limit=ctx.deps.config.experience_limit)
 

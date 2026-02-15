@@ -66,6 +66,7 @@ async def search_patterns(
     """Search the pattern registry using semantic search and Supabase."""
     # Try semantic search first (Mem0 with pattern filter)
     semantic_results = []
+    semantic_relations = []
     try:
         filters = {"category": "pattern"}
         if topic:
@@ -74,8 +75,10 @@ async def search_patterns(
             topic or "patterns",
             metadata_filters=filters,
             limit=10,
+            enable_graph=True,  # Request graph relationships
         )
         semantic_results = result.memories
+        semantic_relations = result.relations  # Graph relationships from Mem0
     except Exception:
         logger.debug("Semantic pattern search failed, falling back to Supabase")
 
@@ -101,6 +104,14 @@ async def search_patterns(
                 f"- [{p['confidence']}] {p['name']}: "
                 f"{p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
             )
+
+    if semantic_relations:
+        formatted.append("\n## Graph Relationships")
+        for rel in semantic_relations:
+            src = rel.get("source", rel.get("entity", "?"))
+            relationship = rel.get("relationship", "?")
+            tgt = rel.get("target", rel.get("connected_to", "?"))
+            formatted.append(f"- {src} --[{relationship}]--> {tgt}")
 
     return "\n".join(formatted)
 
