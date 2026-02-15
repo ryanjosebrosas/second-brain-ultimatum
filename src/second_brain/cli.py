@@ -22,11 +22,20 @@ logger = logging.getLogger(__name__)
 def create_deps() -> BrainDeps:
     """Create the dependency container with all services."""
     config = BrainConfig()
+    graphiti = None
+    if config.graph_provider == "graphiti":
+        try:
+            from second_brain.services.graphiti import GraphitiService
+            graphiti = GraphitiService(config)
+        except ImportError:
+            logger.warning("graphiti-core not installed. Install with: "
+                           "pip install -e '.[graphiti]'")
+
     return BrainDeps(
         config=config,
         memory_service=MemoryService(config),
         storage_service=StorageService(config),
-        graphiti_service=None,
+        graphiti_service=graphiti,
     )
 
 

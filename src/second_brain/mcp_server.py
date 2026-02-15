@@ -30,11 +30,19 @@ def _get_deps() -> BrainDeps:
     global _deps, _model
     if _deps is None:
         config = BrainConfig()
+        graphiti = None
+        if config.graph_provider == "graphiti":
+            try:
+                from second_brain.services.graphiti import GraphitiService
+                graphiti = GraphitiService(config)
+            except ImportError:
+                logger.warning("graphiti-core not installed for MCP server")
+
         _deps = BrainDeps(
             config=config,
             memory_service=MemoryService(config),
             storage_service=StorageService(config),
-            graphiti_service=None,
+            graphiti_service=graphiti,
         )
         _model = get_model(config)
     return _deps

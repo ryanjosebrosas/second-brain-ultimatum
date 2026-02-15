@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ollama = ["pydantic-ai[ollama]"]
+graphiti = ["graphiti-core[anthropic]"]
 dev = [
     "pydantic-ai[ollama]",
     "pytest",
