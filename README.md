@@ -6,7 +6,7 @@ Second Brain is an AI-powered writing system built on 5 specialized agents that 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-411%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-463%20passing-brightgreen.svg)]()
 
 ---
 
@@ -675,6 +675,7 @@ Exposes all agents as tools callable from Claude Code or any MCP-compatible clie
 | `brain_health` | Brain health metrics |
 | `growth_report` | Growth tracking over time |
 | `graph_search` | Knowledge graph traversal |
+| `graph_health` | Graph backend health check |
 | `consolidate_brain` | Memory-to-pattern graduation |
 | `list_content_types` | Available content types |
 | `manage_content_type` | Add/remove content types |
@@ -787,8 +788,8 @@ src/second_brain/
 ├── service_mcp.py           # Service MCP server — SDK subprocess data bridge
 ├── deps.py                  # BrainDeps dataclass — injected into all agents
 ├── schemas.py               # Pydantic output models (RecallResult, CreateResult, etc.)
-├── cli.py                   # Click CLI — 15 commands across 3 groups
-├── mcp_server.py            # FastMCP server — 14 tools for Claude Code
+├── cli.py                   # Click CLI — 17 commands across 4 groups
+├── mcp_server.py            # FastMCP server — 15 tools for Claude Code
 ├── migrate.py               # Markdown -> Mem0 + Supabase migration tool
 ├── agents/
 │   ├── recall.py            # RecallAgent — semantic memory search
@@ -803,7 +804,7 @@ src/second_brain/
     ├── graphiti.py          # GraphitiService — graph memory (Neo4j / FalkorDB)
     └── search_result.py     # SearchResult dataclass — typed Mem0 results
 
-tests/                       # 411 tests
+tests/                       # 463 tests
 ├── conftest.py              # Shared fixtures (including subscription auth)
 ├── test_agents.py           # Agent schema + tool registration
 ├── test_auth.py             # OAuth token reading + validation (20 tests)
@@ -838,7 +839,7 @@ scripts/                     # Utility scripts
 | **MCP Server** | [FastMCP](https://github.com/jlowin/fastmcp) | Expose agents as Claude Code tools |
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
 | **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` file loading, validation |
-| **Testing** | pytest + pytest-asyncio | 411 tests, async support |
+| **Testing** | pytest + pytest-asyncio | 463 tests, async support |
 
 ---
 
