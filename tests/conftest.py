@@ -1,5 +1,7 @@
 """Shared test fixtures for Second Brain tests."""
 
+import json
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
@@ -201,3 +203,51 @@ def mock_deps_with_graphiti(brain_config, mock_memory, mock_storage, mock_graphi
         storage_service=mock_storage,
         graphiti_service=mock_graphiti,
     )
+
+
+# --- Subscription auth fixtures ---
+
+
+@pytest.fixture
+def subscription_config(monkeypatch, tmp_path):
+    """BrainConfig with subscription auth enabled."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("USE_SUBSCRIPTION", "true")
+    monkeypatch.setenv("CLAUDE_OAUTH_TOKEN", "sk-ant-oat01-test-token-here")
+    return BrainConfig(_env_file=None)
+
+
+@pytest.fixture
+def mock_claude_sdk():
+    """Mock claude-agent-sdk module for testing without installation."""
+    mock_sdk = MagicMock()
+    mock_client = MagicMock()
+    mock_client.process_message.return_value = '{"query": "test", "matches": [], "summary": "No results"}'
+    mock_sdk.ClaudeSDKClient.return_value = mock_client
+    mock_sdk.ClaudeAgentOptions = MagicMock()
+    return mock_sdk
+
+
+@pytest.fixture
+def mock_oauth_token():
+    """A valid test OAuth token."""
+    return "sk-ant-oat01-test-token-for-testing-purposes-only"
+
+
+@pytest.fixture
+def credentials_file(tmp_path):
+    """Create a mock .credentials.json file."""
+    creds = {
+        "claudeAiOauth": {
+            "accessToken": "sk-ant-oat01-from-credentials-file",
+            "refreshToken": "test-refresh-token",
+            "expiresAt": "2099-01-01T00:00:00Z",
+        }
+    }
+    creds_dir = tmp_path / ".claude"
+    creds_dir.mkdir()
+    creds_file = creds_dir / ".credentials.json"
+    creds_file.write_text(json.dumps(creds))
+    return creds_dir

@@ -19,6 +19,7 @@ _ENV_VARS = [
     "GRADUATION_MIN_MEMORIES", "GRADUATION_LOOKBACK_DAYS",
     "CONTENT_PREVIEW_LIMIT", "PATTERN_PREVIEW_LIMIT",
     "GRAPHITI_ENABLED", "FALKORDB_URL", "FALKORDB_PASSWORD",
+    "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
 ]
 
 
@@ -473,3 +474,52 @@ class TestGraphitiConfig:
             _env_file=None,
         )
         assert "secret" not in repr(config)
+
+
+class TestSubscriptionConfig:
+    """Tests for subscription auth config fields."""
+
+    def test_use_subscription_default_false(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.use_subscription is False
+
+    def test_use_subscription_from_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("USE_SUBSCRIPTION", "true")
+        config = BrainConfig(_env_file=None)
+        assert config.use_subscription is True
+
+    def test_oauth_token_default_none(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.claude_oauth_token is None
+
+    def test_oauth_token_from_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_OAUTH_TOKEN", "sk-ant-oat01-test")
+        config = BrainConfig(_env_file=None)
+        assert config.claude_oauth_token == "sk-ant-oat01-test"
+
+    def test_oauth_token_not_in_repr(self, tmp_path):
+        """OAuth token should be hidden in repr (security)."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            claude_oauth_token="sk-ant-oat01-secret",
+            _env_file=None,
+        )
+        assert "sk-ant-oat01-secret" not in repr(config)
