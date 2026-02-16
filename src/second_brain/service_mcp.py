@@ -22,13 +22,33 @@ service_server = FastMCP("Second Brain Services")
 
 MAX_INPUT_LENGTH = 10000  # Characters
 
-# Lazy-init deps
+# Deps initialized eagerly before server.run() via init_deps()
 _deps: BrainDeps | None = None
 
 
-def _get_deps() -> BrainDeps:
+def init_deps() -> None:
+    """Initialize BrainDeps eagerly, BEFORE server.run() starts the event loop.
+
+    Mem0's MemoryClient constructor makes synchronous HTTP calls that deadlock
+    when called inside FastMCP's async event loop (both directly and via
+    asyncio.to_thread). Initializing deps before the event loop starts avoids
+    this entirely.
+    """
     global _deps
     if _deps is None:
+        _deps = create_deps()
+
+
+async def _get_deps() -> BrainDeps:
+    """Return pre-initialized BrainDeps.
+
+    Deps MUST be initialized via init_deps() before server.run().
+    Falls back to synchronous creation if not pre-initialized (e.g. in tests),
+    but this may block the event loop.
+    """
+    global _deps
+    if _deps is None:
+        logger.warning("deps not pre-initialized, creating synchronously (may block)")
         _deps = create_deps()
     return _deps
 
@@ -59,7 +79,7 @@ async def search_memory(query: str, limit: int = 10) -> str:
         query = _validate_input(query, "query")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         result = await deps.memory_service.search(query, limit=limit)
         if not result.memories:
@@ -101,7 +121,7 @@ async def search_memory_with_filters(
         query = _validate_input(query, "query")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         filters = {}
         if category and topic:
@@ -140,7 +160,7 @@ async def add_memory(text: str, category: str = "general", metadata: str = "") -
         text = _validate_input(text, "text")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         meta = {"category": category}
         if metadata:
@@ -166,7 +186,7 @@ async def get_patterns(topic: str | None = None) -> str:
     Args:
         topic: Filter by topic (optional)
     """
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         patterns = await deps.storage_service.get_patterns(topic=topic)
         if not patterns:
@@ -189,7 +209,7 @@ async def get_experiences(category: str | None = None) -> str:
     Args:
         category: Filter by category (content, prospects, clients, general)
     """
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         experiences = await deps.storage_service.get_experiences(category=category)
         if not experiences:
@@ -210,7 +230,7 @@ async def get_examples(content_type: str | None = None) -> str:
     Args:
         content_type: Filter by type (linkedin, email, etc.)
     """
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         examples = await deps.storage_service.get_examples(content_type=content_type)
         if not examples:
@@ -232,7 +252,7 @@ async def get_knowledge(category: str | None = None) -> str:
     Args:
         category: Filter by category (framework, methodology, playbook, etc.)
     """
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         knowledge = await deps.storage_service.get_knowledge(category=category)
         if not knowledge:
@@ -271,7 +291,7 @@ async def store_pattern(
         pattern_text = _validate_input(pattern_text, "pattern_text")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         evidence_list = [item.strip() for item in evidence.split(",") if item.strip()] if evidence else []
         data = {
@@ -310,7 +330,7 @@ async def store_experience(
         content = _validate_input(content, "content")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     try:
         data = {
             "name": name,
@@ -341,7 +361,7 @@ async def graph_search(query: str, limit: int = 10) -> str:
         query = _validate_input(query, "query")
     except ValueError as e:
         return str(e)
-    deps = _get_deps()
+    deps = await _get_deps()
     if not deps.graphiti_service:
         return "Graphiti is not enabled."
     try:
@@ -393,4 +413,5 @@ if __name__ == "__main__":
         level=logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
+    init_deps()
     service_server.run()

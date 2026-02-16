@@ -147,3 +147,31 @@ class TestServiceMCPTools:
         """Service server has distinct name from main server."""
         from second_brain.service_mcp import service_server
         assert service_server.name == "Second Brain Services"
+
+    @patch("second_brain.service_mcp.create_deps")
+    def test_init_deps_creates_deps(self, mock_create):
+        """init_deps() calls create_deps and caches result."""
+        import second_brain.service_mcp as smc
+        original = smc._deps
+        try:
+            smc._deps = None
+            mock_create.return_value = MagicMock()
+            smc.init_deps()
+            mock_create.assert_called_once()
+            assert smc._deps is mock_create.return_value
+        finally:
+            smc._deps = original
+
+    @patch("second_brain.service_mcp.create_deps")
+    def test_init_deps_skips_if_already_initialized(self, mock_create):
+        """init_deps() does not re-create deps if already set."""
+        import second_brain.service_mcp as smc
+        original = smc._deps
+        try:
+            existing = MagicMock()
+            smc._deps = existing
+            smc.init_deps()
+            mock_create.assert_not_called()
+            assert smc._deps is existing
+        finally:
+            smc._deps = original
