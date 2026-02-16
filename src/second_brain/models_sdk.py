@@ -45,10 +45,12 @@ class ClaudeSDKModel(Model):
         model_id: str = f"claude-sonnet-4-5-{DEFAULT_MODEL_DATE}",
         oauth_token: str | None = None,
         mcp_config: dict | None = None,
+        mcp_server_name: str = "second-brain-services",
     ):
         self._model_id = model_id
         self._oauth_token = oauth_token
         self._mcp_config = mcp_config
+        self._mcp_server_name = mcp_server_name
 
     @property
     def model_name(self) -> str:
@@ -124,12 +126,11 @@ class ClaudeSDKModel(Model):
             from second_brain.auth import configure_subscription_env
             configure_subscription_env(self._oauth_token)
 
-        mcp_servers = []
+        mcp_servers: dict = {}
         allowed_tools: list[str] = []
         if self._mcp_config:
-            mcp_servers = [self._mcp_config]
-            server_name = self._mcp_config.get("name", "second-brain-services")
-            allowed_tools = [f"mcp__{server_name}__*"]
+            mcp_servers = {self._mcp_server_name: self._mcp_config}
+            allowed_tools = [f"mcp__{self._mcp_server_name}__*"]
 
         options = ClaudeAgentOptions(
             model=self._model_id,
@@ -194,10 +195,13 @@ def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:
     if not _DATE_SUFFIX_RE.search(model_id):
         model_id = f"{model_id}-{DEFAULT_MODEL_DATE}"
 
+    mcp_server_name, mcp_config = get_service_mcp_config()
+
     return ClaudeSDKModel(
         model_id=model_id,
         oauth_token=token,
-        mcp_config=get_service_mcp_config(),
+        mcp_config=mcp_config,
+        mcp_server_name=mcp_server_name,
     )
 
 

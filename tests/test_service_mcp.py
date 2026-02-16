@@ -98,11 +98,13 @@ class TestServiceMCPTools:
         assert "not enabled" in result
 
     def test_get_service_mcp_config(self):
-        """get_service_mcp_config returns valid config dict."""
+        """get_service_mcp_config returns valid (name, config) tuple."""
         from second_brain.service_mcp import get_service_mcp_config
 
-        config = get_service_mcp_config()
-        assert config["name"] == "second-brain-services"
+        name, config = get_service_mcp_config()
+        assert name == "second-brain-services"
+        assert "name" not in config
+        assert config["command"]
         assert "second_brain.service_mcp" in " ".join(config["args"])
 
     def test_validate_input_valid(self):

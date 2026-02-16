@@ -363,19 +363,22 @@ async def graph_search(query: str, limit: int = 10) -> str:
 # --- Config Helper ---
 
 
-def get_service_mcp_config() -> dict:
+def get_service_mcp_config() -> tuple[str, dict]:
     """Get MCP server configuration for claude-agent-sdk.
 
-    Returns a McpStdioServerConfig-compatible dict for ClaudeAgentOptions.mcp_servers.
-    The SDK will spawn this as a subprocess.
+    Returns (server_name, config) for ClaudeAgentOptions.mcp_servers.
+    The SDK expects mcp_servers={server_name: config} (dict, not list).
+    Config follows McpStdioServerConfig: command (required), type/args/env (optional).
     """
     import sys
-    return {
-        "type": "stdio",
-        "name": "second-brain-services",
-        "command": sys.executable,
-        "args": ["-m", "second_brain.service_mcp"],
-    }
+    return (
+        "second-brain-services",
+        {
+            "type": "stdio",
+            "command": sys.executable,
+            "args": ["-m", "second_brain.service_mcp"],
+        },
+    )
 
 
 if __name__ == "__main__":

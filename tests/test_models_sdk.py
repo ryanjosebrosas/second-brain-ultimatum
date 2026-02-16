@@ -143,7 +143,7 @@ class TestCreateSDKModel:
         with patch("second_brain.auth.get_oauth_token", return_value="sk-ant-oat01-valid"), \
              patch("second_brain.auth.validate_oauth_token", return_value=True), \
              patch("second_brain.auth.verify_claude_cli", return_value=(True, "claude 1.0")), \
-             patch("second_brain.service_mcp.get_service_mcp_config", return_value={"name": "test"}):
+             patch("second_brain.service_mcp.get_service_mcp_config", return_value=("test-server", {"command": "python"})):
             from second_brain.models_sdk import create_sdk_model
             result = create_sdk_model(config)
             assert result is not None
@@ -200,7 +200,7 @@ class TestModelDateSuffix:
         with patch("second_brain.auth.get_oauth_token", return_value="sk-ant-oat01-valid"), \
              patch("second_brain.auth.validate_oauth_token", return_value=True), \
              patch("second_brain.auth.verify_claude_cli", return_value=(True, "claude 1.0")), \
-             patch("second_brain.service_mcp.get_service_mcp_config", return_value={"name": "test"}):
+             patch("second_brain.service_mcp.get_service_mcp_config", return_value=("test-server", {"command": "python"})):
             from second_brain.models_sdk import create_sdk_model, DEFAULT_MODEL_DATE
             result = create_sdk_model(config)
             assert result is not None
@@ -216,7 +216,7 @@ class TestModelDateSuffix:
         with patch("second_brain.auth.get_oauth_token", return_value="sk-ant-oat01-valid"), \
              patch("second_brain.auth.validate_oauth_token", return_value=True), \
              patch("second_brain.auth.verify_claude_cli", return_value=(True, "claude 1.0")), \
-             patch("second_brain.service_mcp.get_service_mcp_config", return_value={"name": "test"}):
+             patch("second_brain.service_mcp.get_service_mcp_config", return_value=("test-server", {"command": "python"})):
             from second_brain.models_sdk import create_sdk_model
             result = create_sdk_model(config)
             assert result is not None
@@ -314,6 +314,56 @@ class TestClaudeCodeNestingGuard:
     def test_claudecode_in_env_cleanup_list(self):
         """CLAUDECODE is included in the test env cleanup list."""
         assert "CLAUDECODE" in _ENV_VARS
+
+
+class TestMCPConfigFormat:
+    """Tests for MCP server config dict format passed to SDK."""
+
+    def test_mcp_servers_built_as_dict(self):
+        """mcp_servers should be dict[str, config], not list."""
+        from second_brain.models_sdk import ClaudeSDKModel
+
+        config = {"command": "python", "args": ["-m", "test"]}
+        model = ClaudeSDKModel(
+            mcp_config=config,
+            mcp_server_name="test-server",
+        )
+        assert model._mcp_config == config
+        assert model._mcp_server_name == "test-server"
+
+    def test_mcp_server_name_default(self):
+        """Default server name is second-brain-services."""
+        from second_brain.models_sdk import ClaudeSDKModel
+
+        model = ClaudeSDKModel(mcp_config={"command": "python"})
+        assert model._mcp_server_name == "second-brain-services"
+
+    def test_no_name_key_in_config(self):
+        """Config dict should NOT contain 'name' key."""
+        from second_brain.service_mcp import get_service_mcp_config
+
+        name, config = get_service_mcp_config()
+        assert "name" not in config
+        # Only valid McpStdioServerConfig keys
+        valid_keys = {"type", "command", "args", "env"}
+        assert set(config.keys()).issubset(valid_keys)
+
+    def test_create_sdk_model_passes_separate_name_and_config(self, tmp_path):
+        """create_sdk_model unpacks tuple and passes name + config separately."""
+        config = _make_config(
+            tmp_path,
+            use_subscription=True,
+        )
+        with patch("second_brain.auth.get_oauth_token", return_value="sk-ant-oat01-valid"), \
+             patch("second_brain.auth.validate_oauth_token", return_value=True), \
+             patch("second_brain.auth.verify_claude_cli", return_value=(True, "claude 1.0")), \
+             patch("second_brain.service_mcp.get_service_mcp_config", return_value=("my-server", {"command": "python"})):
+            from second_brain.models_sdk import create_sdk_model
+            result = create_sdk_model(config)
+            assert result is not None
+            assert result._mcp_server_name == "my-server"
+            assert result._mcp_config == {"command": "python"}
+            assert "name" not in result._mcp_config
 
 
 class TestGetModelFallbackChain:
