@@ -347,6 +347,9 @@ class TestMCPConfigFormat:
         # Only valid McpStdioServerConfig keys
         valid_keys = {"type", "command", "args", "env"}
         assert set(config.keys()).issubset(valid_keys)
+        # Verify unbuffered flag
+        assert "-u" in config["args"]
+        assert config["env"]["PYTHONUNBUFFERED"] == "1"
 
     def test_create_sdk_model_passes_separate_name_and_config(self, tmp_path):
         """create_sdk_model unpacks tuple and passes name + config separately."""
@@ -364,6 +367,34 @@ class TestMCPConfigFormat:
             assert result._mcp_server_name == "my-server"
             assert result._mcp_config == {"command": "python"}
             assert "name" not in result._mcp_config
+
+    def test_timeout_default(self):
+        """Default timeout is 120 seconds."""
+        from second_brain.models_sdk import ClaudeSDKModel
+        model = ClaudeSDKModel()
+        assert model._timeout == 120
+
+    def test_timeout_custom(self):
+        """Custom timeout is stored correctly."""
+        from second_brain.models_sdk import ClaudeSDKModel
+        model = ClaudeSDKModel(timeout=60)
+        assert model._timeout == 60
+
+    def test_create_sdk_model_passes_timeout_from_config(self, tmp_path):
+        """create_sdk_model derives timeout from config.api_timeout_seconds."""
+        config = _make_config(
+            tmp_path,
+            use_subscription=True,
+            api_timeout_seconds=45,
+        )
+        with patch("second_brain.auth.get_oauth_token", return_value="sk-ant-oat01-valid"), \
+             patch("second_brain.auth.validate_oauth_token", return_value=True), \
+             patch("second_brain.auth.verify_claude_cli", return_value=(True, "claude 1.0")), \
+             patch("second_brain.service_mcp.get_service_mcp_config", return_value=("srv", {"command": "python"})):
+            from second_brain.models_sdk import create_sdk_model
+            result = create_sdk_model(config)
+            assert result is not None
+            assert result._timeout == 180  # 45 * 4
 
 
 class TestGetModelFallbackChain:

@@ -105,7 +105,9 @@ class TestServiceMCPTools:
         assert name == "second-brain-services"
         assert "name" not in config
         assert config["command"]
+        assert "-u" in config["args"]
         assert "second_brain.service_mcp" in " ".join(config["args"])
+        assert config["env"]["PYTHONUNBUFFERED"] == "1"
 
     def test_validate_input_valid(self):
         """_validate_input accepts valid text."""
@@ -123,6 +125,23 @@ class TestServiceMCPTools:
         from second_brain.service_mcp import _validate_input
         with pytest.raises(ValueError, match="too long"):
             _validate_input("x" * 20000)
+
+    def test_service_server_subprocess_no_stdout_logs(self):
+        """Service server subprocess should not write logs to stdout."""
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import logging; logging.basicConfig(); "
+             "import second_brain.service_mcp; "
+             "logging.getLogger('second_brain.service_mcp').warning('test-log')"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        # Logs should NOT appear in stdout (would corrupt JSON-RPC)
+        assert "test-log" not in result.stdout
 
     def test_server_name(self):
         """Service server has distinct name from main server."""

@@ -369,6 +369,10 @@ def get_service_mcp_config() -> tuple[str, dict]:
     Returns (server_name, config) for ClaudeAgentOptions.mcp_servers.
     The SDK expects mcp_servers={server_name: config} (dict, not list).
     Config follows McpStdioServerConfig: command (required), type/args/env (optional).
+
+    Uses -u flag and PYTHONUNBUFFERED=1 to force unbuffered stdout.
+    Without this, JSON-RPC responses get stuck in Python's output buffer
+    when running as a subprocess with piped stdout (not a TTY).
     """
     import sys
     return (
@@ -376,10 +380,17 @@ def get_service_mcp_config() -> tuple[str, dict]:
         {
             "type": "stdio",
             "command": sys.executable,
-            "args": ["-m", "second_brain.service_mcp"],
+            "args": ["-u", "-m", "second_brain.service_mcp"],
+            "env": {"PYTHONUNBUFFERED": "1"},
         },
     )
 
 
 if __name__ == "__main__":
+    import sys as _sys
+    logging.basicConfig(
+        stream=_sys.stderr,
+        level=logging.WARNING,
+        format="%(levelname)s: %(message)s",
+    )
     service_server.run()

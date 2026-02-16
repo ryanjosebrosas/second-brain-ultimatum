@@ -46,11 +46,13 @@ class ClaudeSDKModel(Model):
         oauth_token: str | None = None,
         mcp_config: dict | None = None,
         mcp_server_name: str = "second-brain-services",
+        timeout: int = 120,
     ):
         self._model_id = model_id
         self._oauth_token = oauth_token
         self._mcp_config = mcp_config
         self._mcp_server_name = mcp_server_name
+        self._timeout = timeout
 
     @property
     def model_name(self) -> str:
@@ -110,6 +112,8 @@ class ClaudeSDKModel(Model):
         self, system_prompt: str, user_prompt: str
     ) -> str:
         """Execute a query via claude-agent-sdk async API."""
+        import asyncio
+
         try:
             from claude_agent_sdk import (
                 ClaudeAgentOptions,
@@ -126,6 +130,11 @@ class ClaudeSDKModel(Model):
             from second_brain.auth import configure_subscription_env
             configure_subscription_env(self._oauth_token)
 
+        # Set MCP timeout env vars for the SDK subprocess
+        if self._mcp_config:
+            os.environ.setdefault("MCP_TOOL_TIMEOUT", "120000")
+            os.environ.setdefault("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "180000")
+
         mcp_servers: dict = {}
         allowed_tools: list[str] = []
         if self._mcp_config:
@@ -139,18 +148,34 @@ class ClaudeSDKModel(Model):
             allowed_tools=allowed_tools,
         )
 
-        # Temporarily unset CLAUDECODE to allow SDK subprocess when running
-        # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
-        saved_claudecode = os.environ.pop("CLAUDECODE", None)
-        try:
-            async for message in sdk_query(prompt=user_prompt, options=options):
-                if isinstance(message, ResultMessage):
-                    return message.result or ""
-        finally:
-            if saved_claudecode is not None:
-                os.environ["CLAUDECODE"] = saved_claudecode
+        async def _run_query() -> str:
+            """Inner coroutine for timeout wrapping."""
+            # Temporarily unset CLAUDECODE to allow SDK subprocess when running
+            # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
+            saved_claudecode = os.environ.pop("CLAUDECODE", None)
+            try:
+                async for message in sdk_query(prompt=user_prompt, options=options):
+                    if isinstance(message, ResultMessage):
+                        return message.result or ""
+            finally:
+                if saved_claudecode is not None:
+                    os.environ["CLAUDECODE"] = saved_claudecode
+            return ""
 
-        return ""
+        timeout = self._timeout
+        try:
+            return await asyncio.wait_for(_run_query(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.error(
+                "SDK query timed out after %ds. This may indicate the MCP "
+                "server subprocess is not responding. Check stderr for errors.",
+                timeout,
+            )
+            raise RuntimeError(
+                f"SDK query timed out after {timeout}s. "
+                "The MCP server subprocess may have failed to respond. "
+                "Try increasing api_timeout_seconds in config."
+            )
 
 
 def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:
@@ -202,6 +227,7 @@ def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:
         oauth_token=token,
         mcp_config=mcp_config,
         mcp_server_name=mcp_server_name,
+        timeout=config.api_timeout_seconds * 4,
     )
 
 
