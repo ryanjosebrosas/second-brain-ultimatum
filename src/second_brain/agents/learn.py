@@ -148,6 +148,29 @@ async def store_pattern(
                 )
             except Exception:
                 logger.debug("Failed to sync pattern '%s' to Mem0 (non-critical)", name)
+            # Dual-write: add episode to Graphiti for entity extraction (non-critical)
+            if ctx.deps.graphiti_service:
+                try:
+                    graphiti_content = (
+                        f"New pattern discovered: {name}. "
+                        f"Topic: {topic}. "
+                        f"Pattern: {pattern_text}"
+                    )
+                    if context:
+                        graphiti_content += f". Context: {context}"
+                    if evidence:
+                        graphiti_content += f". Evidence: {'; '.join(evidence[:3])}"
+                    await ctx.deps.graphiti_service.add_episode(
+                        graphiti_content,
+                        metadata={
+                            "source": "learn_agent",
+                            "category": "pattern",
+                            "pattern_name": name,
+                            "topic": topic,
+                        },
+                    )
+                except Exception:
+                    logger.debug("Failed to sync pattern '%s' to Graphiti (non-critical)", name)
         except Exception as e:
             logger.exception("Failed to insert pattern '%s'", name)
             return f"Error storing pattern '{name}': {e}"
@@ -233,6 +256,26 @@ async def reinforce_existing_pattern(
             )
         except Exception:
             logger.debug("Failed to sync reinforcement for '%s' to Mem0 (non-critical)", pattern_name)
+        # Dual-write: add reinforcement episode to Graphiti (non-critical)
+        if ctx.deps.graphiti_service:
+            try:
+                graphiti_content = (
+                    f"Pattern reinforced: {pattern_name}. "
+                    f"New use_count: {updated.get('use_count', 0)}. "
+                    f"Confidence: {updated.get('confidence', 'LOW')}"
+                )
+                if new_evidence:
+                    graphiti_content += f". New evidence: {'; '.join(new_evidence[:3])}"
+                await ctx.deps.graphiti_service.add_episode(
+                    graphiti_content,
+                    metadata={
+                        "source": "learn_agent",
+                        "category": "pattern_reinforcement",
+                        "pattern_name": pattern_name,
+                    },
+                )
+            except Exception:
+                logger.debug("Failed to sync reinforcement '%s' to Graphiti (non-critical)", pattern_name)
         return (
             f"Reinforced pattern '{pattern_name}' → "
             f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
@@ -296,6 +339,30 @@ async def store_experience(
             )
         except Exception:
             logger.debug("Failed to sync experience '%s' to Mem0 (non-critical)", name)
+
+        # Dual-write: add experience episode to Graphiti (non-critical)
+        if ctx.deps.graphiti_service:
+            try:
+                graphiti_content = (
+                    f"Work experience: {name}. "
+                    f"Category: {category}. "
+                    f"Output: {output_summary}"
+                )
+                if learnings:
+                    graphiti_content += f". Learnings: {learnings[:500]}"
+                if patterns_extracted:
+                    graphiti_content += f". Patterns used: {', '.join(patterns_extracted)}"
+                await ctx.deps.graphiti_service.add_episode(
+                    graphiti_content,
+                    metadata={
+                        "source": "learn_agent",
+                        "category": "experience",
+                        "experience_name": name,
+                        "experience_category": category,
+                    },
+                )
+            except Exception:
+                logger.debug("Failed to sync experience '%s' to Graphiti (non-critical)", name)
 
         return f"Recorded experience '{name}' (category: {category})."
     except Exception as e:

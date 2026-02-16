@@ -41,6 +41,18 @@ async def load_voice_guide(ctx: RunContext[BrainDeps]) -> str:
             title = item.get("title", "Untitled")
             text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
             sections.append(f"### {title}\n{text}")
+        # Enrich with graph relationships if available
+        if ctx.deps.graphiti_service:
+            try:
+                voice_rels = await ctx.deps.graphiti_service.search("voice tone style brand")
+                if voice_rels:
+                    sections.append("\n### Graph Context")
+                    for rel in voice_rels[:5]:
+                        sections.append(
+                            f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
+                        )
+            except Exception:
+                logger.debug("Graphiti voice search failed (non-critical)")
         return "## Voice & Tone Guide\n" + "\n\n".join(sections)
     except Exception as e:
         logger.warning("load_voice_guide failed: %s", type(e).__name__)
@@ -105,6 +117,15 @@ async def find_applicable_patterns(
         except Exception:
             logger.debug("Semantic pattern search failed in create_agent")
 
+        # Also check Graphiti for deeper entity relationships
+        graphiti_relations = []
+        if ctx.deps.graphiti_service:
+            try:
+                graphiti_rels = await ctx.deps.graphiti_service.search(topic)
+                graphiti_relations = graphiti_rels
+            except Exception as e:
+                logger.debug("Graphiti search failed in create_agent (non-critical): %s", e)
+
         # Fall back to Supabase patterns (structured data)
         patterns = await ctx.deps.storage_service.get_patterns()
 
@@ -150,9 +171,11 @@ async def find_applicable_patterns(
                 mem_lines.append(f"- {memory}")
             sections.append("\n".join(mem_lines))
 
-        if pattern_relations:
+        # Merge all graph relations (Mem0 + Graphiti)
+        all_relations = pattern_relations + graphiti_relations
+        if all_relations:
             rel_lines = ["## Entity Relationships"]
-            for rel in pattern_relations:
+            for rel in all_relations:
                 src = rel.get("source", rel.get("entity", "?"))
                 relationship = rel.get("relationship", "?")
                 tgt = rel.get("target", rel.get("connected_to", "?"))

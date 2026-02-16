@@ -163,6 +163,19 @@ async def search_knowledge(
             preview = k.get("content", "")[:ctx.deps.config.pattern_preview_limit]
             if preview:
                 formatted.append(f"  {preview}")
+        # Add graph relationships if available
+        if ctx.deps.graphiti_service:
+            try:
+                query_str = category or "knowledge frameworks methodologies"
+                graphiti_rels = await ctx.deps.graphiti_service.search(query_str)
+                if graphiti_rels:
+                    formatted.append("\n## Related Entities")
+                    for rel in graphiti_rels[:5]:
+                        formatted.append(
+                            f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
+                        )
+            except Exception as e:
+                logger.debug("Graphiti search failed in search_knowledge (non-critical): %s", e)
         return "\n".join(formatted)
     except Exception as e:
         logger.warning("search_knowledge failed: %s", type(e).__name__)

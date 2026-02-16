@@ -89,6 +89,47 @@ async def load_example_benchmarks(ctx: RunContext[BrainDeps], content_type: str 
         return f"Example benchmarks unavailable: {type(e).__name__}"
 
 
+@review_agent.tool
+async def load_graph_context(
+    ctx: RunContext[BrainDeps], content_summary: str
+) -> str:
+    """Load entity relationships from graph memory to ground review in brain context.
+    Searches both Mem0 graph and Graphiti for related entities."""
+    try:
+        relations = []
+
+        # Mem0 graph relations
+        try:
+            result = await ctx.deps.memory_service.search(
+                content_summary, limit=5, enable_graph=True
+            )
+            relations.extend(result.relations)
+        except Exception:
+            logger.debug("Mem0 graph search failed in review_agent")
+
+        # Graphiti relations
+        if ctx.deps.graphiti_service:
+            try:
+                graphiti_rels = await ctx.deps.graphiti_service.search(content_summary)
+                relations.extend(graphiti_rels)
+            except Exception as e:
+                logger.debug("Graphiti search failed in review_agent (non-critical): %s", e)
+
+        if not relations:
+            return "No graph relationships found for this content."
+
+        formatted = ["## Graph Context for Review"]
+        for rel in relations:
+            src = rel.get("source", "?")
+            relationship = rel.get("relationship", "?")
+            tgt = rel.get("target", "?")
+            formatted.append(f"- {src} --[{relationship}]--> {tgt}")
+        return "\n".join(formatted)
+    except Exception as e:
+        logger.warning("load_graph_context failed: %s", type(e).__name__)
+        return f"Graph context unavailable: {type(e).__name__}"
+
+
 async def run_full_review(
     content: str,
     deps: BrainDeps,
