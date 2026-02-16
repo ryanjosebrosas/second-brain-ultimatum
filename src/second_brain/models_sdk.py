@@ -111,7 +111,14 @@ class ClaudeSDKModel(Model):
     async def _sdk_query(
         self, system_prompt: str, user_prompt: str
     ) -> str:
-        """Execute a query via claude-agent-sdk async API."""
+        """Execute a query via claude-agent-sdk async API.
+
+        Important: The SDK's async generator uses anyio task groups internally.
+        We must exhaust the generator fully (no early return/break) to avoid
+        GeneratorExit triggering anyio cancel scope cleanup errors that corrupt
+        pydantic-ai's cancel scope stack. We use asyncio.timeout (not wait_for)
+        to avoid creating task boundaries that conflict with anyio scopes.
+        """
         import asyncio
 
         try:
@@ -148,34 +155,37 @@ class ClaudeSDKModel(Model):
             allowed_tools=allowed_tools,
         )
 
-        async def _run_query() -> str:
-            """Inner coroutine for timeout wrapping."""
-            # Temporarily unset CLAUDECODE to allow SDK subprocess when running
-            # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
-            saved_claudecode = os.environ.pop("CLAUDECODE", None)
-            try:
-                async for message in sdk_query(prompt=user_prompt, options=options):
-                    if isinstance(message, ResultMessage):
-                        return message.result or ""
-            finally:
-                if saved_claudecode is not None:
-                    os.environ["CLAUDECODE"] = saved_claudecode
-            return ""
-
-        timeout = self._timeout
+        # Temporarily unset CLAUDECODE to allow SDK subprocess when running
+        # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
+        saved_claudecode = os.environ.pop("CLAUDECODE", None)
         try:
-            return await asyncio.wait_for(_run_query(), timeout=timeout)
-        except asyncio.TimeoutError:
+            result = ""
+            # Use asyncio.timeout (same task) instead of asyncio.wait_for
+            # (new task) to avoid anyio cancel scope task boundary conflicts.
+            async with asyncio.timeout(self._timeout):
+                # Exhaust the generator fully — do NOT return/break early.
+                # Early exit triggers GeneratorExit which corrupts anyio's
+                # cancel scope stack when the SDK cleans up its task group.
+                async for message in sdk_query(
+                    prompt=user_prompt, options=options
+                ):
+                    if isinstance(message, ResultMessage):
+                        result = message.result or ""
+            return result
+        except TimeoutError:
             logger.error(
                 "SDK query timed out after %ds. This may indicate the MCP "
                 "server subprocess is not responding. Check stderr for errors.",
-                timeout,
+                self._timeout,
             )
             raise RuntimeError(
-                f"SDK query timed out after {timeout}s. "
+                f"SDK query timed out after {self._timeout}s. "
                 "The MCP server subprocess may have failed to respond. "
                 "Try increasing api_timeout_seconds in config."
             )
+        finally:
+            if saved_claudecode is not None:
+                os.environ["CLAUDECODE"] = saved_claudecode
 
 
 def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:
