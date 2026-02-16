@@ -336,6 +336,8 @@ def health():
         click.echo(f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})")
         click.echo(f"Experiences: {metrics.experience_count}")
         click.echo(f"Graph: {metrics.graph_provider}")
+        if metrics.graphiti_status != "disabled":
+            click.echo(f"Graphiti: {metrics.graphiti_status} (backend: {metrics.graphiti_backend})")
         click.echo(f"Last updated: {metrics.latest_update}")
         if metrics.topics:
             click.echo("\nPatterns by Topic:")
@@ -359,6 +361,8 @@ def growth(days: int):
 
         click.echo(f"\n# Growth Report ({days} days)\n")
         click.echo(f"Status: {metrics.status}")
+        if metrics.graphiti_status != "disabled":
+            click.echo(f"Graphiti: {metrics.graphiti_status} (backend: {metrics.graphiti_backend})")
         click.echo(f"Patterns: {metrics.total_patterns} (HIGH: {metrics.high_confidence}, "
                    f"MEDIUM: {metrics.medium_confidence}, LOW: {metrics.low_confidence})")
         click.echo(f"\nGrowth Activity:")
@@ -504,6 +508,56 @@ def types_remove(slug: str, force: bool):
             click.echo(f"Failed to remove '{slug}'")
 
     asyncio.run(_remove())
+
+
+@cli.group()
+def graph():
+    """Manage Graphiti knowledge graph."""
+    pass
+
+
+@graph.command("health")
+def graph_health():
+    """Check Graphiti graph backend health and connectivity."""
+    deps = create_deps()
+
+    async def _health():
+        if not deps.graphiti_service:
+            click.echo("Graphiti is not enabled. Set GRAPHITI_ENABLED=true in .env")
+            return
+        health = await deps.graphiti_service.health_check()
+        click.echo(f"Status: {health.get('status', 'unknown')}")
+        click.echo(f"Backend: {health.get('backend', 'none')}")
+        if health.get("error"):
+            click.echo(f"Error: {health['error']}")
+
+    asyncio.run(_health())
+
+
+@graph.command("search")
+@click.argument("query")
+@click.option("--limit", default=10, type=int, help="Max results")
+def graph_search(query: str, limit: int):
+    """Search Graphiti knowledge graph for entity relationships."""
+    deps = create_deps()
+
+    async def _search():
+        if not deps.graphiti_service:
+            click.echo("Graphiti is not enabled. Set GRAPHITI_ENABLED=true in .env")
+            return
+        results = await deps.graphiti_service.search(query, limit=limit)
+        if not results:
+            click.echo("No graph relationships found.")
+            return
+        click.echo(f"\n# Graph Search: {query}\n")
+        for rel in results:
+            src = rel.get("source", "?")
+            relationship = rel.get("relationship", "?")
+            tgt = rel.get("target", "?")
+            click.echo(f"  {src} --[{relationship}]--> {tgt}")
+        click.echo(f"\nFound {len(results)} relationship(s)")
+
+    asyncio.run(_search())
 
 
 @cli.command()

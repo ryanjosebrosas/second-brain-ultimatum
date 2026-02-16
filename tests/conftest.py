@@ -164,10 +164,40 @@ def mock_storage():
 
 
 @pytest.fixture
+def mock_graphiti():
+    """Create a mocked GraphitiService."""
+    graphiti = MagicMock()
+    graphiti.search = AsyncMock(return_value=[
+        {"source": "Pattern A", "relationship": "relates_to", "target": "Topic B"},
+    ])
+    graphiti.add_episode = AsyncMock(return_value=None)
+    graphiti.add_episodes_batch = AsyncMock(return_value=1)
+    graphiti.health_check = AsyncMock(return_value={
+        "status": "healthy",
+        "backend": "neo4j",
+    })
+    graphiti.is_available = True
+    graphiti.backend = "neo4j"
+    graphiti.close = AsyncMock(return_value=None)
+    return graphiti
+
+
+@pytest.fixture
 def mock_deps(brain_config, mock_memory, mock_storage):
     """Create a BrainDeps with all mocked services."""
     return BrainDeps(
         config=brain_config,
         memory_service=mock_memory,
         storage_service=mock_storage,
+    )
+
+
+@pytest.fixture
+def mock_deps_with_graphiti(brain_config, mock_memory, mock_storage, mock_graphiti):
+    """Create a BrainDeps with all mocked services including Graphiti."""
+    return BrainDeps(
+        config=brain_config,
+        memory_service=mock_memory,
+        storage_service=mock_storage,
+        graphiti_service=mock_graphiti,
     )

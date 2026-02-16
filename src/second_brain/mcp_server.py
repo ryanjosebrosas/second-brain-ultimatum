@@ -373,11 +373,41 @@ async def brain_health() -> str:
         f"Graph: {metrics.graph_provider}",
         f"Last updated: {metrics.latest_update}",
     ]
+    if metrics.graphiti_status != "disabled":
+        parts.append(f"Graphiti: {metrics.graphiti_status} (backend: {metrics.graphiti_backend})")
     if metrics.topics:
         parts.append("\n## Patterns by Topic")
         for t, c in sorted(metrics.topics.items()):
             parts.append(f"  - {t}: {c}")
     parts.append(f"\nStatus: {metrics.status}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def graph_search(query: str, limit: int = 10) -> str:
+    """Search the Graphiti knowledge graph for entity relationships.
+    Returns connections between people, concepts, patterns, and experiences
+    discovered through graph traversal.
+
+    Args:
+        query: What to search for in the knowledge graph
+        limit: Maximum number of relationships to return (default: 10)
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Graphiti is not enabled. Set GRAPHITI_ENABLED=true in your .env file."
+
+    results = await deps.graphiti_service.search(query, limit=limit)
+    if not results:
+        return f"No graph relationships found for: {query}"
+
+    parts = [f"# Graph Search: {query}\n"]
+    for rel in results:
+        src = rel.get("source", "?")
+        relationship = rel.get("relationship", "?")
+        tgt = rel.get("target", "?")
+        parts.append(f"- {src} --[{relationship}]--> {tgt}")
+    parts.append(f"\nFound {len(results)} relationship(s)")
     return "\n".join(parts)
 
 

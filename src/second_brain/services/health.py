@@ -34,6 +34,9 @@ class HealthMetrics:
     avg_review_score: float = 0.0
     review_score_trend: str = "stable"
     stale_patterns: list[str] = field(default_factory=list)
+    # Graphiti status
+    graphiti_status: str = "disabled"  # disabled, healthy, degraded, unavailable
+    graphiti_backend: str = "none"  # neo4j, falkordb, none
     errors: list[str] = field(default_factory=list)
 
 
@@ -78,6 +81,18 @@ class HealthService:
         graph = deps.config.graph_provider or "disabled"
         status = "GROWING" if total > 5 else "BUILDING"
 
+        # Graphiti health
+        graphiti_status = "disabled"
+        graphiti_backend = "none"
+        if deps.graphiti_service:
+            try:
+                health = await deps.graphiti_service.health_check()
+                graphiti_status = health.get("status", "unavailable")
+                graphiti_backend = health.get("backend", "none")
+            except Exception as e:
+                graphiti_status = "unavailable"
+                errors.append(f"graphiti: {type(e).__name__}")
+
         return HealthMetrics(
             memory_count=memory_count,
             total_patterns=total,
@@ -89,6 +104,8 @@ class HealthService:
             latest_update=latest,
             topics=topics,
             status=status,
+            graphiti_status=graphiti_status,
+            graphiti_backend=graphiti_backend,
             errors=errors,
         )
 
