@@ -1,11 +1,14 @@
 """Tests for ClaudeSDKModel and subscription auth model integration."""
 
+import json
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from second_brain.config import BrainConfig
+from second_brain.models_sdk import ClaudeSDKModel
+from pydantic_ai.messages import TextPart, ToolCallPart
 
 
 # Known env vars to clear so host values don't bleed.
@@ -429,3 +432,201 @@ class TestGetModelFallbackChain:
             from second_brain.models import get_model
             model = get_model(config)
             assert model is mock_sdk_model
+
+
+class TestClaudeSDKModelStructuredOutput:
+    """Tests for structured output extraction, SDK query, and response construction."""
+
+    def test_extract_output_schema_text_mode(self):
+        """Returns None when output_mode='text'."""
+        from pydantic_ai.models import ModelRequestParameters
+
+        model = ClaudeSDKModel()
+        params = ModelRequestParameters(output_mode='text')
+        assert model._extract_output_schema(params) is None
+
+    def test_extract_output_schema_tool_mode(self):
+        """Extracts schema from output_tools when output_mode='tool'."""
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.tools import ToolDefinition
+
+        schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        tool = ToolDefinition(name="final_result", parameters_json_schema=schema)
+        params = ModelRequestParameters(output_mode='tool', output_tools=[tool])
+        model = ClaudeSDKModel()
+        assert model._extract_output_schema(params) == schema
+
+    def test_extract_output_schema_native_mode(self):
+        """Extracts schema from output_object when output_mode='native'."""
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.output import OutputObjectDefinition
+
+        schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+        obj_def = OutputObjectDefinition(json_schema=schema)
+        params = ModelRequestParameters(output_mode='native', output_object=obj_def)
+        model = ClaudeSDKModel()
+        assert model._extract_output_schema(params) == schema
+
+    def test_extract_output_schema_no_schema_available(self):
+        """Returns None when mode is not text but no schema is provided."""
+        from pydantic_ai.models import ModelRequestParameters
+
+        params = ModelRequestParameters(output_mode='native')
+        model = ClaudeSDKModel()
+        assert model._extract_output_schema(params) is None
+
+    async def test_request_structured_output_tool_mode(self):
+        """Tool mode returns ToolCallPart with correct tool_name and args."""
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.tools import ToolDefinition
+
+        schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        tool = ToolDefinition(name="final_result", parameters_json_schema=schema)
+        params = ModelRequestParameters(output_mode='tool', output_tools=[tool])
+
+        model = ClaudeSDKModel()
+        structured = {"query": "test", "matches": [], "patterns": [], "relations": [], "summary": ""}
+
+        with patch.object(model, '_sdk_query', new_callable=AsyncMock, return_value=structured):
+            with patch.object(model, '_convert_messages', return_value=("system", "user")):
+                response = await model.request([], None, params)
+
+        assert len(response.parts) == 1
+        part = response.parts[0]
+        assert isinstance(part, ToolCallPart)
+        assert part.tool_name == "final_result"
+        assert part.args == structured
+
+    async def test_request_structured_output_native_mode(self):
+        """Native mode returns TextPart with JSON-serialized dict."""
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.output import OutputObjectDefinition
+
+        schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+        obj_def = OutputObjectDefinition(json_schema=schema)
+        params = ModelRequestParameters(output_mode='native', output_object=obj_def)
+
+        model = ClaudeSDKModel()
+        structured = {"answer": "test answer"}
+
+        with patch.object(model, '_sdk_query', new_callable=AsyncMock, return_value=structured):
+            with patch.object(model, '_convert_messages', return_value=("system", "user")):
+                response = await model.request([], None, params)
+
+        part = response.parts[0]
+        assert isinstance(part, TextPart)
+        assert json.loads(part.content) == structured
+
+    async def test_request_text_mode_plain_text(self):
+        """Text mode still returns plain TextPart (backward compat)."""
+        from pydantic_ai.models import ModelRequestParameters
+
+        params = ModelRequestParameters(output_mode='text')
+
+        model = ClaudeSDKModel()
+
+        with patch.object(model, '_sdk_query', new_callable=AsyncMock, return_value="plain text"):
+            with patch.object(model, '_convert_messages', return_value=("system", "user")):
+                response = await model.request([], None, params)
+
+        part = response.parts[0]
+        assert isinstance(part, TextPart)
+        assert part.content == "plain text"
+
+    async def test_sdk_query_passes_output_format(self):
+        """output_format is passed to ClaudeAgentOptions when schema provided."""
+        schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+
+        mock_result = MagicMock()
+        mock_result.structured_output = {"query": "test"}
+        mock_result.result = None
+
+        # Create mock SDK module
+        mock_sdk = MagicMock()
+        mock_sdk.ResultMessage = type(mock_result)
+
+        # Mock the async generator
+        async def mock_query(prompt, options):
+            yield mock_result
+
+        mock_sdk.query = mock_query
+        mock_opts_cls = MagicMock()
+        mock_sdk.ClaudeAgentOptions = mock_opts_cls
+
+        model = ClaudeSDKModel()
+
+        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+            result = await model._sdk_query("system", "user", output_schema=schema)
+
+        # Verify output_format was passed to ClaudeAgentOptions
+        call_kwargs = mock_opts_cls.call_args
+        assert call_kwargs is not None
+        assert "output_format" in call_kwargs.kwargs
+        assert call_kwargs.kwargs["output_format"]["type"] == "json_schema"
+        assert call_kwargs.kwargs["output_format"]["schema"] == schema
+        # Verify structured_output was returned
+        assert result == {"query": "test"}
+
+    async def test_sdk_query_structured_output_fallback(self):
+        """Falls back to result text when structured_output is None."""
+        schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+
+        mock_result = MagicMock()
+        mock_result.structured_output = None
+        mock_result.result = '{"query": "fallback"}'
+
+        mock_sdk = MagicMock()
+        mock_sdk.ResultMessage = type(mock_result)
+
+        async def mock_query(prompt, options):
+            yield mock_result
+
+        mock_sdk.query = mock_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        model = ClaudeSDKModel()
+
+        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+            result = await model._sdk_query("system", "user", output_schema=schema)
+
+        assert isinstance(result, str)
+        assert result == '{"query": "fallback"}'
+
+    async def test_sdk_query_no_schema_returns_text(self):
+        """Without schema, _sdk_query returns plain text as before."""
+        mock_result = MagicMock()
+        mock_result.result = "plain text response"
+
+        mock_sdk = MagicMock()
+        mock_sdk.ResultMessage = type(mock_result)
+
+        async def mock_query(prompt, options):
+            yield mock_result
+
+        mock_sdk.query = mock_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        model = ClaudeSDKModel()
+
+        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+            result = await model._sdk_query("system", "user")
+
+        assert isinstance(result, str)
+        assert result == "plain text response"
+
+    async def test_request_structured_dict_fallback_to_text(self):
+        """Dict response with empty output_tools falls back to TextPart with JSON."""
+        from pydantic_ai.models import ModelRequestParameters
+
+        params = ModelRequestParameters(output_mode='tool', output_tools=[])
+
+        model = ClaudeSDKModel()
+        structured = {"query": "test"}
+
+        with patch.object(model, '_sdk_query', new_callable=AsyncMock, return_value=structured):
+            with patch.object(model, '_convert_messages', return_value=("system", "user")):
+                response = await model.request([], None, params)
+
+        part = response.parts[0]
+        assert isinstance(part, TextPart)
+        assert json.loads(part.content) == structured

@@ -4,6 +4,7 @@ Routes LLM calls through Claude CLI subprocess using OAuth subscription auth.
 The CLI handles tool execution via the service MCP server.
 """
 
+import json
 import logging
 import os
 import re
@@ -15,6 +16,7 @@ from pydantic_ai.messages import (
     ModelResponse as MsgResponse,
     SystemPromptPart,
     TextPart,
+    ToolCallPart,
     UserPromptPart,
     ToolReturnPart,
 )
@@ -70,11 +72,35 @@ class ClaudeSDKModel(Model):
     ) -> ModelResponse:
         """Send messages to Claude via the SDK."""
         system_prompt, user_prompt = self._convert_messages(messages)
+        output_schema = self._extract_output_schema(model_request_parameters)
 
-        response_text = await self._sdk_query(system_prompt, user_prompt)
+        response_data = await self._sdk_query(
+            system_prompt, user_prompt, output_schema
+        )
+
+        # Build response parts based on output mode and response type
+        parts: list = []
+
+        if isinstance(response_data, dict):
+            # Structured output returned — format based on output mode
+            if (model_request_parameters.output_mode == 'tool'
+                    and model_request_parameters.output_tools):
+                # Tool mode: return as a tool call that pydantic-ai will intercept
+                tool_def = model_request_parameters.output_tools[0]
+                parts.append(ToolCallPart(
+                    tool_name=tool_def.name,
+                    args=response_data,
+                    tool_call_id=f"sdk-{id(response_data):x}",
+                ))
+            else:
+                # Native/prompted mode: return JSON string
+                parts.append(TextPart(content=json.dumps(response_data)))
+        else:
+            # Plain text response (text mode or fallback)
+            parts.append(TextPart(content=response_data))
 
         return ModelResponse(
-            parts=[TextPart(content=response_text)],
+            parts=parts,
             model_name=self.model_name,
             usage=RequestUsage(),
         )
@@ -108,9 +134,33 @@ class ClaudeSDKModel(Model):
 
         return system_prompt, user_prompt
 
+    def _extract_output_schema(
+        self, model_request_parameters: ModelRequestParameters
+    ) -> dict | None:
+        """Extract JSON schema for structured output from model request parameters.
+
+        Returns the schema dict if structured output is requested, None for text mode.
+        Handles both tool mode (schema in output_tools) and native mode (schema in output_object).
+        """
+        if model_request_parameters.output_mode == 'text':
+            return None
+
+        # Prefer output_object (native/prompted mode)
+        if model_request_parameters.output_object is not None:
+            schema = model_request_parameters.output_object.json_schema
+            if schema:
+                return schema
+
+        # Fall back to output_tools (tool mode)
+        if model_request_parameters.output_tools:
+            return model_request_parameters.output_tools[0].parameters_json_schema
+
+        return None
+
     async def _sdk_query(
-        self, system_prompt: str, user_prompt: str
-    ) -> str:
+        self, system_prompt: str, user_prompt: str,
+        output_schema: dict | None = None,
+    ) -> str | dict:
         """Execute a query via claude-agent-sdk async API.
 
         Important: The SDK's async generator uses anyio task groups internally.
@@ -148,18 +198,24 @@ class ClaudeSDKModel(Model):
             mcp_servers = {self._mcp_server_name: self._mcp_config}
             allowed_tools = [f"mcp__{self._mcp_server_name}__*"]
 
-        options = ClaudeAgentOptions(
-            model=self._model_id,
-            system_prompt=system_prompt or "You are a helpful AI assistant.",
-            mcp_servers=mcp_servers,
-            allowed_tools=allowed_tools,
-        )
+        options_kwargs: dict = {
+            "model": self._model_id,
+            "system_prompt": system_prompt or "You are a helpful AI assistant.",
+            "mcp_servers": mcp_servers,
+            "allowed_tools": allowed_tools,
+        }
+        if output_schema:
+            options_kwargs["output_format"] = {
+                "type": "json_schema",
+                "schema": output_schema,
+            }
+        options = ClaudeAgentOptions(**options_kwargs)
 
         # Temporarily unset CLAUDECODE to allow SDK subprocess when running
         # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
         saved_claudecode = os.environ.pop("CLAUDECODE", None)
         try:
-            result = ""
+            result: str | dict = ""
             # Use asyncio.timeout (same task) instead of asyncio.wait_for
             # (new task) to avoid anyio cancel scope task boundary conflicts.
             async with asyncio.timeout(self._timeout):
@@ -170,7 +226,11 @@ class ClaudeSDKModel(Model):
                     prompt=user_prompt, options=options
                 ):
                     if isinstance(message, ResultMessage):
-                        result = message.result or ""
+                        # Prefer structured_output when we requested it
+                        if output_schema and message.structured_output is not None:
+                            result = message.structured_output
+                        else:
+                            result = message.result or ""
             return result
         except TimeoutError:
             logger.error(
