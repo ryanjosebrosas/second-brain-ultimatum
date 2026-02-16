@@ -46,5 +46,6 @@ def get_model(config: BrainConfig) -> Model:
     except Exception as e:
         logger.error(f"Fallback model also unavailable: {e}")
         raise RuntimeError(
-            "No LLM available. Set ANTHROPIC_API_KEY or start Ollama."
+            "No LLM available. Set ANTHROPIC_API_KEY, enable USE_SUBSCRIPTION=true "
+            "(requires claude CLI), or start Ollama."
         ) from e

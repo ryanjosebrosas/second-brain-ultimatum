@@ -28,6 +28,18 @@ class BrainConfig(BaseSettings):
         description="Default Ollama model",
     )
 
+    # Subscription auth (Claude Pro/Max)
+    use_subscription: bool = Field(
+        default=False,
+        description="Use Claude subscription (OAuth) instead of API key. "
+        "Requires claude CLI installed and authenticated.",
+    )
+    claude_oauth_token: str | None = Field(
+        default=None,
+        description="OAuth token override. If not set, reads from credential store.",
+        repr=False,
+    )
+
     # Mem0
     mem0_api_key: str | None = Field(
         default=None,
@@ -154,6 +166,18 @@ class BrainConfig(BaseSettings):
                 raise ValueError(
                     "graphiti_enabled=True requires at least one of: "
                     "NEO4J_URL or FALKORDB_URL"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_subscription_config(self) -> "BrainConfig":
+        if self.use_subscription:
+            # Warn if API key is also set (subscription takes priority)
+            if self.anthropic_api_key:
+                import logging
+                logging.getLogger(__name__).info(
+                    "Both API key and subscription auth configured. "
+                    "Subscription auth takes priority when USE_SUBSCRIPTION=true."
                 )
         return self
 
