@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 from second_brain.deps import BrainDeps
 from second_brain.schemas import LearnResult
 
+# NOTE: When using ClaudeSDKModel (subscription auth), Pydantic AI tools
+# are NOT called. Instead, the SDK process calls service MCP tools directly.
+# The agent instructions and output schema validation still apply.
 learn_agent = Agent(
     deps_type=BrainDeps,
     output_type=LearnResult,

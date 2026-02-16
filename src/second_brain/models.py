@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def get_model(config: BrainConfig) -> Model:
     """Get the best available LLM model with fallback.
 
-    Tries: Anthropic Claude -> Ollama (local)
+    Tries: Anthropic Claude (API key) -> Claude SDK (subscription) -> Ollama (local)
     """
     # Try primary model (Anthropic Claude) — only if API key is set
     if config.anthropic_api_key:
@@ -28,6 +28,20 @@ def get_model(config: BrainConfig) -> Model:
             logger.warning(f"Primary model unavailable: {e}")
     else:
         logger.info("No Anthropic API key set, skipping primary model")
+
+    # Try subscription auth (Claude SDK via OAuth token)
+    if config.use_subscription:
+        try:
+            from second_brain.models_sdk import create_sdk_model
+
+            sdk_model = create_sdk_model(config)
+            if sdk_model:
+                logger.info("Using subscription model: %s", sdk_model.model_name)
+                return sdk_model
+            else:
+                logger.info("Subscription auth not available, trying fallback")
+        except Exception as e:
+            logger.warning("SDK model creation failed: %s", e)
 
     # Try fallback (Ollama via OpenAI-compatible API)
     try:

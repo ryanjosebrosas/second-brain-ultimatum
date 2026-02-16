@@ -9,6 +9,9 @@ from second_brain.schemas import AskResult
 
 logger = logging.getLogger(__name__)
 
+# NOTE: When using ClaudeSDKModel (subscription auth), Pydantic AI tools
+# are NOT called. Instead, the SDK process calls service MCP tools directly.
+# The agent instructions and output schema validation still apply.
 ask_agent = Agent(
     deps_type=BrainDeps,
     output_type=AskResult,

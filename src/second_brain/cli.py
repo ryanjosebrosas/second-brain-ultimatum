@@ -28,10 +28,14 @@ def _validate_input(text: str, max_length: int = 10000, label: str = "input") ->
 
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
-def cli(verbose: bool):
+@click.option("--subscription", "-s", is_flag=True, help="Use Claude subscription auth (overrides config)")
+def cli(verbose: bool, subscription: bool):
     """AI Second Brain — Your intelligent business companion."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
+    if subscription:
+        import os
+        os.environ["USE_SUBSCRIPTION"] = "true"
 
 
 @cli.command()
