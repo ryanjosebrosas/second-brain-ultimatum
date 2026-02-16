@@ -189,3 +189,144 @@ class TestGraphitiServiceClose:
         from second_brain.services.graphiti import GraphitiService
         service = GraphitiService(graphiti_config)
         await service.close()  # Should not raise
+
+
+class TestGraphitiServiceFallback:
+    """Test Neo4j → FalkorDB fallback behavior."""
+
+    @patch("second_brain.services.graphiti.GraphitiService._build_providers")
+    async def test_neo4j_primary_success(self, mock_providers, graphiti_config, _mock_graphiti_core):
+        """When Neo4j connects, it should be used as backend."""
+        mock_providers.return_value = (MagicMock(), MagicMock(), MagicMock())
+        mock_client = AsyncMock()
+        _mock_graphiti_core.Graphiti.return_value = mock_client
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        await service._ensure_init()
+        assert service._initialized is True
+        assert service._backend == "neo4j"
+
+    @patch("second_brain.services.graphiti.GraphitiService._build_providers")
+    async def test_fallback_to_falkordb(self, mock_providers, tmp_path, _mock_graphiti_core):
+        """When Neo4j fails, should fall back to FalkorDB."""
+        mock_providers.return_value = (MagicMock(), MagicMock(), MagicMock())
+        # First call (Neo4j) fails, second call (FalkorDB) succeeds
+        mock_client_falkor = AsyncMock()
+        _mock_graphiti_core.Graphiti.side_effect = [
+            Exception("Neo4j connection refused"),
+            mock_client_falkor,
+        ]
+        config = BrainConfig(
+            graphiti_enabled=True,
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(config)
+        await service._ensure_init()
+        assert service._initialized is True
+        assert service._backend == "falkordb"
+        # Reset side_effect
+        _mock_graphiti_core.Graphiti.side_effect = None
+
+    @patch("second_brain.services.graphiti.GraphitiService._build_providers")
+    async def test_both_backends_fail(self, mock_providers, tmp_path, _mock_graphiti_core):
+        """When both Neo4j and FalkorDB fail, should mark init_failed."""
+        mock_providers.return_value = (MagicMock(), MagicMock(), MagicMock())
+        _mock_graphiti_core.Graphiti.side_effect = Exception("All connections refused")
+        config = BrainConfig(
+            graphiti_enabled=True,
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(config)
+        await service._ensure_init()
+        assert service._initialized is False
+        assert service._init_failed is True
+        # Reset side_effect
+        _mock_graphiti_core.Graphiti.side_effect = None
+
+    async def test_falkordb_only_config(self, tmp_path):
+        """When only falkordb_url is set, should try FalkorDB directly."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(config)
+        # Without mocking Graphiti constructor, init will fail (graphiti_core not installed)
+        # but it should NOT crash — just set _init_failed
+        await service._ensure_init()
+        assert service._init_failed is True
+
+
+class TestGraphitiServiceHealth:
+    """Test health check method."""
+
+    async def test_health_check_healthy(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._backend = "neo4j"
+        service._client = AsyncMock()
+        service._client.search = AsyncMock(return_value=[])
+        result = await service.health_check()
+        assert result["status"] == "healthy"
+        assert result["backend"] == "neo4j"
+
+    async def test_health_check_degraded(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._backend = "neo4j"
+        service._client = AsyncMock()
+        service._client.search = AsyncMock(side_effect=Exception("timeout"))
+        result = await service.health_check()
+        assert result["status"] == "degraded"
+
+    async def test_health_check_unavailable(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.health_check()
+        assert result["status"] == "unavailable"
+
+
+class TestGraphitiServiceBatch:
+    """Test batch episode add."""
+
+    async def test_add_episodes_batch_success(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        episodes = [
+            {"content": "Episode 1", "metadata": {"source": "test"}},
+            {"content": "Episode 2"},
+        ]
+        count = await service.add_episodes_batch(episodes)
+        assert count == 2
+
+    async def test_add_episodes_batch_skips_when_unavailable(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        count = await service.add_episodes_batch([{"content": "test"}])
+        assert count == 0

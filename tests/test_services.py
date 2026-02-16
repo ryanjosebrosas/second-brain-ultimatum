@@ -1459,6 +1459,34 @@ class TestStorageServiceErrorHandling:
         assert result is None
 
 
+class TestHealthServiceGraphiti:
+    """Test HealthService with Graphiti integration."""
+
+    async def test_health_without_graphiti(self, mock_deps):
+        """Health compute when Graphiti is not configured."""
+        from second_brain.services.health import HealthService
+        metrics = await HealthService().compute(mock_deps)
+        assert metrics.graphiti_status == "disabled"
+        assert metrics.graphiti_backend == "none"
+
+    async def test_health_with_graphiti_healthy(self, mock_deps_with_graphiti):
+        """Health compute when Graphiti is healthy."""
+        from second_brain.services.health import HealthService
+        metrics = await HealthService().compute(mock_deps_with_graphiti)
+        assert metrics.graphiti_status == "healthy"
+        assert metrics.graphiti_backend == "neo4j"
+
+    async def test_health_with_graphiti_error(self, mock_deps):
+        """Health compute when Graphiti health check fails."""
+        from second_brain.services.health import HealthService
+        mock_graphiti = AsyncMock()
+        mock_graphiti.health_check = AsyncMock(side_effect=Exception("connection lost"))
+        mock_deps.graphiti_service = mock_graphiti
+        metrics = await HealthService().compute(mock_deps)
+        assert metrics.graphiti_status == "unavailable"
+        assert "graphiti" in str(metrics.errors).lower()
+
+
 class TestHealthServiceErrorTracking:
     """Test HealthService error tracking."""
 

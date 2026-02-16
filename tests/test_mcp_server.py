@@ -451,6 +451,48 @@ class TestMCPInputValidation:
         assert "empty" in result.lower()
 
 
+class TestMCPGraphSearch:
+    """Test graph_search MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_search_not_enabled(self, mock_get_deps):
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+
+        from second_brain.mcp_server import graph_search
+        result = await graph_search.fn(query="test")
+        assert "not enabled" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_search_no_results(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search = AsyncMock(return_value=[])
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = mock_graphiti
+        mock_get_deps.return_value = mock_deps
+
+        from second_brain.mcp_server import graph_search
+        result = await graph_search.fn(query="unknown")
+        assert "no graph relationships" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_search_returns_relationships(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search = AsyncMock(return_value=[
+            {"source": "Pattern A", "relationship": "relates_to", "target": "Topic B"},
+        ])
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = mock_graphiti
+        mock_get_deps.return_value = mock_deps
+
+        from second_brain.mcp_server import graph_search
+        result = await graph_search.fn(query="patterns")
+        assert "Pattern A" in result
+        assert "relates_to" in result
+        assert "Topic B" in result
+
+
 class TestConsolidateBrain:
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")

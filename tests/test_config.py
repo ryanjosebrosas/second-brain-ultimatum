@@ -18,6 +18,7 @@ _ENV_VARS = [
     "GRAPH_SEARCH_LIMIT", "PATTERN_CONTEXT_LIMIT", "EXPERIENCE_LIMIT",
     "GRADUATION_MIN_MEMORIES", "GRADUATION_LOOKBACK_DAYS",
     "CONTENT_PREVIEW_LIMIT", "PATTERN_PREVIEW_LIMIT",
+    "GRAPHITI_ENABLED", "FALKORDB_URL", "FALKORDB_PASSWORD",
 ]
 
 
@@ -390,3 +391,85 @@ class TestBrainDepsRegistry:
             r2 = deps.get_content_type_registry()
             assert r1 is r2  # Same instance (cached)
             mock_reg.assert_called_once()  # Only created once
+
+
+class TestGraphitiConfig:
+    """Test graphiti_enabled config validation."""
+
+    def test_graphiti_enabled_with_neo4j(self, tmp_path):
+        """graphiti_enabled=True with neo4j_url should pass."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.graphiti_enabled is True
+
+    def test_graphiti_enabled_with_falkordb(self, tmp_path):
+        """graphiti_enabled=True with falkordb_url should pass."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.graphiti_enabled is True
+        assert config.falkordb_url == "falkor://localhost:6379"
+
+    def test_graphiti_enabled_with_both_backends(self, tmp_path):
+        """graphiti_enabled=True with both URLs for fallback."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.neo4j_url is not None
+        assert config.falkordb_url is not None
+
+    def test_graphiti_enabled_without_any_backend_fails(self, tmp_path):
+        """graphiti_enabled=True without neo4j or falkordb should fail."""
+        with pytest.raises(ValueError, match="graphiti_enabled=True requires"):
+            BrainConfig(
+                graphiti_enabled=True,
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                _env_file=None,
+            )
+
+    def test_graphiti_disabled_by_default(self, tmp_path):
+        """graphiti_enabled defaults to False."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.graphiti_enabled is False
+        assert config.falkordb_url is None
+
+    def test_falkordb_password_not_in_repr(self, tmp_path):
+        """falkordb_password should be hidden in repr."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            falkordb_url="falkor://localhost:6379",
+            falkordb_password="secret",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert "secret" not in repr(config)

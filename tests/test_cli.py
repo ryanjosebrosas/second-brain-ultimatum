@@ -412,6 +412,48 @@ class TestCLIInputValidation:
         assert result.exit_code != 0 or "empty" in result.output.lower()
 
 
+class TestCLIGraph:
+    """Test graph subcommand group."""
+
+    def test_graph_health_not_enabled(self, runner, mock_create_deps):
+        """graph health when Graphiti is not enabled."""
+        mock_create_deps.graphiti_service = None
+        result = runner.invoke(cli, ["graph", "health"])
+        assert "not enabled" in result.output.lower()
+
+    def test_graph_health_enabled(self, runner, mock_create_deps):
+        """graph health when Graphiti is healthy."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.health_check = AsyncMock(return_value={
+            "status": "healthy",
+            "backend": "neo4j",
+        })
+        mock_create_deps.graphiti_service = mock_graphiti
+        result = runner.invoke(cli, ["graph", "health"])
+        assert "healthy" in result.output
+        assert "neo4j" in result.output
+
+    def test_graph_search_no_results(self, runner, mock_create_deps):
+        """graph search with no results."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search = AsyncMock(return_value=[])
+        mock_create_deps.graphiti_service = mock_graphiti
+        result = runner.invoke(cli, ["graph", "search", "test query"])
+        assert "not enabled" in result.output.lower() or "no graph relationships" in result.output.lower()
+
+    def test_graph_search_with_results(self, runner, mock_create_deps):
+        """graph search returning relationships."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search = AsyncMock(return_value=[
+            {"source": "Alice", "relationship": "works_with", "target": "Bob"},
+        ])
+        mock_create_deps.graphiti_service = mock_graphiti
+        result = runner.invoke(cli, ["graph", "search", "team members"])
+        assert "Alice" in result.output
+        assert "works_with" in result.output
+        assert "Bob" in result.output
+
+
 class TestMigrateCommand:
     """Test migrate command."""
 

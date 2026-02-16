@@ -1014,3 +1014,28 @@ class TestMemoryGraduation:
         )
 
         assert "Tagged 2/3" in result
+
+
+class TestAgentGraphitiIntegration:
+    """Test that agents interact with Graphiti when available."""
+
+    def test_recall_agent_has_search_tool(self):
+        from second_brain.agents.recall import recall_agent
+        tools = list(recall_agent._function_toolset.tools.keys())
+        assert "search_semantic_memory" in tools
+
+    def test_review_agent_has_graph_context_tool(self):
+        from second_brain.agents.review import review_agent
+        tools = list(review_agent._function_toolset.tools.keys())
+        assert "load_graph_context" in tools
+
+    def test_learn_agent_has_store_pattern_tool(self):
+        from second_brain.agents.learn import learn_agent
+        tools = list(learn_agent._function_toolset.tools.keys())
+        assert "store_pattern" in tools
+        assert "store_experience" in tools
+
+    def test_create_agent_has_pattern_tool(self):
+        from second_brain.agents.create import create_agent
+        tools = list(create_agent._function_toolset.tools.keys())
+        assert "find_applicable_patterns" in tools
