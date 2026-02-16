@@ -373,6 +373,36 @@ class TestMCPTools:
         assert "Unknown content type" in result
         assert "linkedin" in result
 
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_default_mode(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """create_content uses type's default_mode when mode is None."""
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Test draft content",
+            content_type="linkedin",
+            mode="casual",
+            word_count=50,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_deps = MagicMock()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
+        result = await create_content.fn(prompt="Write about AI", content_type="linkedin")
+        assert "Test draft" in result
+        call_args = mock_agent.run.call_args[0][0]
+        assert "Communication mode: casual" in call_args
+
     def test_review_content_tool_exists(self):
         from second_brain.mcp_server import server
         tool_names = [t.name for t in server._tool_manager._tools.values()]
@@ -493,6 +523,51 @@ class TestMCPGraphSearch:
         assert "Topic B" in result
 
 
+class TestGraphHealth:
+    """Test graph_health MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_health_not_enabled(self, mock_get_deps):
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_health
+        result = await graph_health.fn()
+        assert "not enabled" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_health_healthy(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.health_check = AsyncMock(return_value={
+            "status": "healthy",
+            "backend": "neo4j",
+        })
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = mock_graphiti
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_health
+        result = await graph_health.fn()
+        assert "healthy" in result
+        assert "neo4j" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_graph_health_with_error(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.health_check = AsyncMock(return_value={
+            "status": "degraded",
+            "backend": "falkordb",
+            "error": "Connection timeout",
+        })
+        mock_deps = MagicMock()
+        mock_deps.graphiti_service = mock_graphiti
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_health
+        result = await graph_health.fn()
+        assert "degraded" in result
+        assert "falkordb" in result
+        assert "Connection timeout" in result
+
+
 class TestConsolidateBrain:
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
@@ -592,6 +667,39 @@ class TestGrowthReport:
         assert "Quality Metrics" in result
         assert "8.2" in result
         assert "improving" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.services.health.HealthService")
+    async def test_growth_report_with_stale_patterns(self, mock_hs_cls, mock_deps_fn):
+        from second_brain.mcp_server import growth_report
+        mock_metrics = HealthMetrics(
+            memory_count=50, total_patterns=10, high_confidence=3,
+            medium_confidence=5, low_confidence=2, experience_count=8,
+            graph_provider="none", latest_update="2026-02-15", status="GROWING",
+            stale_patterns=["Old Pattern", "Forgotten Rule"],
+        )
+        mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        mock_deps_fn.return_value = MagicMock()
+        result = await growth_report.fn(days=30)
+        assert "Stale Patterns" in result
+        assert "Old Pattern" in result
+        assert "Forgotten Rule" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.services.health.HealthService")
+    async def test_growth_report_with_topics(self, mock_hs_cls, mock_deps_fn):
+        from second_brain.mcp_server import growth_report
+        mock_metrics = HealthMetrics(
+            memory_count=50, total_patterns=10, high_confidence=3,
+            medium_confidence=5, low_confidence=2, experience_count=8,
+            graph_provider="none", latest_update="2026-02-15", status="GROWING",
+            topics={"Content": 5, "Messaging": 3},
+        )
+        mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        mock_deps_fn.return_value = MagicMock()
+        result = await growth_report.fn(days=30)
+        assert "Content" in result
+        assert "Messaging" in result
 
 
 class TestListContentTypes:

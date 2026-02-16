@@ -1,6 +1,10 @@
+import logging
 from pathlib import Path
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class BrainConfig(BaseSettings):
@@ -174,8 +178,7 @@ class BrainConfig(BaseSettings):
         if self.use_subscription:
             # Warn if API key is also set (subscription takes priority)
             if self.anthropic_api_key:
-                import logging
-                logging.getLogger(__name__).info(
+                logger.info(
                     "Both API key and subscription auth configured. "
                     "Subscription auth takes priority when USE_SUBSCRIPTION=true."
                 )

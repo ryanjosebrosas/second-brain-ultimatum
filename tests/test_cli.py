@@ -52,6 +52,29 @@ class TestCLIBasic:
         result = runner.invoke(cli, ["--verbose", "--help"])
         assert result.exit_code == 0
 
+    @patch("second_brain.services.health.HealthService")
+    def test_subscription_flag_sets_env(self, mock_hs, runner, mock_create_deps, monkeypatch):
+        """--subscription flag sets USE_SUBSCRIPTION env var."""
+        import os
+        monkeypatch.delenv("USE_SUBSCRIPTION", raising=False)
+        mock_metrics = MagicMock()
+        mock_metrics.memory_count = 0
+        mock_metrics.total_patterns = 0
+        mock_metrics.high_confidence = 0
+        mock_metrics.medium_confidence = 0
+        mock_metrics.low_confidence = 0
+        mock_metrics.experience_count = 0
+        mock_metrics.graph_provider = "none"
+        mock_metrics.latest_update = "none"
+        mock_metrics.topics = {}
+        mock_metrics.status = "BUILDING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_hs.return_value.compute = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["--subscription", "health"])
+        assert result.exit_code == 0
+        assert os.environ.get("USE_SUBSCRIPTION") == "true"
+        monkeypatch.delenv("USE_SUBSCRIPTION", raising=False)
+
 
 class TestRecallCommand:
     """Test recall command."""
@@ -70,6 +93,36 @@ class TestRecallCommand:
         result = runner.invoke(cli, ["recall", "test query"])
         assert result.exit_code == 0
         assert "Recall" in result.output
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.recall.recall_agent")
+    def test_recall_with_populated_output(self, mock_agent, mock_model, runner, mock_create_deps):
+        """recall command formats matches, patterns, and relations."""
+        mock_model.return_value = MagicMock()
+        mock_match = MagicMock()
+        mock_match.relevance = "HIGH"
+        mock_match.content = "Use compelling hooks"
+        mock_match.source = "content-patterns.md"
+        mock_relation = MagicMock()
+        mock_relation.source = "LinkedIn"
+        mock_relation.relationship = "uses"
+        mock_relation.target = "hooks"
+        mock_output = MagicMock()
+        mock_output.query = "hooks"
+        mock_output.matches = [mock_match]
+        mock_output.patterns = ["Hook First", "Short > Structured"]
+        mock_output.relations = [mock_relation]
+        mock_output.summary = "Found hook patterns"
+        mock_agent.run = AsyncMock(return_value=MagicMock(output=mock_output))
+        result = runner.invoke(cli, ["recall", "hooks"])
+        assert result.exit_code == 0
+        assert "Matches" in result.output
+        assert "Use compelling hooks" in result.output
+        assert "content-patterns.md" in result.output
+        assert "Hook First" in result.output
+        assert "Graph Relationships" in result.output
+        assert "LinkedIn" in result.output
+        assert "uses" in result.output
 
     def test_recall_missing_query(self, runner):
         result = runner.invoke(cli, ["recall"])
@@ -121,6 +174,36 @@ class TestLearnCommand:
         assert result.exit_code == 0
         assert "Learn" in result.output
 
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.learn.learn_agent")
+    def test_learn_with_patterns_output(self, mock_agent, mock_model, runner, mock_create_deps):
+        """learn command formats extracted patterns with details."""
+        mock_model.return_value = MagicMock()
+        mock_pattern = MagicMock()
+        mock_pattern.confidence = "MEDIUM"
+        mock_pattern.name = "Hook First"
+        mock_pattern.is_reinforcement = False
+        mock_pattern.pattern_text = "Always start with a compelling hook that grabs attention"
+        mock_pattern.anti_patterns = ["Starting with a question", "Generic openings"]
+        mock_output = MagicMock()
+        mock_output.input_summary = "Content writing session"
+        mock_output.patterns_extracted = [mock_pattern]
+        mock_output.insights = ["Hooks outperform questions"]
+        mock_output.experience_recorded = True
+        mock_output.experience_category = "content"
+        mock_output.patterns_new = 1
+        mock_output.patterns_reinforced = 0
+        mock_output.storage_summary = "1 pattern stored"
+        mock_agent.run = AsyncMock(return_value=MagicMock(output=mock_output))
+        result = runner.invoke(cli, ["learn", "Today I learned about hooks"])
+        assert result.exit_code == 0
+        assert "Hook First" in result.output
+        assert "(new)" in result.output
+        assert "MEDIUM" in result.output
+        assert "Anti:" in result.output
+        assert "Starting with a question" in result.output
+        assert "Insights" in result.output
+
     def test_learn_missing_content(self, runner):
         result = runner.invoke(cli, ["learn"])
         assert result.exit_code != 0
@@ -164,6 +247,34 @@ class TestCreateCommand:
         assert result.exit_code == 0
         assert "Draft" in result.output
 
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.create.create_agent")
+    def test_create_with_mode_override(self, mock_agent, mock_model, runner, mock_create_deps):
+        """create command passes --mode override to agent prompt."""
+        mock_model.return_value = MagicMock()
+        type_config = MagicMock()
+        type_config.name = "LinkedIn Post"
+        type_config.default_mode = "casual"
+        type_config.structure_hint = "Hook -> Body -> CTA"
+        type_config.max_words = 300
+        registry = mock_create_deps.get_content_type_registry()
+        registry.get = AsyncMock(return_value=type_config)
+        mock_output = MagicMock()
+        mock_output.content_type = "linkedin"
+        mock_output.mode = "formal"
+        mock_output.draft = "Draft content here"
+        mock_output.word_count = 80
+        mock_output.voice_elements = []
+        mock_output.patterns_applied = []
+        mock_output.examples_referenced = []
+        mock_output.notes = None
+        mock_agent.run = AsyncMock(return_value=MagicMock(output=mock_output))
+        result = runner.invoke(cli, ["create", "Write about AI", "--mode", "formal"])
+        assert result.exit_code == 0
+        call_args = mock_agent.run.call_args
+        prompt = call_args[0][0]
+        assert "Communication mode: formal" in prompt
+
 
 class TestReviewCommand:
     """Test review command."""
@@ -184,6 +295,26 @@ class TestReviewCommand:
         result = runner.invoke(cli, ["review", "Test content"])
         assert result.exit_code == 0
         assert "Review" in result.output
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.review.run_full_review")
+    def test_review_with_type_flag(self, mock_review, mock_model, runner, mock_create_deps):
+        """review command passes --type flag to run_full_review."""
+        mock_model.return_value = MagicMock()
+        mock_result = MagicMock()
+        mock_result.overall_score = 7.5
+        mock_result.verdict = "NEEDS REVISION"
+        mock_result.summary = "Good but needs work"
+        mock_result.scores = []
+        mock_result.top_strengths = []
+        mock_result.critical_issues = []
+        mock_result.next_steps = []
+        mock_review.return_value = mock_result
+        result = runner.invoke(cli, ["review", "Test content", "--type", "email"])
+        assert result.exit_code == 0
+        mock_review.assert_called_once()
+        call_args = mock_review.call_args[0]
+        assert call_args[3] == "email"
 
 
 class TestExamplesCommand:
@@ -265,6 +396,48 @@ class TestHealthCommand:
         assert "Memories: 42" in result.output
         assert "Patterns: 5" in result.output
 
+    @patch("second_brain.services.health.HealthService")
+    def test_health_with_graphiti_enabled(self, mock_hs, runner, mock_create_deps):
+        """health command shows Graphiti status when not disabled."""
+        mock_metrics = MagicMock()
+        mock_metrics.memory_count = 42
+        mock_metrics.total_patterns = 5
+        mock_metrics.high_confidence = 2
+        mock_metrics.medium_confidence = 2
+        mock_metrics.low_confidence = 1
+        mock_metrics.experience_count = 3
+        mock_metrics.graph_provider = "none"
+        mock_metrics.latest_update = "2026-02-15"
+        mock_metrics.topics = {}
+        mock_metrics.status = "BUILDING"
+        mock_metrics.graphiti_status = "healthy"
+        mock_metrics.graphiti_backend = "neo4j"
+        mock_hs.return_value.compute = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["health"])
+        assert result.exit_code == 0
+        assert "Graphiti: healthy" in result.output
+        assert "neo4j" in result.output
+
+    @patch("second_brain.services.health.HealthService")
+    def test_health_no_topics(self, mock_hs, runner, mock_create_deps):
+        """health command skips topics section when topics is empty."""
+        mock_metrics = MagicMock()
+        mock_metrics.memory_count = 10
+        mock_metrics.total_patterns = 2
+        mock_metrics.high_confidence = 1
+        mock_metrics.medium_confidence = 1
+        mock_metrics.low_confidence = 0
+        mock_metrics.experience_count = 1
+        mock_metrics.graph_provider = "none"
+        mock_metrics.latest_update = "2026-02-15"
+        mock_metrics.topics = {}
+        mock_metrics.status = "BUILDING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_hs.return_value.compute = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["health"])
+        assert result.exit_code == 0
+        assert "Patterns by Topic" not in result.output
+
 
 class TestGrowthCommand:
     """Test growth command."""
@@ -289,6 +462,100 @@ class TestGrowthCommand:
         assert result.exit_code == 0
         assert "Growth Report" in result.output
         assert "GROWING" in result.output
+
+    @patch("second_brain.services.health.HealthService")
+    def test_growth_with_reviews(self, mock_hs, runner, mock_create_deps):
+        """growth command shows quality metrics when reviews exist."""
+        mock_metrics = MagicMock()
+        mock_metrics.status = "GROWING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_metrics.total_patterns = 10
+        mock_metrics.high_confidence = 3
+        mock_metrics.medium_confidence = 5
+        mock_metrics.low_confidence = 2
+        mock_metrics.growth_events_total = 15
+        mock_metrics.patterns_created_period = 5
+        mock_metrics.patterns_reinforced_period = 8
+        mock_metrics.confidence_upgrades_period = 2
+        mock_metrics.reviews_completed_period = 4
+        mock_metrics.avg_review_score = 8.2
+        mock_metrics.review_score_trend = "improving"
+        mock_metrics.stale_patterns = []
+        mock_metrics.topics = {}
+        mock_hs.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["growth"])
+        assert result.exit_code == 0
+        assert "Quality Metrics" in result.output
+        assert "8.2" in result.output
+        assert "improving" in result.output
+
+    @patch("second_brain.services.health.HealthService")
+    def test_growth_with_stale_patterns(self, mock_hs, runner, mock_create_deps):
+        """growth command shows stale patterns when present."""
+        mock_metrics = MagicMock()
+        mock_metrics.status = "GROWING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_metrics.total_patterns = 10
+        mock_metrics.high_confidence = 3
+        mock_metrics.medium_confidence = 5
+        mock_metrics.low_confidence = 2
+        mock_metrics.growth_events_total = 15
+        mock_metrics.patterns_created_period = 5
+        mock_metrics.patterns_reinforced_period = 8
+        mock_metrics.confidence_upgrades_period = 2
+        mock_metrics.reviews_completed_period = 0
+        mock_metrics.stale_patterns = ["Old Pattern", "Forgotten Rule"]
+        mock_metrics.topics = {}
+        mock_hs.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["growth"])
+        assert result.exit_code == 0
+        assert "Stale Patterns" in result.output
+        assert "Old Pattern" in result.output
+
+    @patch("second_brain.services.health.HealthService")
+    def test_growth_custom_days(self, mock_hs, runner, mock_create_deps):
+        """growth command accepts --days option."""
+        mock_metrics = MagicMock()
+        mock_metrics.status = "BUILDING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_metrics.total_patterns = 5
+        mock_metrics.high_confidence = 1
+        mock_metrics.medium_confidence = 2
+        mock_metrics.low_confidence = 2
+        mock_metrics.growth_events_total = 3
+        mock_metrics.patterns_created_period = 2
+        mock_metrics.patterns_reinforced_period = 1
+        mock_metrics.confidence_upgrades_period = 0
+        mock_metrics.reviews_completed_period = 0
+        mock_metrics.stale_patterns = []
+        mock_metrics.topics = {}
+        mock_hs.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["growth", "--days", "7"])
+        assert result.exit_code == 0
+        assert "Growth Report (7 days)" in result.output
+
+    @patch("second_brain.services.health.HealthService")
+    def test_growth_with_topics(self, mock_hs, runner, mock_create_deps):
+        """growth command shows topics breakdown."""
+        mock_metrics = MagicMock()
+        mock_metrics.status = "GROWING"
+        mock_metrics.graphiti_status = "disabled"
+        mock_metrics.total_patterns = 10
+        mock_metrics.high_confidence = 3
+        mock_metrics.medium_confidence = 5
+        mock_metrics.low_confidence = 2
+        mock_metrics.growth_events_total = 15
+        mock_metrics.patterns_created_period = 5
+        mock_metrics.patterns_reinforced_period = 8
+        mock_metrics.confidence_upgrades_period = 2
+        mock_metrics.reviews_completed_period = 0
+        mock_metrics.stale_patterns = []
+        mock_metrics.topics = {"content": 5, "messaging": 3}
+        mock_hs.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
+        result = runner.invoke(cli, ["growth"])
+        assert result.exit_code == 0
+        assert "content: 5" in result.output
+        assert "messaging: 3" in result.output
 
 
 class TestConsolidateCommand:

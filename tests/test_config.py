@@ -351,6 +351,62 @@ class TestCreateDeps:
             assert deps.graphiti_service is None  # Graceful degradation
 
 
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_graphiti_enabled_flag(self, mock_mem, mock_storage, tmp_path):
+        """create_deps with graphiti_enabled=True (independent of graph_provider)."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        with patch("second_brain.services.graphiti.GraphitiService") as mock_graphiti:
+            mock_graphiti.return_value = MagicMock()
+            from second_brain.deps import create_deps
+            deps = create_deps(config=config)
+            assert deps.graphiti_service is not None
+            mock_graphiti.assert_called_once_with(config)
+
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_graphiti_enabled_import_error(self, mock_mem, mock_storage, tmp_path):
+        """create_deps gracefully handles missing graphiti when enabled."""
+        config = BrainConfig(
+            graphiti_enabled=True,
+            falkordb_url="falkor://localhost:6379",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        with patch("second_brain.services.graphiti.GraphitiService", side_effect=ImportError):
+            from second_brain.deps import create_deps
+            deps = create_deps(config=config)
+            assert deps.graphiti_service is None
+
+    @patch("second_brain.services.storage.StorageService")
+    @patch("second_brain.services.memory.MemoryService")
+    def test_create_deps_default_config(self, mock_mem, mock_storage, tmp_path, monkeypatch):
+        """create_deps() with no config arg creates BrainConfig from env."""
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        with patch("second_brain.deps.BrainConfig") as mock_config_cls:
+            mock_config_cls.return_value = BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                _env_file=None,
+            )
+            from second_brain.deps import create_deps
+            deps = create_deps()
+            mock_config_cls.assert_called_once()
+            assert deps.config is not None
+
+
 class TestBrainDepsRegistry:
     """Test get_content_type_registry lazy initialization."""
 

@@ -13,6 +13,8 @@ if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
 from second_brain.deps import BrainDeps, create_deps
 from second_brain.models import get_model
 
+logger = logging.getLogger(__name__)
+
 
 def _validate_input(text: str, max_length: int = 10000, label: str = "input") -> str:
     """Validate and sanitize CLI text input."""

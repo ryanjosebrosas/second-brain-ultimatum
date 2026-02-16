@@ -5,8 +5,12 @@ Run: python -m second_brain.mcp_server
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 from fastmcp import FastMCP
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
 
 from second_brain.deps import BrainDeps, create_deps
 from second_brain.models import get_model
@@ -48,7 +52,7 @@ def _get_deps() -> BrainDeps:
     return _deps
 
 
-def _get_model():
+def _get_model() -> "Model | None":
     _get_deps()  # ensure initialized
     return _model
 
@@ -408,6 +412,26 @@ async def graph_search(query: str, limit: int = 10) -> str:
         tgt = rel.get("target", "?")
         parts.append(f"- {src} --[{relationship}]--> {tgt}")
     parts.append(f"\nFound {len(results)} relationship(s)")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def graph_health() -> str:
+    """Check the health and connectivity of the Graphiti knowledge graph backend.
+    Returns status, backend type, and any errors.
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Graphiti is not enabled. Set GRAPHITI_ENABLED=true in your .env file."
+
+    health = await deps.graphiti_service.health_check()
+    parts = [
+        "# Graph Health\n",
+        f"Status: {health.get('status', 'unknown')}",
+        f"Backend: {health.get('backend', 'none')}",
+    ]
+    if health.get("error"):
+        parts.append(f"Error: {health['error']}")
     return "\n".join(parts)
 
 
