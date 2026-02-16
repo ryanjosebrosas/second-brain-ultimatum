@@ -6,7 +6,7 @@ Second Brain is an AI-powered writing system built on 5 specialized agents that 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-361%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-411%20passing-brightgreen.svg)]()
 
 ---
 
@@ -279,8 +279,9 @@ graph TD
     end
 
     subgraph "LLM Layer"
-        CLAUDE["Anthropic Claude<br/><i>primary</i>"]
-        OLLAMA["Ollama<br/><i>fallback</i>"]
+        CLAUDE["Anthropic Claude<br/><i>API primary</i>"]
+        SDK["Claude SDK<br/><i>subscription</i>"]
+        OLLAMA["Ollama<br/><i>local fallback</i>"]
     end
 
     CLI --> RA & AA & LA & CA & RV
@@ -295,11 +296,13 @@ graph TD
     HS --> SS & MS & GS
 
     RA & AA & LA & CA & RV -.-> CLAUDE
+    RA & AA & LA & CA & RV -.-> SDK
     RA & AA & LA & CA & RV -.-> OLLAMA
 
     style CLI fill:#4a90d9,color:#fff
     style MCP fill:#4a90d9,color:#fff
     style CLAUDE fill:#8e44ad,color:#fff
+    style SDK fill:#6c3483,color:#fff
     style OLLAMA fill:#8e44ad,color:#fff
     style M0 fill:#27ae60,color:#fff
     style SB fill:#27ae60,color:#fff
@@ -318,7 +321,7 @@ User ← Formatted Output ← Typed Result (Pydantic) ← Agent ← Tool Results
 
 | Layer | What | Files |
 |-------|------|-------|
-| **Config** | Loads `.env`, resolves LLM provider | `config.py`, `models.py` |
+| **Config** | Loads `.env`, resolves LLM provider, OAuth auth | `config.py`, `models.py`, `models_sdk.py`, `auth.py` |
 | **Services** | Wraps external backends with error handling | `services/memory.py`, `services/storage.py`, `services/graphiti.py`, `services/health.py` |
 | **Agents** | Pydantic AI agents with typed deps and tools | `agents/recall.py`, `agents/ask.py`, `agents/learn.py`, `agents/create.py`, `agents/review.py` |
 | **Interfaces** | CLI (Click) and MCP server (FastMCP) | `cli.py`, `mcp_server.py` |
@@ -543,17 +546,66 @@ erDiagram
 
 ## LLM Fallback Chain
 
-Second Brain tries Anthropic Claude first, then falls back to local Ollama if no API key is set or the primary model is unavailable.
+Second Brain supports three LLM backends with automatic fallback. It tries them in order until one works:
 
 ```mermaid
 graph LR
     REQ["Agent Request"] --> CHECK{"Anthropic<br/>API key set?"}
-    CHECK -->|"Yes"| CLAUDE["Claude Sonnet 4.5<br/><i>primary</i>"]
-    CHECK -->|"No"| OLLAMA["Ollama llama3.1:8b<br/><i>local fallback</i>"]
-    CLAUDE -->|"fails"| OLLAMA
+    CHECK -->|"Yes"| CLAUDE["Claude Sonnet 4.5<br/><i>API primary</i>"]
+    CHECK -->|"No"| SUB{"Subscription<br/>enabled?"}
+    CLAUDE -->|"fails"| SUB
+    SUB -->|"Yes + OAuth token"| SDK["Claude SDK<br/><i>Pro/Max subscription</i>"]
+    SUB -->|"No"| OLLAMA["Ollama<br/><i>local fallback</i>"]
+    SDK -->|"fails"| OLLAMA
 
     style CLAUDE fill:#8e44ad,color:#fff
+    style SDK fill:#6c3483,color:#fff
     style OLLAMA fill:#e67e22,color:#fff
+```
+
+| Priority | Backend | Auth | Cost |
+|----------|---------|------|------|
+| 1 | **Anthropic API** | `ANTHROPIC_API_KEY` | Pay-per-token |
+| 2 | **Claude SDK** (subscription) | Claude Pro/Max OAuth token | Included in subscription |
+| 3 | **Ollama** (local) | None | Free (local GPU) |
+
+### Using Claude Pro/Max Subscription (No API Key Needed)
+
+If you have a Claude Pro or Max subscription, you can run Second Brain without spending API credits. The Claude SDK routes LLM calls through your subscription via the Claude CLI.
+
+**Prerequisites:**
+1. Active [Claude Pro or Max](https://claude.ai/settings) subscription
+2. [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude` command works)
+3. `claude-agent-sdk` Python package
+
+**Setup:**
+
+```bash
+# 1. Install the Claude Agent SDK
+pip install claude-agent-sdk
+
+# 2. Verify Claude CLI is authenticated
+claude --version
+
+# 3. Enable subscription mode in .env
+```
+
+Add to your `.env`:
+
+```env
+USE_SUBSCRIPTION=true
+# No ANTHROPIC_API_KEY needed!
+```
+
+That's it. Second Brain will automatically detect your OAuth token from the Claude CLI credential store and route all LLM calls through your subscription.
+
+**How it works:** The `ClaudeSDKModel` wraps `claude-agent-sdk` as a Pydantic AI Model. When an agent makes an LLM call, it spawns a Claude CLI subprocess with a service MCP server that gives it access to your memory, patterns, and storage — all authenticated through your existing subscription.
+
+**CLI flag:** You can also enable subscription mode per-command:
+
+```bash
+brain -s recall "content patterns"
+brain -s create "Write a LinkedIn post" --type linkedin
 ```
 
 Both models are configurable via `.env`:
@@ -641,8 +693,8 @@ python -m second_brain.mcp_server
 
 - Python 3.11+
 - A Supabase project (free tier works)
-- An Anthropic API key (or Ollama for local inference)
 - An OpenAI API key (for Mem0 embeddings — uses `text-embedding-3-small`)
+- **One of**: Anthropic API key, Claude Pro/Max subscription, or Ollama for local inference
 
 ### Install
 
@@ -662,9 +714,12 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
 BRAIN_DATA_PATH=C:\path\to\your\markdown\data
 
-# LLM (at least one)
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...          # For Mem0 embeddings
+# LLM (pick one)
+ANTHROPIC_API_KEY=sk-ant-...   # Option A: API key (pay-per-token)
+USE_SUBSCRIPTION=true          # Option B: Claude Pro/Max (no API key needed)
+# Option C: Ollama only (no keys needed, local GPU)
+
+OPENAI_API_KEY=sk-...          # For Mem0 embeddings (always required)
 
 # Optional: Mem0 Cloud
 MEM0_API_KEY=m0-...
@@ -726,7 +781,10 @@ This reads your `BRAIN_DATA_PATH` directory and ingests content into Mem0 and Su
 src/second_brain/
 ├── __init__.py              # Package init, __version__
 ├── config.py                # BrainConfig (Pydantic Settings, loads .env)
-├── models.py                # get_model() — LLM provider factory (Claude -> Ollama)
+├── models.py                # get_model() — LLM provider factory (Claude -> SDK -> Ollama)
+├── models_sdk.py            # ClaudeSDKModel — Pydantic AI Model wrapping claude-agent-sdk
+├── auth.py                  # OAuth token reader (env, credentials file, keychain)
+├── service_mcp.py           # Service MCP server — SDK subprocess data bridge
 ├── deps.py                  # BrainDeps dataclass — injected into all agents
 ├── schemas.py               # Pydantic output models (RecallResult, CreateResult, etc.)
 ├── cli.py                   # Click CLI — 15 commands across 3 groups
@@ -745,16 +803,19 @@ src/second_brain/
     ├── graphiti.py          # GraphitiService — graph memory (Neo4j / FalkorDB)
     └── search_result.py     # SearchResult dataclass — typed Mem0 results
 
-tests/                       # 361 tests
-├── conftest.py              # Shared fixtures
+tests/                       # 411 tests
+├── conftest.py              # Shared fixtures (including subscription auth)
 ├── test_agents.py           # Agent schema + tool registration
+├── test_auth.py             # OAuth token reading + validation (20 tests)
 ├── test_cli.py              # CLI command tests
-├── test_config.py           # Config validation
+├── test_config.py           # Config validation (including subscription)
 ├── test_graph.py            # Graphiti integration tests
 ├── test_graphiti_service.py # GraphitiService unit tests
 ├── test_mcp_server.py       # MCP tool tests
 ├── test_migrate.py          # Migration tests
 ├── test_models.py           # LLM model resolution
+├── test_models_sdk.py       # ClaudeSDKModel + fallback chain (14 tests)
+├── test_service_mcp.py      # Service MCP bridge tools (11 tests)
 └── test_services.py         # MemoryService + StorageService
 
 supabase/migrations/         # 5 SQL migration files
@@ -772,11 +833,12 @@ scripts/                     # Utility scripts
 | **Structured Storage** | [Supabase](https://supabase.com/) | PostgreSQL + pgvector for patterns, experiences, metrics |
 | **Knowledge Graph** | [Graphiti](https://github.com/getzep/graphiti) | Entity extraction, graph traversal (Neo4j / FalkorDB) |
 | **Primary LLM** | Anthropic Claude | Agent reasoning and content generation |
+| **Subscription LLM** | [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) | Route LLM calls through Claude Pro/Max subscription |
 | **Fallback LLM** | Ollama | Local inference when no API key |
 | **MCP Server** | [FastMCP](https://github.com/jlowin/fastmcp) | Expose agents as Claude Code tools |
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
 | **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` file loading, validation |
-| **Testing** | pytest + pytest-asyncio | 361 tests, async support |
+| **Testing** | pytest + pytest-asyncio | 411 tests, async support |
 
 ---
 
