@@ -101,24 +101,13 @@ class ClaudeSDKModel(Model):
     async def _sdk_query(
         self, system_prompt: str, user_prompt: str
     ) -> str:
-        """Execute a query via claude-agent-sdk."""
-        import asyncio
-
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            self._sdk_query_sync,
-            system_prompt,
-            user_prompt,
-        )
-        return result
-
-    def _sdk_query_sync(
-        self, system_prompt: str, user_prompt: str
-    ) -> str:
-        """Synchronous SDK query (runs in thread pool)."""
+        """Execute a query via claude-agent-sdk async API."""
         try:
-            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+            from claude_agent_sdk import (
+                ClaudeAgentOptions,
+                ResultMessage,
+                query as sdk_query,
+            )
         except ImportError:
             raise RuntimeError(
                 "claude-agent-sdk not installed. "
@@ -130,7 +119,7 @@ class ClaudeSDKModel(Model):
             configure_subscription_env(self._oauth_token)
 
         mcp_servers = []
-        allowed_tools = []
+        allowed_tools: list[str] = []
         if self._mcp_config:
             mcp_servers = [self._mcp_config]
             server_name = self._mcp_config.get("name", "second-brain-services")
@@ -138,17 +127,16 @@ class ClaudeSDKModel(Model):
 
         options = ClaudeAgentOptions(
             model=self._model_id,
-            prompt=system_prompt or "You are a helpful AI assistant.",
+            system_prompt=system_prompt or "You are a helpful AI assistant.",
             mcp_servers=mcp_servers,
             allowed_tools=allowed_tools,
         )
 
-        client = ClaudeSDKClient(options)
-        response = client.process_message(user_prompt)
+        async for message in sdk_query(prompt=user_prompt, options=options):
+            if isinstance(message, ResultMessage):
+                return message.result or ""
 
-        if isinstance(response, str):
-            return response
-        return str(response)
+        return ""
 
 
 def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:

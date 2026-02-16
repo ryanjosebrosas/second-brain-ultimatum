@@ -366,11 +366,12 @@ async def graph_search(query: str, limit: int = 10) -> str:
 def get_service_mcp_config() -> dict:
     """Get MCP server configuration for claude-agent-sdk.
 
-    Returns a dict suitable for ClaudeAgentOptions.mcp_servers.
+    Returns a McpStdioServerConfig-compatible dict for ClaudeAgentOptions.mcp_servers.
     The SDK will spawn this as a subprocess.
     """
     import sys
     return {
+        "type": "stdio",
         "name": "second-brain-services",
         "command": sys.executable,
         "args": ["-m", "second_brain.service_mcp"],
