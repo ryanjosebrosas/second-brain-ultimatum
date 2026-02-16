@@ -35,7 +35,7 @@ class MemoryService:
             "llm": {
                 "provider": "anthropic",
                 "config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.1,
                     "max_tokens": 2000,
                     "api_key": self.config.anthropic_api_key,

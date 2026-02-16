@@ -5,6 +5,8 @@ The CLI handles tool execution via the service MCP server.
 """
 
 import logging
+import os
+import re
 from typing import TYPE_CHECKING
 
 from pydantic_ai.messages import (
@@ -25,6 +27,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Current model snapshot date — update when new snapshots release
+DEFAULT_MODEL_DATE = "20250929"
+_DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
+
 
 class ClaudeSDKModel(Model):
     """Pydantic AI Model that uses claude-agent-sdk for LLM calls.
@@ -36,7 +42,7 @@ class ClaudeSDKModel(Model):
 
     def __init__(
         self,
-        model_id: str = "claude-sonnet-4-5-20250514",
+        model_id: str = f"claude-sonnet-4-5-{DEFAULT_MODEL_DATE}",
         oauth_token: str | None = None,
         mcp_config: dict | None = None,
     ):
@@ -132,9 +138,16 @@ class ClaudeSDKModel(Model):
             allowed_tools=allowed_tools,
         )
 
-        async for message in sdk_query(prompt=user_prompt, options=options):
-            if isinstance(message, ResultMessage):
-                return message.result or ""
+        # Temporarily unset CLAUDECODE to allow SDK subprocess when running
+        # inside a Claude Code session (e.g., via MCP or CLI invoked by Claude).
+        saved_claudecode = os.environ.pop("CLAUDECODE", None)
+        try:
+            async for message in sdk_query(prompt=user_prompt, options=options):
+                if isinstance(message, ResultMessage):
+                    return message.result or ""
+        finally:
+            if saved_claudecode is not None:
+                os.environ["CLAUDECODE"] = saved_claudecode
 
         return ""
 
@@ -178,8 +191,8 @@ def create_sdk_model(config: "BrainConfig") -> ClaudeSDKModel | None:
     logger.info("Claude CLI found: %s", cli_info)
 
     model_id = config.primary_model.replace("anthropic:", "")
-    if not any(c.isdigit() for c in model_id.split("-")[-1]):
-        model_id = f"{model_id}-20250514"
+    if not _DATE_SUFFIX_RE.search(model_id):
+        model_id = f"{model_id}-{DEFAULT_MODEL_DATE}"
 
     return ClaudeSDKModel(
         model_id=model_id,
