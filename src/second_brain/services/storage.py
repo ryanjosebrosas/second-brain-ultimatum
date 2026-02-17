@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from supabase import create_client, Client
 
@@ -509,6 +509,296 @@ class StorageService:
             logger.warning("vector_search failed on %s: %s", table, type(e).__name__)
             logger.debug("vector_search error detail: %s", e)
             return []
+
+    # --- Project Lifecycle ---
+
+    async def create_project(self, project: dict) -> dict:
+        """Create a new project with lifecycle tracking."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("projects").insert(project).execute
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase create_project failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    async def get_project(self, project_id: str) -> dict | None:
+        """Get a project by ID with its artifacts."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("projects")
+                .select("*, project_artifacts(*)")
+                .eq("id", project_id)
+                .execute
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_project failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
+
+    async def list_projects(
+        self, lifecycle_stage: str | None = None, category: str | None = None, limit: int = 20
+    ) -> list[dict]:
+        """List projects with optional filtering."""
+        try:
+            query = self._client.table("projects").select("*")
+            if lifecycle_stage:
+                query = query.eq("lifecycle_stage", lifecycle_stage)
+            if category:
+                query = query.eq("category", category)
+            result = await asyncio.to_thread(
+                query.order("updated_at", desc=True).limit(limit).execute
+            )
+            return result.data if result.data else []
+        except Exception as e:
+            logger.warning("Supabase list_projects failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
+
+    async def update_project_stage(self, project_id: str, stage: str, **kwargs) -> dict:
+        """Update project lifecycle stage and optional fields."""
+        try:
+            update_data = {
+                "lifecycle_stage": stage,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            update_data.update(kwargs)
+            if stage == "complete":
+                update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+            result = await asyncio.to_thread(
+                self._client.table("projects")
+                .update(update_data)
+                .eq("id", project_id)
+                .execute
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase update_project_stage failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    async def add_project_artifact(self, artifact: dict) -> dict:
+        """Add or update an artifact for a project (upsert by project_id + artifact_type)."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("project_artifacts")
+                .upsert(artifact, on_conflict="project_id,artifact_type")
+                .execute
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase add_project_artifact failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    async def get_project_artifacts(self, project_id: str) -> list[dict]:
+        """Get all artifacts for a project."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("project_artifacts")
+                .select("*")
+                .eq("project_id", project_id)
+                .order("created_at")
+                .execute
+            )
+            return result.data if result.data else []
+        except Exception as e:
+            logger.warning("Supabase get_project_artifacts failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
+
+    # --- Pattern Registry & Downgrade ---
+
+    async def update_pattern_failures(self, pattern_id: str, reset: bool = False) -> dict:
+        """Increment or reset consecutive_failures on a pattern."""
+        try:
+            if reset:
+                update_data = {"consecutive_failures": 0}
+            else:
+                current = await asyncio.to_thread(
+                    self._client.table("patterns")
+                    .select("consecutive_failures")
+                    .eq("id", pattern_id)
+                    .execute
+                )
+                current_val = current.data[0].get("consecutive_failures", 0) if current.data else 0
+                update_data = {"consecutive_failures": current_val + 1}
+            result = await asyncio.to_thread(
+                self._client.table("patterns")
+                .update(update_data)
+                .eq("id", pattern_id)
+                .execute
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase update_pattern_failures failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    async def get_pattern_registry(self) -> list[dict]:
+        """Get all patterns formatted for registry view."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("patterns")
+                .select("name, topic, confidence, use_count, date_added, date_updated, "
+                        "consecutive_failures, applicable_content_types")
+                .order("confidence", desc=True)
+                .order("use_count", desc=True)
+                .execute
+            )
+            return result.data if result.data else []
+        except Exception as e:
+            logger.warning("Supabase get_pattern_registry failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
+
+    async def downgrade_pattern_confidence(self, pattern_id: str) -> dict:
+        """Downgrade a pattern's confidence level (HIGH->MEDIUM, MEDIUM->LOW)."""
+        try:
+            current = await asyncio.to_thread(
+                self._client.table("patterns")
+                .select("name, confidence, consecutive_failures")
+                .eq("id", pattern_id)
+                .execute
+            )
+            if not current.data:
+                return {}
+            pattern = current.data[0]
+            conf = pattern["confidence"]
+            new_conf = "MEDIUM" if conf == "HIGH" else "LOW" if conf == "MEDIUM" else "LOW"
+            if new_conf == conf:
+                return pattern  # Already at LOW, can't downgrade further
+            result = await asyncio.to_thread(
+                self._client.table("patterns")
+                .update({"confidence": new_conf, "consecutive_failures": 0})
+                .eq("id", pattern_id)
+                .execute
+            )
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase downgrade_pattern_confidence failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    # --- Quality Trending ---
+
+    async def get_quality_trending(self, days: int = 30) -> dict:
+        """Get quality metrics trending data for the specified period."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("review_history")
+                .select("*")
+                .gte("review_date", (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat())
+                .order("review_date", desc=True)
+                .execute
+            )
+            reviews = result.data if result.data else []
+            if not reviews:
+                return {"total_reviews": 0, "avg_score": 0.0, "by_dimension": {},
+                        "by_content_type": {}, "recurring_issues": [],
+                        "excellence_count": 0, "needs_work_count": 0}
+
+            scores = [r["overall_score"] for r in reviews if r.get("overall_score")]
+            avg_score = sum(scores) / len(scores) if scores else 0.0
+
+            # By content type
+            by_type: dict[str, list[float]] = {}
+            for r in reviews:
+                ct = r.get("content_type", "unknown")
+                if r.get("overall_score"):
+                    by_type.setdefault(ct, []).append(r["overall_score"])
+            by_content_type = {ct: sum(s) / len(s) for ct, s in by_type.items()}
+
+            # By dimension (from dimension_scores JSONB — handle dict or list format)
+            dim_scores: dict[str, list[float]] = {}
+            for r in reviews:
+                ds = r.get("dimension_scores") or r.get("dimension_details") or {}
+                if isinstance(ds, dict):
+                    for dim, score in ds.items():
+                        if isinstance(score, (int, float)):
+                            dim_scores.setdefault(dim, []).append(score)
+                elif isinstance(ds, list):
+                    for item in ds:
+                        if isinstance(item, dict) and "dimension" in item and "score" in item:
+                            dim_scores.setdefault(item["dimension"], []).append(item["score"])
+            by_dimension = {
+                dim: {"avg_score": sum(s) / len(s), "count": len(s)}
+                for dim, s in dim_scores.items()
+            }
+
+            # Recurring issues (from critical_issues JSONB, appearing 3+ times)
+            issue_counts: dict[str, int] = {}
+            for r in reviews:
+                issues = r.get("critical_issues") or []
+                if isinstance(issues, list):
+                    for issue in issues:
+                        issue_str = str(issue) if not isinstance(issue, str) else issue
+                        issue_counts[issue_str] = issue_counts.get(issue_str, 0) + 1
+            recurring = [issue for issue, count in issue_counts.items() if count >= 3]
+
+            excellence_count = sum(1 for s in scores if s >= 9.0)
+            needs_work_count = sum(1 for s in scores if s < 6.0)
+
+            return {
+                "total_reviews": len(reviews),
+                "avg_score": round(avg_score, 2),
+                "by_dimension": by_dimension,
+                "by_content_type": {k: round(v, 2) for k, v in by_content_type.items()},
+                "recurring_issues": recurring[:10],
+                "excellence_count": excellence_count,
+                "needs_work_count": needs_work_count,
+            }
+        except Exception as e:
+            logger.warning("Supabase get_quality_trending failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {"total_reviews": 0, "avg_score": 0.0, "by_dimension": {},
+                    "by_content_type": {}, "recurring_issues": [],
+                    "excellence_count": 0, "needs_work_count": 0}
+
+    # --- Setup Status ---
+
+    async def get_setup_status(self) -> dict:
+        """Check brain setup completion — which memory categories are populated."""
+        all_categories = {"company", "customers", "audience", "style-voice",
+                          "values-beliefs", "personal"}
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("memory_content")
+                .select("category, subcategory")
+                .execute
+            )
+            entries = result.data if result.data else []
+            populated_categories = set(e["category"] for e in entries if e.get("category"))
+
+            missing = sorted(all_categories - populated_categories)
+
+            pattern_result = await asyncio.to_thread(
+                self._client.table("patterns").select("id", count="exact").execute
+            )
+            has_patterns = bool(pattern_result.count and pattern_result.count > 0)
+
+            example_result = await asyncio.to_thread(
+                self._client.table("examples").select("id", count="exact").execute
+            )
+            has_examples = bool(example_result.count and example_result.count > 0)
+
+            return {
+                "total_memory_entries": len(entries),
+                "populated_categories": sorted(populated_categories),
+                "missing_categories": missing,
+                "has_patterns": has_patterns,
+                "has_examples": has_examples,
+                "is_complete": len(missing) == 0 and has_patterns,
+            }
+        except Exception as e:
+            logger.warning("Supabase get_setup_status failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {"total_memory_entries": 0, "populated_categories": [],
+                    "missing_categories": sorted(all_categories), "has_patterns": False,
+                    "has_examples": False, "is_complete": False}
 
     async def close(self) -> None:
         """Release Supabase client resources."""

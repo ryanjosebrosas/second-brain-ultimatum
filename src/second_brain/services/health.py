@@ -162,3 +162,230 @@ class HealthService:
             metrics.errors.append(f"stale_patterns: {type(e).__name__}")
 
         return metrics
+
+    async def compute_milestones(self, deps: "BrainDeps") -> dict:
+        """Compute brain growth level and milestone progress."""
+        from second_brain.schemas import (
+            BRAIN_MILESTONES, BRAIN_LEVEL_THRESHOLDS,
+            BrainMilestone,
+        )
+
+        # Get current metrics
+        metrics = await self.compute(deps)
+        growth = await self.compute_growth(deps)
+
+        # Compute milestone completion
+        milestones = []
+        for m in BRAIN_MILESTONES:
+            reqs = m["requires"]
+            completed = True
+            if "min_patterns" in reqs and metrics.total_patterns < reqs["min_patterns"]:
+                completed = False
+            if "min_medium" in reqs and metrics.medium_confidence < reqs["min_medium"]:
+                completed = False
+            if "min_high" in reqs and metrics.high_confidence < reqs["min_high"]:
+                completed = False
+            if "min_experiences" in reqs and metrics.experience_count < reqs["min_experiences"]:
+                completed = False
+            if "min_avg_score" in reqs and growth.avg_review_score < reqs["min_avg_score"]:
+                completed = False
+            milestones.append(BrainMilestone(
+                name=m["name"],
+                description=m["description"],
+                completed=completed,
+            ))
+
+        # Determine brain level (check from most restrictive downward)
+        level = "EMPTY"
+        for lvl in ["EXPERT", "COMPOUND", "GROWTH", "FOUNDATION"]:
+            reqs = BRAIN_LEVEL_THRESHOLDS[lvl]
+            meets = True
+            if "min_patterns" in reqs and metrics.total_patterns < reqs["min_patterns"]:
+                meets = False
+            if "min_medium" in reqs and metrics.medium_confidence < reqs["min_medium"]:
+                meets = False
+            if "min_high" in reqs and metrics.high_confidence < reqs["min_high"]:
+                meets = False
+            if "min_experiences" in reqs and metrics.experience_count < reqs["min_experiences"]:
+                meets = False
+            if "min_avg_score" in reqs and growth.avg_review_score < reqs["min_avg_score"]:
+                meets = False
+            if meets:
+                level = lvl
+                break
+
+        level_descriptions = {
+            "EMPTY": "No patterns or experiences yet — start with /plan and /learn",
+            "FOUNDATION": "Building first patterns — keep learning from each project",
+            "GROWTH": "Patterns reaching MEDIUM confidence — compound returns emerging",
+            "COMPOUND": "HIGH confidence patterns active — significant time savings",
+            "EXPERT": "Multiple HIGH patterns, consistent quality — brain is thriving",
+        }
+
+        # Find next unachieved milestone
+        next_milestone = None
+        for m in milestones:
+            if not m.completed:
+                next_milestone = m.description
+                break
+
+        return {
+            "level": level,
+            "level_description": level_descriptions[level],
+            "milestones": [m.model_dump() for m in milestones],
+            "milestones_completed": sum(1 for m in milestones if m.completed),
+            "milestones_total": len(milestones),
+            "next_milestone": next_milestone,
+            "patterns_total": metrics.total_patterns,
+            "high_confidence_count": metrics.high_confidence,
+            "experiences_total": metrics.experience_count,
+            "avg_review_score": growth.avg_review_score,
+        }
+
+    async def compute_quality_trend(self, deps: "BrainDeps", days: int = 30) -> dict:
+        """Compute quality trend from review history."""
+        trending_data = await deps.storage_service.get_quality_trending(days=days)
+
+        # Compute dimensional trends
+        by_dimension = []
+        for dim, data in trending_data.get("by_dimension", {}).items():
+            by_dimension.append({
+                "dimension": dim,
+                "avg_score": round(data["avg_score"], 2),
+                "review_count": data["count"],
+                "trend": "stable",
+            })
+
+        # Compute score trend (compare first half vs second half of period)
+        score_trend = "stable"
+        total = trending_data.get("total_reviews", 0)
+        if total >= 4:
+            reviews = await deps.storage_service.get_review_history(limit=total)
+            if len(reviews) >= 4:
+                mid = len(reviews) // 2
+                recent_avg = sum(r.get("overall_score", 0) for r in reviews[:mid]) / mid
+                older_avg = sum(r.get("overall_score", 0) for r in reviews[mid:]) / (len(reviews) - mid)
+                if recent_avg > older_avg + 0.5:
+                    score_trend = "improving"
+                elif recent_avg < older_avg - 0.5:
+                    score_trend = "declining"
+
+        return {
+            "period_days": days,
+            "total_reviews": trending_data.get("total_reviews", 0),
+            "avg_score": trending_data.get("avg_score", 0.0),
+            "score_trend": score_trend,
+            "by_dimension": by_dimension,
+            "by_content_type": trending_data.get("by_content_type", {}),
+            "recurring_issues": trending_data.get("recurring_issues", []),
+            "excellence_count": trending_data.get("excellence_count", 0),
+            "needs_work_count": trending_data.get("needs_work_count", 0),
+        }
+
+    async def check_confidence_downgrades(self, deps: "BrainDeps") -> list[dict]:
+        """Check for patterns that should be downgraded due to consecutive failures."""
+        downgrades = []
+        try:
+            patterns = await deps.storage_service.get_patterns()
+            threshold = deps.config.confidence_downgrade_consecutive
+
+            for p in patterns:
+                failures = p.get("consecutive_failures", 0)
+                if failures >= threshold and p.get("confidence", "LOW") != "LOW":
+                    result = await deps.storage_service.downgrade_pattern_confidence(p["id"])
+                    if result:
+                        old_conf = p["confidence"]
+                        new_conf = result.get("confidence", old_conf)
+                        downgrades.append({
+                            "pattern_name": p["name"],
+                            "old_confidence": old_conf,
+                            "new_confidence": new_conf,
+                            "consecutive_failures": failures,
+                        })
+                        # Record growth event
+                        try:
+                            await deps.storage_service.add_growth_event({
+                                "event_type": "confidence_downgraded",
+                                "pattern_name": p["name"],
+                                "pattern_topic": p.get("topic", ""),
+                                "details": {
+                                    "from": old_conf,
+                                    "to": new_conf,
+                                    "failures": failures,
+                                },
+                            })
+                        except Exception:
+                            logger.debug("Growth event recording failed (non-critical)")
+                        # Record confidence transition
+                        try:
+                            await deps.storage_service.add_confidence_transition({
+                                "pattern_name": p["name"],
+                                "pattern_topic": p.get("topic", ""),
+                                "from_confidence": old_conf,
+                                "to_confidence": new_conf,
+                                "use_count": p.get("use_count", 0),
+                                "reason": f"Downgraded after {failures} consecutive failures below score {deps.config.confidence_downgrade_threshold}",
+                            })
+                        except Exception:
+                            logger.debug("Confidence transition recording failed (non-critical)")
+        except Exception as e:
+            logger.warning("Confidence downgrade check failed: %s", type(e).__name__)
+            logger.debug("Downgrade check error detail: %s", e)
+
+        return downgrades
+
+    async def compute_setup_status(self, deps: "BrainDeps") -> dict:
+        """Check brain onboarding/setup completion status."""
+        status = await deps.storage_service.get_setup_status()
+
+        steps = [
+            {
+                "name": "company_context",
+                "description": "Add company info (products, positioning, differentiators)",
+                "completed": "company" in status.get("populated_categories", []),
+            },
+            {
+                "name": "customer_context",
+                "description": "Add customer intelligence (ICP, pain points, objections)",
+                "completed": "customers" in status.get("populated_categories", []),
+            },
+            {
+                "name": "personal_context",
+                "description": "Add personal info (bio, expertise, services)",
+                "completed": "personal" in status.get("populated_categories", []),
+            },
+            {
+                "name": "audience_context",
+                "description": "Add audience/target client profile",
+                "completed": "audience" in status.get("populated_categories", []),
+            },
+            {
+                "name": "style_voice",
+                "description": "Add style and voice guide (tone, vocabulary, structure)",
+                "completed": "style-voice" in status.get("populated_categories", []),
+            },
+            {
+                "name": "values_beliefs",
+                "description": "Add values, principles, and POVs",
+                "completed": "values-beliefs" in status.get("populated_categories", []),
+            },
+            {
+                "name": "first_pattern",
+                "description": "Extract your first pattern with /learn",
+                "completed": status.get("has_patterns", False),
+            },
+            {
+                "name": "first_example",
+                "description": "Add your first content example",
+                "completed": status.get("has_examples", False),
+            },
+        ]
+
+        return {
+            "is_complete": all(s["completed"] for s in steps),
+            "steps": steps,
+            "completed_count": sum(1 for s in steps if s["completed"]),
+            "total_steps": len(steps),
+            "missing_categories": status.get("missing_categories", []),
+            "total_memory_entries": status.get("total_memory_entries", 0),
+        }
