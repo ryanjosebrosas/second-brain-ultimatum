@@ -144,3 +144,41 @@ async def search_examples(
         return "\n".join(formatted)
     except Exception as e:
         return tool_error("search_examples", e)
+
+
+@recall_agent.tool
+async def search_projects(
+    ctx: RunContext[BrainDeps],
+    lifecycle_stage: str | None = None,
+    category: str | None = None,
+) -> str:
+    """Search projects by lifecycle stage or category. Stages: planning, executing,
+    reviewing, learning, complete, archived."""
+    try:
+        projects = await ctx.deps.storage_service.list_projects(
+            lifecycle_stage=lifecycle_stage,
+            category=category,
+            limit=ctx.deps.config.experience_limit,
+        )
+        if not projects:
+            filters = []
+            if lifecycle_stage:
+                filters.append(f"stage={lifecycle_stage}")
+            if category:
+                filters.append(f"category={category}")
+            filter_str = f" ({', '.join(filters)})" if filters else ""
+            return f"No projects found{filter_str}."
+
+        lines = []
+        for p in projects:
+            stage_icon = {
+                "planning": "[plan]", "executing": "[exec]", "reviewing": "[rev]",
+                "learning": "[learn]", "complete": "[done]", "archived": "[arch]",
+            }.get(p.get("lifecycle_stage", ""), "[?]")
+            score = f" (score: {p['review_score']})" if p.get("review_score") else ""
+            lines.append(
+                f"{stage_icon} {p['name']} [{p.get('lifecycle_stage', 'unknown')}]{score}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return tool_error("search_projects", e)

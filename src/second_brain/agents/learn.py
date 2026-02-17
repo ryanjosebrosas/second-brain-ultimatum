@@ -177,7 +177,19 @@ async def store_pattern(
         except Exception as e:
             logger.exception("Failed to insert pattern '%s'", name)
             return f"Error storing pattern '{name}': {e}"
-        return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
+        parts = [f"Stored new pattern '{name}' (confidence: {confidence}) in registry."]
+        # Quality gate: auto-promote to examples if associated review scored high enough
+        if source_experience:
+            try:
+                from second_brain.schemas import QUALITY_GATE_SCORE
+                experiences = await ctx.deps.storage_service.get_experiences()
+                matching = [e for e in experiences if e.get("name") == source_experience
+                            and e.get("review_score") and e["review_score"] >= QUALITY_GATE_SCORE]
+                if matching:
+                    parts.append(f"Source experience scored {matching[0]['review_score']} — pattern promoted from quality work")
+            except Exception:
+                logger.debug("Quality gate check failed (non-critical)")
+        return "\n".join(parts)
     except Exception as e:
         return tool_error("store_pattern", e)
 
@@ -310,6 +322,7 @@ async def store_experience(
     output_summary: str,
     learnings: str,
     patterns_extracted: list[str] | None = None,
+    project_id: str | None = None,
 ) -> str:
     """Store a work experience entry in Supabase. Only call this if the input
     describes a complete work session with clear outcomes."""
@@ -321,6 +334,8 @@ async def store_experience(
             "learnings": learnings,
             "patterns_extracted": patterns_extracted or [],
         }
+        if project_id:
+            experience_data["project_id"] = project_id
         await ctx.deps.storage_service.add_experience(experience_data)
 
         # Dual-write: sync experience to Mem0 for graph relationships (non-critical)
@@ -364,9 +379,78 @@ async def store_experience(
             except Exception:
                 logger.debug("Failed to sync experience '%s' to Graphiti (non-critical)", name)
 
+        # Store as project artifact if linked to a project
+        if project_id:
+            try:
+                await ctx.deps.storage_service.add_project_artifact({
+                    "project_id": project_id,
+                    "artifact_type": "learnings",
+                    "title": f"Learnings: {name}",
+                    "content": learnings,
+                    "metadata": {"patterns_extracted": patterns_extracted or []},
+                })
+            except Exception:
+                logger.debug("Project artifact creation failed (non-critical)")
+
         return f"Recorded experience '{name}' (category: {category})."
     except Exception as e:
         return tool_error("store_experience", e)
+
+
+@learn_agent.tool
+async def learn_from_review(
+    ctx: RunContext[BrainDeps],
+    review_summary: str,
+    review_score: float,
+    strengths: str,
+    issues: str,
+    content_type: str = "",
+) -> str:
+    """Extract learnings from a review result. Call this after a review to automatically
+    learn from what worked (strengths with score 8+) and what didn't (issues)."""
+    try:
+        parts = [f"Review Score: {review_score}/10"]
+
+        # Record review as experience
+        experience = {
+            "name": f"review-{content_type or 'unknown'}-{review_score}",
+            "category": "content",
+            "output_summary": review_summary[:500],
+            "review_score": review_score,
+            "learnings": f"Strengths: {strengths}\nIssues: {issues}",
+        }
+        await ctx.deps.storage_service.add_experience(experience)
+
+        # Track growth event
+        try:
+            await ctx.deps.storage_service.add_growth_event({
+                "event_type": "content_reviewed",
+                "details": {
+                    "score": review_score,
+                    "content_type": content_type,
+                    "strengths_count": len(strengths.split("\n")),
+                    "issues_count": len(issues.split("\n")),
+                },
+            })
+        except Exception:
+            logger.debug("Growth event recording failed (non-critical)")
+
+        # If score is high enough, suggest example promotion
+        from second_brain.schemas import QUALITY_GATE_SCORE
+        if review_score >= QUALITY_GATE_SCORE:
+            parts.append(f"Score {review_score} >= {QUALITY_GATE_SCORE} — eligible for example promotion")
+            parts.append("Use store_pattern to extract successful patterns from strengths")
+        else:
+            parts.append(f"Score {review_score} < {QUALITY_GATE_SCORE} — focus on learning from issues")
+
+        if strengths.strip():
+            parts.append(f"\nStrengths to learn from:\n{strengths}")
+        if issues.strip():
+            parts.append(f"\nIssues to address:\n{issues}")
+
+        return "\n".join(parts)
+    except Exception as e:
+        return tool_error("learn_from_review", e)
 
 
 @learn_agent.tool

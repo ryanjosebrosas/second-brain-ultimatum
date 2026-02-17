@@ -244,12 +244,34 @@ async def run_full_review(
                 {"dimension": s.dimension, "score": s.score, "status": s.status}
                 for s in scores
             ],
+            "dimension_details": {s.dimension: s.score for s in scores if s.score is not None},
             "top_strengths": top_strengths,
             "critical_issues": critical_issues,
             "content_preview": content[:200] if content else "",
         })
     except Exception:
         logger.debug("Failed to record review history")
+
+    # Track pattern failures for confidence downgrade
+    try:
+        if overall_score < deps.config.confidence_downgrade_threshold:
+            # Find patterns that were expected to apply
+            patterns = await deps.storage_service.get_patterns()
+            for p in patterns:
+                applicable_types = p.get("applicable_content_types") or []
+                if not applicable_types or content_type in applicable_types:
+                    if p.get("confidence") != "LOW":
+                        await deps.storage_service.update_pattern_failures(p["id"])
+        else:
+            # Reset consecutive failures for applicable patterns on good review
+            patterns = await deps.storage_service.get_patterns()
+            for p in patterns:
+                if p.get("consecutive_failures", 0) > 0:
+                    applicable_types = p.get("applicable_content_types") or []
+                    if not applicable_types or content_type in applicable_types:
+                        await deps.storage_service.update_pattern_failures(p["id"], reset=True)
+    except Exception:
+        logger.debug("Pattern failure tracking failed (non-critical)")
 
     return ReviewResult(
         scores=scores,

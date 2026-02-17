@@ -125,6 +125,94 @@ async def rerank_memories(
         return memories
 
 
+async def run_review_learn_pipeline(
+    content: str,
+    content_type: str,
+    deps: "BrainDeps",
+    model,
+) -> dict:
+    """Run the review->learn pipeline: review content, then learn from the review results.
+
+    Returns dict with 'review' (ReviewResult) and 'learn' (LearnResult) keys.
+    """
+    from second_brain.agents.review import run_full_review
+    from second_brain.agents.learn import learn_agent
+
+    # Step 1: Review
+    review_result = await run_full_review(
+        content=content,
+        content_type=content_type,
+        deps=deps,
+        model=model,
+    )
+
+    # Step 2: Learn from review
+    strengths = "\n".join(review_result.top_strengths or [])
+    issues = "\n".join(review_result.critical_issues or [])
+    overall_score = review_result.overall_score
+    summary = review_result.summary or ""
+
+    learn_prompt = (
+        f"Learn from this review of {content_type} content.\n"
+        f"Review score: {overall_score}/10\n"
+        f"Summary: {summary}\n"
+        f"Strengths:\n{strengths}\n"
+        f"Issues:\n{issues}\n\n"
+        f"Extract patterns from what worked well (strengths) and note what to avoid (issues)."
+    )
+
+    learn_result = await learn_agent.run(learn_prompt, deps=deps, model=model)
+
+    return {
+        "review": review_result,
+        "learn": learn_result.output,
+    }
+
+
+def format_pattern_registry(patterns: list[dict], config=None) -> str:
+    """Format patterns as a registry table for display."""
+    if not patterns:
+        return "No patterns in registry."
+
+    stale_days = config.stale_pattern_days if config else 30
+
+    lines = ["| Pattern | Topic | Confidence | Uses | Last Updated | Status |",
+             "|---------|-------|------------|------|--------------|--------|"]
+
+    for p in patterns:
+        name = p.get("name", "Unknown")
+        topic = p.get("topic", "-")
+        conf = p.get("confidence", "LOW")
+        uses = p.get("use_count", 0)
+        updated = p.get("date_updated", "-")
+        failures = p.get("consecutive_failures", 0)
+
+        # Determine status
+        status = "Active"
+        if failures >= 2:
+            status = "At Risk"
+        elif updated and updated != "-":
+            try:
+                from datetime import datetime, timedelta, timezone
+                last = datetime.fromisoformat(updated.replace("Z", "+00:00")) if "T" in updated else datetime.strptime(updated, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - last > timedelta(days=stale_days):
+                    status = "Stale"
+            except (ValueError, TypeError):
+                pass
+
+        lines.append(f"| {name} | {topic} | {conf} | {uses} | {updated} | {status} |")
+
+    lines.append(f"\nTotal: {len(patterns)} patterns")
+    conf_counts: dict[str, int] = {}
+    for p in patterns:
+        c = p.get("confidence", "LOW")
+        conf_counts[c] = conf_counts.get(c, 0) + 1
+    dist = ", ".join(f"{k}: {v}" for k, v in sorted(conf_counts.items()))
+    lines.append(f"Distribution: {dist}")
+
+    return "\n".join(lines)
+
+
 def tool_error(tool_name: str, error: Exception) -> str:
     """Standard error format for agent tool failures.
 
