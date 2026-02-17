@@ -4,6 +4,12 @@ import logging
 
 from pydantic_ai import Agent, RunContext
 
+from second_brain.agents.utils import (
+    format_memories,
+    format_relations,
+    search_with_graph_fallback,
+    tool_error,
+)
 from second_brain.deps import BrainDeps
 from second_brain.schemas import CreateResult
 
@@ -27,7 +33,9 @@ create_agent = Agent(
         "no generic intros ('In today's fast-paced world...'). "
         "Produce a DRAFT for human editing, not final copy. "
         "Include notes about what the human should review or polish. "
-        "Set word_count in the output to the actual word count of the draft."
+        "Set word_count in the output to the actual word count of the draft. "
+        "Before finalizing, call validate_draft to check your draft meets "
+        "the content type requirements."
     ),
 )
 
@@ -45,21 +53,17 @@ async def load_voice_guide(ctx: RunContext[BrainDeps]) -> str:
             text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
             sections.append(f"### {title}\n{text}")
         # Enrich with graph relationships if available
-        if ctx.deps.graphiti_service:
-            try:
-                voice_rels = await ctx.deps.graphiti_service.search("voice tone style brand")
-                if voice_rels:
-                    sections.append("\n### Graph Context")
-                    for rel in voice_rels[:5]:
-                        sections.append(
-                            f"- {rel.get('source', '?')} --[{rel.get('relationship', '?')}]--> {rel.get('target', '?')}"
-                        )
-            except Exception:
-                logger.debug("Graphiti voice search failed (non-critical)")
+        graphiti_rels = await search_with_graph_fallback(
+            ctx.deps, "voice tone style brand"
+        )
+        if graphiti_rels:
+            sections.append("\n### Graph Context")
+            rel_text = format_relations(graphiti_rels)
+            if rel_text:
+                sections.append(rel_text)
         return "## Voice & Tone Guide\n" + "\n\n".join(sections)
     except Exception as e:
-        logger.warning("load_voice_guide failed: %s", type(e).__name__)
-        return f"Voice guide unavailable: {type(e).__name__}"
+        return tool_error("load_voice_guide", e)
 
 
 @create_agent.tool
@@ -82,8 +86,7 @@ async def load_content_examples(
             sections.append(f"### {title}\n{text}")
         return f"## Examples ({content_type})\n" + "\n\n".join(sections)
     except Exception as e:
-        logger.warning("load_content_examples failed: %s", type(e).__name__)
-        return f"Content examples unavailable: {type(e).__name__}"
+        return tool_error("load_content_examples", e)
 
 
 @create_agent.tool
@@ -113,7 +116,7 @@ async def find_applicable_patterns(
                 topic,
                 metadata_filters=filters,
                 limit=10,
-                enable_graph=True,  # Request graph relationships
+                enable_graph=True,
             )
             pattern_memories = pattern_result.memories
             pattern_relations = pattern_result.relations
@@ -121,13 +124,7 @@ async def find_applicable_patterns(
             logger.debug("Semantic pattern search failed in create_agent")
 
         # Also check Graphiti for deeper entity relationships
-        graphiti_relations = []
-        if ctx.deps.graphiti_service:
-            try:
-                graphiti_rels = await ctx.deps.graphiti_service.search(topic)
-                graphiti_relations = graphiti_rels
-            except Exception as e:
-                logger.debug("Graphiti search failed in create_agent (non-critical): %s", e)
+        graphiti_relations = await search_with_graph_fallback(ctx.deps, topic)
 
         # Fall back to Supabase patterns (structured data)
         patterns = await ctx.deps.storage_service.get_patterns()
@@ -149,10 +146,7 @@ async def find_applicable_patterns(
 
         if pattern_memories:
             mem_lines = ["## Semantically Matched Patterns"]
-            for m in pattern_memories:
-                memory = m.get("memory", m.get("result", ""))
-                score = m.get("score", 0)
-                mem_lines.append(f"- [{score:.2f}] {memory}")
+            mem_lines.append(format_memories(pattern_memories))
             sections.append("\n".join(mem_lines))
 
         if patterns:
@@ -176,19 +170,13 @@ async def find_applicable_patterns(
 
         # Merge all graph relations (Mem0 + Graphiti)
         all_relations = pattern_relations + graphiti_relations
-        if all_relations:
-            rel_lines = ["## Entity Relationships"]
-            for rel in all_relations:
-                src = rel.get("source", rel.get("entity", "?"))
-                relationship = rel.get("relationship", "?")
-                tgt = rel.get("target", rel.get("connected_to", "?"))
-                rel_lines.append(f"- {src} --[{relationship}]--> {tgt}")
-            sections.append("\n".join(rel_lines))
+        rel_text = format_relations(all_relations)
+        if rel_text:
+            sections.append(rel_text)
 
         return "\n\n".join(sections) if sections else "No applicable patterns found."
     except Exception as e:
-        logger.warning("find_applicable_patterns failed: %s", type(e).__name__)
-        return f"Pattern search unavailable: {type(e).__name__}"
+        return tool_error("find_applicable_patterns", e)
 
 
 @create_agent.tool
@@ -212,5 +200,50 @@ async def load_audience_context(ctx: RunContext[BrainDeps]) -> str:
             return "No audience context found. Write for a general professional audience."
         return "\n\n".join(sections)
     except Exception as e:
-        logger.warning("load_audience_context failed: %s", type(e).__name__)
-        return f"Audience context unavailable: {type(e).__name__}"
+        return tool_error("load_audience_context", e)
+
+
+@create_agent.tool
+async def validate_draft(
+    ctx: RunContext[BrainDeps],
+    draft: str,
+    content_type: str,
+) -> str:
+    """Validate a draft against content type requirements.
+
+    Checks word count against max_words and verifies structure hints.
+    Call this before finalizing the draft.
+    """
+    try:
+        registry = ctx.deps.get_content_type_registry()
+        config = await registry.get(content_type)
+        if not config:
+            return f"Unknown content type: '{content_type}'. Skipping validation."
+
+        issues = []
+        word_count = len(draft.split())
+
+        if config.max_words and config.max_words > 0:
+            if word_count > config.max_words:
+                issues.append(
+                    f"Word count ({word_count}) exceeds max ({config.max_words}). "
+                    f"Trim by {word_count - config.max_words} words."
+                )
+            elif word_count < config.max_words * 0.3:
+                issues.append(
+                    f"Word count ({word_count}) is very short for {content_type} "
+                    f"(target: {config.max_words}). Consider expanding."
+                )
+
+        # Check structure hints if available
+        if config.structure_hint:
+            hint_sections = [s.strip() for s in config.structure_hint.split("|") if s.strip()]
+            for section in hint_sections:
+                if section.lower() not in draft.lower():
+                    issues.append(f"Missing expected section: '{section}'")
+
+        if not issues:
+            return f"Draft validates OK. Word count: {word_count}/{config.max_words or 'unlimited'}."
+        return "Validation issues:\n" + "\n".join(f"- {i}" for i in issues)
+    except Exception as e:
+        return tool_error("validate_draft", e)

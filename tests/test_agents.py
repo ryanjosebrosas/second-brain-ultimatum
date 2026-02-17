@@ -152,9 +152,8 @@ class TestLearnAgent:
 
     def test_agent_has_dynamic_instructions(self):
         from second_brain.agents.learn import learn_agent
-        # @agent.instructions appends callables to _instructions list
-        dynamic = [i for i in learn_agent._instructions if callable(i)]
-        assert len(dynamic) > 0
+        # @agent.instructions registers SystemPromptRunners in _instructions_functions
+        assert len(learn_agent._instructions_functions) > 0
 
 
 class TestPatternReinforcement:

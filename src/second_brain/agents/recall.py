@@ -4,6 +4,12 @@ import logging
 
 from pydantic_ai import Agent, RunContext
 
+from second_brain.agents.utils import (
+    format_memories,
+    format_relations,
+    search_with_graph_fallback,
+    tool_error,
+)
 from second_brain.deps import BrainDeps
 from second_brain.schemas import RecallResult
 
@@ -31,39 +37,18 @@ async def search_semantic_memory(
     """Search Mem0 semantic memory for relevant content."""
     try:
         result = await ctx.deps.memory_service.search(query)
-
-        # Collect relations from Mem0 graph
-        relations = result.relations
-
-        # Also check Graphiti if available
-        if ctx.deps.graphiti_service:
-            try:
-                graphiti_rels = await ctx.deps.graphiti_service.search(query)
-                relations = relations + graphiti_rels
-            except Exception as e:
-                logger.debug("Graphiti search failed (non-critical): %s", e)
+        relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
         if not result.memories and not relations:
             return "No semantic matches found."
 
-        formatted = []
-        for r in result.memories:
-            memory = r.get("memory", r.get("result", ""))
-            score = r.get("score", 0)
-            formatted.append(f"- [{score:.2f}] {memory}")
-
-        if relations:
-            formatted.append("\nGraph Relationships:")
-            for rel in relations:
-                src = rel.get("source", "?")
-                relationship = rel.get("relationship", "?")
-                tgt = rel.get("target", "?")
-                formatted.append(f"- {src} --[{relationship}]--> {tgt}")
-
-        return "\n".join(formatted)
+        parts = [format_memories(result.memories)]
+        rel_text = format_relations(relations)
+        if rel_text:
+            parts.append(rel_text)
+        return "\n".join(parts)
     except Exception as e:
-        logger.warning("search_semantic_memory failed: %s", type(e).__name__)
-        return f"Memory search unavailable: {type(e).__name__}"
+        return tool_error("search_semantic_memory", e)
 
 
 @recall_agent.tool
@@ -83,10 +68,10 @@ async def search_patterns(
                 topic or "patterns",
                 metadata_filters=filters,
                 limit=10,
-                enable_graph=True,  # Request graph relationships
+                enable_graph=True,
             )
             semantic_results = result.memories
-            semantic_relations = result.relations  # Graph relationships from Mem0
+            semantic_relations = result.relations
         except Exception:
             logger.debug("Semantic pattern search failed, falling back to Supabase")
 
@@ -99,10 +84,7 @@ async def search_patterns(
         formatted = []
         if semantic_results:
             formatted.append("## Semantic Matches")
-            for m in semantic_results:
-                memory = m.get("memory", m.get("result", ""))
-                score = m.get("score", 0)
-                formatted.append(f"- [{score:.2f}] {memory}")
+            formatted.append(format_memories(semantic_results))
             formatted.append("")
 
         if patterns:
@@ -113,18 +95,13 @@ async def search_patterns(
                     f"{p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
                 )
 
-        if semantic_relations:
-            formatted.append("\n## Graph Relationships")
-            for rel in semantic_relations:
-                src = rel.get("source", rel.get("entity", "?"))
-                relationship = rel.get("relationship", "?")
-                tgt = rel.get("target", rel.get("connected_to", "?"))
-                formatted.append(f"- {src} --[{relationship}]--> {tgt}")
+        rel_text = format_relations(semantic_relations)
+        if rel_text:
+            formatted.append(rel_text)
 
         return "\n".join(formatted)
     except Exception as e:
-        logger.warning("search_patterns failed: %s", type(e).__name__)
-        return f"Pattern search unavailable: {type(e).__name__}"
+        return tool_error("search_patterns", e)
 
 
 @recall_agent.tool
@@ -142,8 +119,7 @@ async def search_experiences(
             formatted.append(f"- {e['name']} [{e['category']}]{score_str}")
         return "\n".join(formatted)
     except Exception as e:
-        logger.warning("search_experiences failed: %s", type(e).__name__)
-        return f"Experience search unavailable: {type(e).__name__}"
+        return tool_error("search_experiences", e)
 
 
 @recall_agent.tool
@@ -163,5 +139,4 @@ async def search_examples(
                 formatted.append(f"  {preview}")
         return "\n".join(formatted)
     except Exception as e:
-        logger.warning("search_examples failed: %s", type(e).__name__)
-        return f"Example search unavailable: {type(e).__name__}"
+        return tool_error("search_examples", e)

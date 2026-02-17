@@ -5,10 +5,11 @@ from datetime import date
 
 from pydantic_ai import Agent, RunContext
 
-logger = logging.getLogger(__name__)
-
+from second_brain.agents.utils import tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import LearnResult
+
+logger = logging.getLogger(__name__)
 
 # NOTE: When using ClaudeSDKModel (subscription auth), Pydantic AI tools
 # are NOT called. Instead, the SDK process calls service MCP tools directly.
@@ -72,8 +73,7 @@ async def search_existing_patterns(
             )
         return f"Existing matches:\n" + "\n".join(formatted)
     except Exception as e:
-        logger.warning("search_existing_patterns failed: %s", type(e).__name__)
-        return f"Pattern search unavailable: {type(e).__name__}"
+        return tool_error("search_existing_patterns", e)
 
 
 @learn_agent.tool
@@ -179,8 +179,7 @@ async def store_pattern(
             return f"Error storing pattern '{name}': {e}"
         return f"Stored new pattern '{name}' (confidence: {confidence}) in registry."
     except Exception as e:
-        logger.warning("store_pattern failed: %s", type(e).__name__)
-        return f"Pattern storage unavailable: {type(e).__name__}"
+        return tool_error("store_pattern", e)
 
 
 @learn_agent.tool
@@ -284,8 +283,7 @@ async def reinforce_existing_pattern(
             f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
         )
     except Exception as e:
-        logger.warning("reinforce_existing_pattern failed: %s", type(e).__name__)
-        return f"Pattern reinforcement unavailable: {type(e).__name__}"
+        return tool_error("reinforce_existing_pattern", e)
 
 
 @learn_agent.tool
@@ -301,8 +299,7 @@ async def add_to_memory(
         await ctx.deps.memory_service.add(content, metadata=metadata)
         return f"Added to semantic memory (category: {category})."
     except Exception as e:
-        logger.warning("add_to_memory failed: %s", type(e).__name__)
-        return f"Memory storage unavailable: {type(e).__name__}"
+        return tool_error("add_to_memory", e)
 
 
 @learn_agent.tool
@@ -369,47 +366,52 @@ async def store_experience(
 
         return f"Recorded experience '{name}' (category: {category})."
     except Exception as e:
-        logger.warning("store_experience failed: %s", type(e).__name__)
-        return f"Experience storage unavailable: {type(e).__name__}"
+        return tool_error("store_experience", e)
 
 
 @learn_agent.tool
 async def consolidate_memories(
     ctx: RunContext[BrainDeps],
-    min_cluster_size: int | None = None,
+    batch_size: int = 10,
+    batch_offset: int = 0,
 ) -> str:
-    """Review accumulated Mem0 memories and identify recurring themes
-    that could become patterns. Returns a summary of memory clusters.
+    """Review a batch of accumulated memories for consolidation.
 
-    After reviewing, use store_pattern for new themes and
-    reinforce_existing_pattern for themes matching existing patterns.
+    Call with batch_offset=0 first, then increment by batch_size
+    to process all uncategorized memories.
 
     Args:
-        min_cluster_size: Minimum memories in a cluster to suggest graduation.
-            Defaults to config.graduation_min_memories (3).
+        batch_size: Number of memories per batch (default 10).
+        batch_offset: Starting offset for pagination.
     """
     try:
-        min_size = min_cluster_size or ctx.deps.config.graduation_min_memories
-
-        # Fetch all memories
         all_memories = await ctx.deps.memory_service.get_all()
         if not all_memories:
             return "No memories found in Mem0. Nothing to consolidate."
 
-        # Filter out already-categorized memories (patterns, graduated)
-        uncategorized = []
-        for mem in all_memories:
-            metadata = mem.get("metadata", {})
-            category = metadata.get("category", "")
-            if category not in ("pattern", "pattern_reinforcement", "graduated"):
-                uncategorized.append(mem)
+        uncategorized = [
+            m for m in all_memories
+            if m.get("metadata", {}).get("category", "") not in
+            ("pattern", "pattern_reinforcement", "graduated")
+        ]
 
         if not uncategorized:
             return "All memories are already categorized. Nothing to consolidate."
 
-        # Format memories for LLM analysis
-        formatted = [f"Found {len(uncategorized)} uncategorized memories (of {len(all_memories)} total):\n"]
-        for i, mem in enumerate(uncategorized[:50], 1):  # Limit to 50 for context
+        total = len(uncategorized)
+        batch = uncategorized[batch_offset:batch_offset + batch_size]
+
+        if not batch:
+            return f"No more uncategorized memories. Total checked: {total}."
+
+        min_size = ctx.deps.config.graduation_min_memories
+
+        formatted = [
+            f"Batch {batch_offset // batch_size + 1}: "
+            f"Showing {len(batch)} of {total} uncategorized memories "
+            f"(offset {batch_offset}):\n"
+        ]
+        for i, mem in enumerate(batch, batch_offset + 1):
             memory_text = mem.get("memory", mem.get("result", ""))
             metadata = mem.get("metadata", {})
             category = metadata.get("category", "uncategorized")
@@ -424,11 +426,12 @@ async def consolidate_memories(
             "3. If new: use store_pattern to create it\n"
             "Report what you found and what actions you took."
         )
-
+        formatted.append(
+            f"\n---\nNext batch: call with batch_offset={batch_offset + batch_size}"
+        )
         return "\n".join(formatted)
     except Exception as e:
-        logger.warning("consolidate_memories failed: %s", type(e).__name__)
-        return f"Memory consolidation unavailable: {type(e).__name__}"
+        return tool_error("consolidate_memories", e)
 
 
 @learn_agent.tool
@@ -461,5 +464,4 @@ async def tag_graduated_memories(
 
         return f"Tagged {tagged}/{len(memory_ids)} memories as graduated to pattern '{pattern_name}'."
     except Exception as e:
-        logger.warning("tag_graduated_memories failed: %s", type(e).__name__)
-        return f"Memory tagging unavailable: {type(e).__name__}"
+        return tool_error("tag_graduated_memories", e)

@@ -5,6 +5,11 @@ import logging
 
 from pydantic_ai import Agent, RunContext
 
+from second_brain.agents.utils import (
+    format_relations,
+    search_with_graph_fallback,
+    tool_error,
+)
 from second_brain.deps import BrainDeps
 from second_brain.schemas import (
     DimensionScore, ReviewResult, REVIEW_DIMENSIONS,
@@ -47,8 +52,7 @@ async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
             sections.append(f"### {title}\n{text}")
         return "## Voice & Tone Reference\n" + "\n\n".join(sections)
     except Exception as e:
-        logger.warning("load_voice_reference failed: %s", type(e).__name__)
-        return f"Voice reference unavailable: {type(e).__name__}"
+        return tool_error("load_voice_reference", e)
 
 
 @review_agent.tool
@@ -69,8 +73,7 @@ async def load_positioning_context(ctx: RunContext[BrainDeps]) -> str:
             return "No positioning context found."
         return "## Positioning Context\n" + "\n\n".join(all_sections)
     except Exception as e:
-        logger.warning("load_positioning_context failed: %s", type(e).__name__)
-        return f"Positioning context unavailable: {type(e).__name__}"
+        return tool_error("load_positioning_context", e)
 
 
 @review_agent.tool
@@ -88,8 +91,7 @@ async def load_example_benchmarks(ctx: RunContext[BrainDeps], content_type: str 
             sections.append(f"### {title}\n{text}")
         return "## Example Benchmarks\n" + "\n\n".join(sections)
     except Exception as e:
-        logger.warning("load_example_benchmarks failed: %s", type(e).__name__)
-        return f"Example benchmarks unavailable: {type(e).__name__}"
+        return tool_error("load_example_benchmarks", e)
 
 
 @review_agent.tool
@@ -110,27 +112,19 @@ async def load_graph_context(
         except Exception:
             logger.debug("Mem0 graph search failed in review_agent")
 
-        # Graphiti relations
-        if ctx.deps.graphiti_service:
-            try:
-                graphiti_rels = await ctx.deps.graphiti_service.search(content_summary)
-                relations.extend(graphiti_rels)
-            except Exception as e:
-                logger.debug("Graphiti search failed in review_agent (non-critical): %s", e)
+        # Graphiti relations via shared helper
+        relations = await search_with_graph_fallback(ctx.deps, content_summary, relations)
 
         if not relations:
             return "No graph relationships found for this content."
 
         formatted = ["## Graph Context for Review"]
-        for rel in relations:
-            src = rel.get("source", "?")
-            relationship = rel.get("relationship", "?")
-            tgt = rel.get("target", "?")
-            formatted.append(f"- {src} --[{relationship}]--> {tgt}")
+        rel_text = format_relations(relations)
+        if rel_text:
+            formatted.append(rel_text)
         return "\n".join(formatted)
     except Exception as e:
-        logger.warning("load_graph_context failed: %s", type(e).__name__)
-        return f"Graph context unavailable: {type(e).__name__}"
+        return tool_error("load_graph_context", e)
 
 
 async def run_full_review(
@@ -172,10 +166,20 @@ async def run_full_review(
         prompts.append(prompt)
         active_configs.append(dc)
 
-    results = await asyncio.gather(
-        *[review_agent.run(prompt, deps=deps, model=model) for prompt in prompts],
-        return_exceptions=True,
+    # Timeout-protected parallel reviews
+    timeout_seconds = (
+        deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
+        if deps else 60
     )
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            results = await asyncio.gather(
+                *[review_agent.run(prompt, deps=deps, model=model) for prompt in prompts],
+                return_exceptions=True,
+            )
+    except TimeoutError:
+        logger.warning("run_full_review timed out after %ds", timeout_seconds)
+        results = []
 
     scores: list[DimensionScore] = []
     for i, result in enumerate(results):
