@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from second_brain.schemas import (
-    RoutingDecision, EssayResult, ClarityFinding, ClarityResult,
+    RoutingDecision, ClarityFinding, ClarityResult,
     SynthesizerTheme, SynthesizerResult, TemplateOpportunity,
     TemplateBuilderResult, CoachSession, PriorityScore, PMOResult,
     EmailAction,
@@ -51,28 +51,6 @@ class TestRoutingDecision:
     def test_high_confidence(self):
         r = RoutingDecision(target_agent="recall", reasoning="clear memory search", confidence="HIGH")
         assert r.confidence == "HIGH"
-
-
-class TestEssayResult:
-    def test_defaults(self):
-        e = EssayResult(title="Test", essay="Full essay text here")
-        assert e.stirc_score == 0
-        assert e.word_count == 0
-        assert e.patterns_applied == []
-        assert e.notes == ""
-
-    def test_full(self):
-        e = EssayResult(
-            title="Why AI Agents Matter",
-            essay="Long essay content...",
-            stirc_score=22,
-            framework="argumentative",
-            word_count=1500,
-            patterns_applied=["hook_pattern"],
-        )
-        assert e.stirc_score == 22
-        assert e.framework == "argumentative"
-        assert len(e.patterns_applied) == 1
 
 
 class TestClarityFinding:
@@ -404,7 +382,6 @@ class TestAgenticConfig:
         assert config.agent_max_retries == 3
         assert config.agent_request_limit == 10
         assert config.pipeline_request_limit == 30
-        assert config.stirc_threshold == 18
 
     def test_coach_defaults(self, tmp_path):
         config = _make_config(tmp_path)

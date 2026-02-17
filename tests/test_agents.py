@@ -361,7 +361,7 @@ class TestCreateResultSchema:
         assert "email" in DEFAULT_CONTENT_TYPES
         assert "landing-page" in DEFAULT_CONTENT_TYPES
         assert "comment" in DEFAULT_CONTENT_TYPES
-        assert len(DEFAULT_CONTENT_TYPES) == 9
+        assert len(DEFAULT_CONTENT_TYPES) == 10
 
     def test_content_type_defaults(self):
         linkedin = DEFAULT_CONTENT_TYPES["linkedin"]
@@ -526,7 +526,7 @@ class TestContentTypeExpansion:
     def test_total_content_types(self):
         """Verify we have 9 content types total."""
         from second_brain.schemas import DEFAULT_CONTENT_TYPES
-        assert len(DEFAULT_CONTENT_TYPES) == 9
+        assert len(DEFAULT_CONTENT_TYPES) == 10
 
     def test_original_content_types_unchanged(self):
         """Verify original 4 content types are still present and unchanged."""
@@ -613,7 +613,7 @@ class TestDynamicContentTypes:
 
     def test_default_content_types_exists(self):
         from second_brain.schemas import DEFAULT_CONTENT_TYPES
-        assert len(DEFAULT_CONTENT_TYPES) == 9
+        assert len(DEFAULT_CONTENT_TYPES) == 10
 
     def test_default_content_types_all_builtin(self):
         from second_brain.schemas import DEFAULT_CONTENT_TYPES

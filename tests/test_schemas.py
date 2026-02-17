@@ -254,6 +254,7 @@ class TestContentTypeConfig:
         expected = {
             "linkedin", "email", "landing-page", "comment",
             "case-study", "proposal", "one-pager", "presentation", "instagram",
+            "essay",
         }
         assert set(DEFAULT_CONTENT_TYPES.keys()) == expected
 

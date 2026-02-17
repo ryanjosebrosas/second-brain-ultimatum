@@ -1,109 +1,17 @@
-"""Tests for content pipeline agents: essay writer, clarity, synthesizer, template builder."""
+"""Tests for content pipeline agents: clarity, synthesizer, template builder."""
 
 import pytest
 from unittest.mock import MagicMock
 from pydantic_ai import ModelRetry
 
-from second_brain.agents.essay_writer import essay_writer_agent
 from second_brain.agents.clarity import clarity_agent
 from second_brain.agents.synthesizer import synthesizer_agent
 from second_brain.agents.template_builder import template_builder_agent
 from second_brain.schemas import (
-    EssayResult, ClarityResult, ClarityFinding,
+    ClarityResult, ClarityFinding,
     SynthesizerResult, SynthesizerTheme,
     TemplateBuilderResult, TemplateOpportunity,
 )
-
-
-# --- Essay Writer ---
-
-class TestEssayWriterAgent:
-    def test_has_tools(self):
-        tools = essay_writer_agent._function_toolset.tools
-        assert "load_voice_and_patterns" in tools
-        assert "load_examples" in tools
-        assert "search_research_context" in tools
-
-    def test_has_retries(self):
-        assert essay_writer_agent._max_result_retries == 3
-
-    def test_has_validator(self):
-        assert len(essay_writer_agent._output_validators) > 0
-
-
-class TestEssayValidator:
-    @pytest.mark.asyncio
-    async def test_short_essay_triggers_retry(self):
-        output = EssayResult(title="Test", essay="Too short.")
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        with pytest.raises(ModelRetry):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_low_stirc_triggers_retry(self):
-        output = EssayResult(
-            title="Test",
-            essay=" ".join(["word"] * 500),
-            stirc_score=12,
-        )
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        with pytest.raises(ModelRetry):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_missing_title_triggers_retry(self):
-        output = EssayResult(
-            title="",
-            essay=" ".join(["word"] * 500),
-            stirc_score=20,
-        )
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        with pytest.raises(ModelRetry):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_zero_stirc_score_skips_threshold(self):
-        """STIRC score of 0 means the LLM skipped scoring — should not penalize."""
-        output = EssayResult(
-            title="Why AI Matters",
-            essay=" ".join(["word"] * 500),
-            stirc_score=0,
-        )
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.word_count == 500
-
-    @pytest.mark.asyncio
-    async def test_good_essay_passes(self):
-        output = EssayResult(
-            title="Why AI Agents Matter",
-            essay=" ".join(["word"] * 500),
-            stirc_score=22,
-        )
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.word_count == 500
-
-    @pytest.mark.asyncio
-    async def test_word_count_auto_set(self):
-        """Validator should auto-set word_count from actual essay content."""
-        essay_text = " ".join(["word"] * 350)
-        output = EssayResult(title="Test Essay", essay=essay_text, stirc_score=20)
-        ctx = MagicMock()
-        ctx.deps.config.stirc_threshold = 18
-        validators = essay_writer_agent._output_validators
-        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.word_count == 350
 
 
 # --- Clarity Maximizer ---
@@ -362,13 +270,173 @@ class TestTemplateValidator:
         assert result.templates_created == 3
 
 
+# --- Content Type Enrichment ---
+
+class TestContentTypeEnrichment:
+    """Tests for enriched ContentTypeConfig fields added by the Agent Factory refactor."""
+
+    def test_essay_in_default_types(self):
+        """Essay content type exists in DEFAULT_CONTENT_TYPES."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        assert "essay" in DEFAULT_CONTENT_TYPES
+
+    def test_essay_has_stirc_protocol(self):
+        """Essay content type includes STIRC scoring in writing_instructions."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        essay = DEFAULT_CONTENT_TYPES["essay"]
+        assert "STIRC" in essay.writing_instructions
+        assert "threshold 18/25" in essay.writing_instructions
+        assert "FIVE WRITING LAWS" in essay.writing_instructions
+
+    def test_essay_has_validation_rules(self):
+        """Essay content type has validation rules for quality enforcement."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        essay = DEFAULT_CONTENT_TYPES["essay"]
+        assert essay.validation_rules.get("min_words") == 300
+        assert "title_required" in essay.validation_rules.get("custom_checks", [])
+        assert "substantial_content" in essay.validation_rules.get("custom_checks", [])
+
+    def test_essay_has_ui_config(self):
+        """Essay content type has frontend UI metadata."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        essay = DEFAULT_CONTENT_TYPES["essay"]
+        assert essay.ui_config.get("icon") == "pen-tool"
+        assert essay.ui_config.get("category") == "long-form"
+        assert essay.ui_config.get("show_framework_selector") is True
+
+    def test_essay_metadata(self):
+        """Essay content type has correct basic metadata."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        essay = DEFAULT_CONTENT_TYPES["essay"]
+        assert essay.name == "Long-Form Essay"
+        assert essay.max_words == 3000
+        assert essay.default_mode == "professional"
+        assert essay.is_builtin is True
+
+    def test_all_types_have_writing_instructions(self):
+        """Every builtin content type has non-empty writing_instructions."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        for slug, ct in DEFAULT_CONTENT_TYPES.items():
+            assert ct.writing_instructions, f"{slug} missing writing_instructions"
+
+    def test_all_types_have_ui_config_icon(self):
+        """Every builtin content type has an icon in ui_config."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        for slug, ct in DEFAULT_CONTENT_TYPES.items():
+            assert "icon" in ct.ui_config, f"{slug} missing ui_config.icon"
+
+    def test_all_types_have_ui_config_category(self):
+        """Every builtin content type has a category in ui_config."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        for slug, ct in DEFAULT_CONTENT_TYPES.items():
+            assert "category" in ct.ui_config, f"{slug} missing ui_config.category"
+
+    def test_ten_builtin_types(self):
+        """DEFAULT_CONTENT_TYPES has exactly 10 types (9 original + essay)."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        assert len(DEFAULT_CONTENT_TYPES) == 10
+
+    def test_content_type_config_new_field_defaults(self):
+        """New ContentTypeConfig fields have correct defaults."""
+        from second_brain.schemas import ContentTypeConfig
+        ct = ContentTypeConfig(
+            name="Test",
+            default_mode="casual",
+            structure_hint="A -> B",
+            example_type="test",
+        )
+        assert ct.writing_instructions == ""
+        assert ct.validation_rules == {}
+        assert ct.ui_config == {}
+
+    def test_content_type_config_with_enrichment(self):
+        """ContentTypeConfig accepts all three enrichment fields."""
+        from second_brain.schemas import ContentTypeConfig
+        ct = ContentTypeConfig(
+            name="Custom",
+            default_mode="professional",
+            structure_hint="Intro -> Body -> Close",
+            example_type="custom",
+            max_words=500,
+            writing_instructions="Write clearly.",
+            validation_rules={"min_words": 100, "required_sections": ["intro"]},
+            ui_config={"icon": "star", "color": "#ff0000", "category": "custom"},
+        )
+        assert ct.writing_instructions == "Write clearly."
+        assert ct.validation_rules["min_words"] == 100
+        assert ct.ui_config["icon"] == "star"
+
+    def test_content_type_from_row_parses_new_fields(self):
+        """content_type_from_row() correctly parses enrichment fields from DB rows."""
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "name": "Test Type",
+            "slug": "test",
+            "default_mode": "casual",
+            "structure_hint": "A -> B",
+            "example_type": "test",
+            "max_words": 500,
+            "description": "A test type",
+            "is_builtin": True,
+            "writing_instructions": "RULES:\n1. Be clear\n2. Be concise",
+            "validation_rules": {"min_words": 100, "required_sections": ["intro"]},
+            "ui_config": {"icon": "star", "color": "#ff0000", "category": "custom"},
+        }
+        ct = content_type_from_row(row)
+        assert ct.writing_instructions == "RULES:\n1. Be clear\n2. Be concise"
+        assert ct.validation_rules == {"min_words": 100, "required_sections": ["intro"]}
+        assert ct.ui_config == {"icon": "star", "color": "#ff0000", "category": "custom"}
+
+    def test_content_type_from_row_handles_none_fields(self):
+        """content_type_from_row() handles None for JSONB fields (Supabase returns None)."""
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "name": "Minimal",
+            "slug": "minimal",
+            "default_mode": "casual",
+            "structure_hint": "",
+            "example_type": "minimal",
+            "writing_instructions": None,
+            "validation_rules": None,
+            "ui_config": None,
+        }
+        ct = content_type_from_row(row)
+        assert ct.writing_instructions == ""
+        assert ct.validation_rules == {}
+        assert ct.ui_config == {}
+
+    def test_content_type_from_row_handles_missing_fields(self):
+        """content_type_from_row() handles missing new fields (old DB rows without migration)."""
+        from second_brain.schemas import content_type_from_row
+        row = {
+            "name": "Legacy",
+            "slug": "legacy",
+            "default_mode": "professional",
+            "structure_hint": "A -> B",
+            "example_type": "legacy",
+        }
+        ct = content_type_from_row(row)
+        assert ct.writing_instructions == ""
+        assert ct.validation_rules == {}
+        assert ct.ui_config == {}
+
+    def test_ui_config_categories_are_valid(self):
+        """All ui_config categories are from the expected set."""
+        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+        valid_categories = {"social", "communication", "marketing", "long-form", "business"}
+        for slug, ct in DEFAULT_CONTENT_TYPES.items():
+            category = ct.ui_config.get("category")
+            assert category in valid_categories, (
+                f"{slug} has unexpected category '{category}', expected one of {valid_categories}"
+            )
+
+
 # --- Registry Integration ---
 
 class TestAgentRegistry:
     def test_all_content_pipeline_agents_in_registry(self):
         from second_brain.agents.utils import get_agent_registry
         registry = get_agent_registry()
-        assert "essay_writer" in registry
         assert "clarity" in registry
         assert "synthesizer" in registry
         assert "template_builder" in registry
@@ -376,7 +444,12 @@ class TestAgentRegistry:
     def test_registry_has_descriptions(self):
         from second_brain.agents.utils import get_agent_registry
         registry = get_agent_registry()
-        for key in ("essay_writer", "clarity", "synthesizer", "template_builder"):
+        for key in ("clarity", "synthesizer", "template_builder"):
             agent, desc = registry[key]
             assert agent is not None
             assert desc
+
+    def test_essay_writer_removed_from_registry(self):
+        from second_brain.agents.utils import get_agent_registry
+        registry = get_agent_registry()
+        assert "essay_writer" not in registry

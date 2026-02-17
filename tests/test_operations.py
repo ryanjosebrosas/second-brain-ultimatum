@@ -237,8 +237,8 @@ class TestRegistryCompleteness:
         registry = get_agent_registry()
         for name in ["coach", "pmo", "email", "specialist"]:
             assert name in registry, f"'{name}' missing from registry"
-        # Total: 5 original + chief of staff + 4 content + 4 operations = 14
-        assert len(registry) >= 13
+        # Total: 5 original + chief of staff + 3 content + 4 operations = 13 (essay_writer removed)
+        assert len(registry) >= 12
 
     def test_registry_descriptions_present(self):
         from second_brain.agents.utils import get_agent_registry
