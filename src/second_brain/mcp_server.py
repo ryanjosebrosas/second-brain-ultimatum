@@ -907,29 +907,6 @@ async def prioritize_tasks(tasks: str) -> str:
 
 
 @server.tool()
-async def analyze_business_impact(recommendation: str) -> str:
-    """Quantify business impact and ROI of a recommendation.
-
-    Args:
-        recommendation: The recommendation or initiative to analyze
-    """
-    try:
-        recommendation = _validate_mcp_input(recommendation, label="recommendation")
-    except ValueError as e:
-        return str(e)
-    deps = _get_deps()
-    model = _get_model()
-    from second_brain.agents.impact import impact_agent
-    timeout = deps.config.api_timeout_seconds
-    try:
-        async with asyncio.timeout(timeout):
-            result = await impact_agent.run(recommendation, deps=deps, model=model)
-    except TimeoutError:
-        return f"Impact analysis timed out after {timeout}s."
-    return result.output.executive_summary or str(result.output)
-
-
-@server.tool()
 async def compose_email(request: str) -> str:
     """Compose or manage emails with brand voice.
 
@@ -951,29 +928,6 @@ async def compose_email(request: str) -> str:
         return f"Email composition timed out after {timeout}s."
     out = result.output
     return f"Subject: {out.subject}\n\n{out.body}\n\nStatus: {out.status}"
-
-
-@server.tool()
-async def analyze_data(question: str) -> str:
-    """Get data analysis and business insights.
-
-    Args:
-        question: The business or data question to analyze
-    """
-    try:
-        question = _validate_mcp_input(question, label="question")
-    except ValueError as e:
-        return str(e)
-    deps = _get_deps()
-    model = _get_model()
-    from second_brain.agents.analyst import analyst_agent
-    timeout = deps.config.api_timeout_seconds
-    try:
-        async with asyncio.timeout(timeout):
-            result = await analyst_agent.run(question, deps=deps, model=model)
-    except TimeoutError:
-        return f"Data analysis timed out after {timeout}s."
-    return result.output.executive_summary or str(result.output)
 
 
 @server.tool()
@@ -1001,36 +955,6 @@ async def ask_claude_specialist(question: str) -> str:
 
 
 # --- Chief of Staff / Orchestration ---
-
-@server.tool()
-async def route_request(request: str) -> str:
-    """Route a request to the optimal brain agent using Chief of Staff.
-
-    Args:
-        request: The user's request to classify and route
-    """
-    try:
-        request = _validate_mcp_input(request, label="request")
-    except ValueError as e:
-        return str(e)
-    deps = _get_deps()
-    model = _get_model()
-    from second_brain.agents.chief_of_staff import chief_of_staff
-    timeout = deps.config.api_timeout_seconds
-    try:
-        async with asyncio.timeout(timeout):
-            result = await chief_of_staff.run(request, deps=deps, model=model)
-    except TimeoutError:
-        return f"Route request timed out after {timeout}s."
-    routing = result.output
-    parts = [
-        f"Route: {routing.target_agent}",
-        f"Reasoning: {routing.reasoning}",
-        f"Pipeline: {' -> '.join(routing.pipeline_steps) if routing.pipeline_steps else 'N/A'}",
-        f"Confidence: {routing.confidence}",
-    ]
-    return "\n".join(parts)
-
 
 @server.tool()
 async def run_brain_pipeline(request: str, steps: str = "") -> str:

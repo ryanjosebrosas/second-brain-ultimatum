@@ -986,25 +986,6 @@ def prioritize(tasks: str):
     asyncio.run(run())
 
 
-@cli.command("impact")
-@click.argument("recommendation")
-def analyze_impact(recommendation: str):
-    """Quantify business impact of a recommendation."""
-    recommendation = _validate_input(recommendation, label="recommendation")
-    from second_brain.agents.impact import impact_agent
-
-    deps = create_deps()
-    model = get_model(deps.config)
-
-    async def run():
-        result = await impact_agent.run(recommendation, deps=deps, model=model)
-        click.echo(f"\n{result.output.executive_summary}")
-        if result.output.total_roi:
-            click.echo(f"\nROI: {result.output.total_roi}")
-
-    asyncio.run(run())
-
-
 @cli.command()
 @click.argument("request")
 def email(request: str):
@@ -1022,23 +1003,6 @@ def email(request: str):
             click.echo(f"\nSubject: {out.subject}")
         click.echo(f"\n{out.body}")
         click.echo(f"\nStatus: {out.status}")
-
-    asyncio.run(run())
-
-
-@cli.command()
-@click.argument("question")
-def analyze(question: str):
-    """Get data analysis and business insights."""
-    question = _validate_input(question, label="question")
-    from second_brain.agents.analyst import analyst_agent
-
-    deps = create_deps()
-    model = get_model(deps.config)
-
-    async def run():
-        result = await analyst_agent.run(question, deps=deps, model=model)
-        click.echo(f"\n{result.output.executive_summary}")
 
     asyncio.run(run())
 

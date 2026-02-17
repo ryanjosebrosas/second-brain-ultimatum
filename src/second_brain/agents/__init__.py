@@ -13,9 +13,7 @@ from second_brain.agents.synthesizer import synthesizer_agent
 from second_brain.agents.template_builder import template_builder_agent
 from second_brain.agents.coach import coach_agent
 from second_brain.agents.pmo import pmo_agent
-from second_brain.agents.impact import impact_agent
 from second_brain.agents.email_agent import email_agent
-from second_brain.agents.analyst import analyst_agent
 from second_brain.agents.specialist import specialist_agent
 
 __all__ = [
@@ -34,8 +32,6 @@ __all__ = [
     "template_builder_agent",
     "coach_agent",
     "pmo_agent",
-    "impact_agent",
     "email_agent",
-    "analyst_agent",
     "specialist_agent",
 ]

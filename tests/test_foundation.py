@@ -7,7 +7,7 @@ from second_brain.schemas import (
     RoutingDecision, EssayResult, ClarityFinding, ClarityResult,
     SynthesizerTheme, SynthesizerResult, TemplateOpportunity,
     TemplateBuilderResult, CoachSession, PriorityScore, PMOResult,
-    ImpactMetric, ImpactResult, EmailAction, AnalysisResult,
+    EmailAction,
     SpecialistAnswer,
 )
 from second_brain.services.abstract import (
@@ -235,27 +235,6 @@ class TestPMOResult:
         assert "Fix auth bug" in p.today_focus
 
 
-class TestImpactMetric:
-    def test_defaults(self):
-        m = ImpactMetric(metric_name="Revenue")
-        assert m.current_value == ""
-        assert m.confidence == "MEDIUM"
-
-
-class TestImpactResult:
-    def test_defaults(self):
-        i = ImpactResult()
-        assert i.metrics == []
-        assert i.risk_scenarios == {}
-        assert i.total_roi == ""
-
-    def test_with_metrics(self):
-        metric = ImpactMetric(metric_name="Conversion Rate", financial_impact="$50K/year")
-        i = ImpactResult(metrics=[metric], total_roi="3x in 12 months")
-        assert len(i.metrics) == 1
-        assert i.total_roi == "3x in 12 months"
-
-
 class TestEmailAction:
     def test_send(self):
         e = EmailAction(
@@ -276,22 +255,6 @@ class TestEmailAction:
     def test_invalid_action_type(self):
         with pytest.raises(Exception):
             EmailAction(action_type="forward")
-
-
-class TestAnalysisResult:
-    def test_defaults(self):
-        a = AnalysisResult(query_type="revenue")
-        assert a.data_sources == []
-        assert a.confidence == "MEDIUM"
-        assert a.metrics == {}
-
-    def test_with_findings(self):
-        a = AnalysisResult(
-            query_type="revenue",
-            findings=["Revenue up 15%", "Churn down 5%"],
-            recommendations=["Double down on email"],
-        )
-        assert len(a.findings) == 2
 
 
 class TestSpecialistAnswer:

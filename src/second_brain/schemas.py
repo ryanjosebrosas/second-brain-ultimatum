@@ -641,7 +641,7 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
 AgentRoute = Literal[
     "recall", "ask", "learn", "create", "review",
     "essay_writer", "clarity", "synthesizer", "template_builder",
-    "coach", "pmo", "impact", "email", "analyst", "specialist",
+    "coach", "pmo", "email", "specialist",
     "pipeline",
 ]
 
@@ -812,30 +812,6 @@ class PMOResult(BaseModel):
     capacity_hours: float = Field(default=8.0, description="Available focused hours estimated")
 
 
-class ImpactMetric(BaseModel):
-    """A single quantified business impact metric."""
-
-    metric_name: str = Field(description="What is being measured")
-    current_value: str = Field(default="", description="Current state")
-    projected_value: str = Field(default="", description="Projected improvement")
-    financial_impact: str = Field(default="", description="Dollar value if quantifiable")
-    confidence: ConfidenceLevel = Field(default="MEDIUM", description="Confidence in projection")
-
-
-class ImpactResult(BaseModel):
-    """Output from the Impact Analyzer agent."""
-
-    metrics: list[ImpactMetric] = Field(default_factory=list, description="Quantified impact metrics")
-    total_roi: str = Field(default="", description="Overall ROI calculation")
-    payback_period: str = Field(default="", description="Time to recover investment")
-    risk_scenarios: dict = Field(
-        default_factory=dict,
-        description="Conservative/base/optimistic projections",
-    )
-    opportunity_cost: str = Field(default="", description="Cost of NOT taking action")
-    executive_summary: str = Field(default="", description="1-2 paragraph business case")
-
-
 class EmailAction(BaseModel):
     """Output from the Email Agent."""
 
@@ -849,22 +825,6 @@ class EmailAction(BaseModel):
     template_used: str = Field(default="", description="Template name if one was used")
     status: str = Field(default="draft", description="sent/draft/searched/organized")
     notes: str = Field(default="", description="Notes for user review before sending")
-
-
-class AnalysisResult(BaseModel):
-    """Output from the Data Analyst agent."""
-
-    query_type: str = Field(description="Type of analysis performed")
-    data_sources: list[str] = Field(default_factory=list, description="Data sources queried")
-    findings: list[str] = Field(default_factory=list, description="Key findings")
-    metrics: dict = Field(default_factory=dict, description="Computed metrics")
-    recommendations: list[str] = Field(default_factory=list, description="Actionable recommendations")
-    sql_queries: list[str] = Field(default_factory=list, description="SQL queries executed (if any)")
-    visualization_suggestions: list[str] = Field(
-        default_factory=list, description="Suggested charts/graphs"
-    )
-    executive_summary: str = Field(default="", description="Business-friendly summary")
-    confidence: ConfidenceLevel = Field(default="MEDIUM", description="Confidence in analysis")
 
 
 class SpecialistAnswer(BaseModel):

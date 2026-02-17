@@ -334,18 +334,8 @@ def get_agent_registry() -> dict:
     except ImportError:
         pass
     try:
-        from second_brain.agents.impact import impact_agent
-        registry["impact"] = (impact_agent, "Business impact analysis")
-    except ImportError:
-        pass
-    try:
         from second_brain.agents.email_agent import email_agent
         registry["email"] = (email_agent, "Email operations")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.analyst import analyst_agent
-        registry["analyst"] = (analyst_agent, "Data analytics")
     except ImportError:
         pass
     try:

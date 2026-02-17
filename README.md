@@ -2,11 +2,11 @@
 
 **An agentic AI system that learns your voice, manages your work, and gets smarter every session.**
 
-Second Brain is a 16-agent Pydantic AI system built around a single principle: your accumulated knowledge should make every output better. Feed it your past work, coaching notes, business context, and patterns — and it applies all of it automatically, every time.
+Second Brain is a 14-agent Pydantic AI system built around a single principle: your accumulated knowledge should make every output better. Feed it your past work, coaching notes, business context, and patterns — and it applies all of it automatically, every time.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-789%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-776%20passing-brightgreen.svg)]()
 
 ---
 
@@ -14,7 +14,7 @@ Second Brain is a 16-agent Pydantic AI system built around a single principle: y
 
 Most AI tools start fresh every session. Second Brain doesn't. It maintains a persistent knowledge layer — semantic memory, a pattern registry, a knowledge graph — and every agent taps into it before responding.
 
-Write content? It loads your voice guide, past examples, and proven patterns first. Plan your day? It knows your goals, projects, and past sessions. Analyze business impact? It has your company context and metrics history.
+Write content? It loads your voice guide, past examples, and proven patterns first. Plan your day? It knows your goals, projects, and past sessions. Ask a technical question? It searches your knowledge base and cites sources with verified confidence levels.
 
 The system also self-corrects. Every agent uses output validators with `ModelRetry` — if the first attempt doesn't meet quality criteria, the agent receives specific feedback and retries up to 3 times before returning the result.
 
@@ -23,7 +23,7 @@ graph TD
     USER["User Request"] --> COS["Chief of Staff<br/><i>routes to best agent</i>"]
 
     COS --> CONTENT["Content Pipeline<br/>Create → Clarity → Review → Synthesize"]
-    COS --> OPS["Operations<br/>Coach / PMO / Impact / Email / Analyst"]
+    COS --> OPS["Operations<br/>Coach / PMO / Email / Specialist"]
     COS --> BRAIN["Brain Core<br/>Recall / Ask / Learn"]
 
     CONTENT --> MEM["Memory Layer<br/><i>Mem0 + Supabase + Graph</i>"]
@@ -42,7 +42,7 @@ graph TD
 
 ---
 
-## 16 Agents
+## 14 Agents
 
 Second Brain is built on [Pydantic AI](https://ai.pydantic.dev/) with typed dependencies, structured output, and `@output_validator` loops. All agents share a single `BrainDeps` dataclass injected at runtime.
 
@@ -50,7 +50,7 @@ Second Brain is built on [Pydantic AI](https://ai.pydantic.dev/) with typed depe
 
 #### Chief of Staff — Router & Orchestrator
 
-The Chief of Staff routes any request to the right specialist and runs multi-agent pipelines. It knows all 15 specialist agents and their capabilities.
+The Chief of Staff routes any request to the right specialist and runs multi-agent pipelines. It knows all 13 specialist agents and their capabilities.
 
 ```bash
 brain route "Help me plan today and write a LinkedIn post about it"
@@ -175,7 +175,7 @@ brain templates "Subject: Following up on our demo\n\nHi Sarah, ..."
 
 ---
 
-### Operations (6 agents)
+### Operations (4 agents)
 
 #### Daily Accountability Coach
 
@@ -199,16 +199,6 @@ Scores tasks using a multi-factor algorithm (Urgency 35%, Impact 25%, Effort 15%
 brain prioritize "Task 1: Write proposal for Acme. Task 2: Fix staging bug. Task 3: Prep Q4 review..."
 ```
 
-#### Impact Analyzer — Business ROI
-
-Transforms recommendations into quantified business cases. Framework: quantify status quo cost → calculate benefits → compute ROI metrics → risk scenarios at 75%/100%/125% → opportunity cost of inaction. Every analysis needs numbers — not activity metrics but business outcomes.
-
-**Tools**: `load_business_context`
-
-```bash
-brain impact "Implement automated email follow-up for sales leads"
-```
-
 #### Email Agent — Composition & Management
 
 Drafts emails in your brand voice using voice guide, past examples, and email history when EmailService is configured. Enforces draft-first safety — `send` actions are forced to `status="draft"` until you approve. Email history search and send are gated behind EmailService availability via `prepare=`.
@@ -218,17 +208,6 @@ Drafts emails in your brand voice using voice guide, past examples, and email hi
 
 ```bash
 brain email "Follow up with Sarah at Acme who went silent after the demo"
-```
-
-#### Data Analyst — Business Intelligence
-
-Analyzes business questions with data. Identifies relevant sources, runs SQL when AnalyticsService is configured, interprets results with business context, and delivers recommendations. Leads with findings, not methodology. SQL execution and revenue metrics are gated via `prepare=`.
-
-**Tools**: `load_business_metrics_context`, `run_query`*, `get_revenue_metrics`*
-*(conditional on analytics service)*
-
-```bash
-brain analyze "What's driving the drop in trial-to-paid conversion this quarter?"
 ```
 
 #### Claude Code Specialist — Verified Technical Answers
@@ -274,9 +253,7 @@ graph TD
     subgraph "Operations"
         CO["Coach"]
         PM["PMO"]
-        IM["Impact"]
         EM["Email"]
-        AN["Analyst"]
         SP["Specialist"]
     end
 
@@ -292,11 +269,11 @@ graph TD
     CLI & MCP --> COS
     COS --> RA & AA & LA & CA & RV
     COS --> EW & CL & SY & TB
-    COS --> CO & PM & IM & EM & AN & SP
+    COS --> CO & PM & EM & SP
 
     RA & AA & LA & CA & RV --> MS & SS
     EW & CL & SY & TB --> MS & SS
-    CO & PM & IM & EM & AN & SP --> MS & SS & AB
+    CO & PM & EM & SP --> MS & SS & AB
 
     style COS fill:#2c3e50,color:#fff
     style AB fill:#c0392b,color:#fff
@@ -495,9 +472,7 @@ brain templates "your deliverable text"
 # Operations
 brain coach "help me plan today" --session-type morning
 brain prioritize "Task 1: write proposal. Task 2: fix bug..."
-brain impact "automate lead follow-up emails"
 brain email "follow up with Sarah at Acme"
-brain analyze "what's driving the Q3 drop?"
 brain specialist "how does agent delegation work in Pydantic AI?"
 
 # Orchestration
@@ -549,12 +524,9 @@ python -m second_brain.mcp_server
 | `find_template_opportunities` | TemplateBuilder | Identify reusable frameworks |
 | `coaching_session` | Coach | Daily accountability coaching |
 | `prioritize_tasks` | PMO | Multi-factor task priority scoring |
-| `analyze_business_impact` | Impact | ROI quantification |
 | `compose_email` | Email | Draft emails with brand voice |
-| `analyze_data` | Analyst | Business intelligence insights |
 | `ask_claude_specialist` | Specialist | Verified Claude Code answers |
-| `route_request` | Chief of Staff | Auto-route to best agent |
-| `run_brain_pipeline` | Chief of Staff | Execute multi-agent pipeline |
+| `run_brain_pipeline` | Chief of Staff | Auto-route or execute multi-agent pipeline |
 | `brain_health` | — | Brain health metrics |
 | `growth_report` | — | Growth tracking |
 | `vector_search` | — | pgvector similarity search |
@@ -667,9 +639,7 @@ src/second_brain/
 │   ├── template_builder.py  # Template Builder — identify reusable frameworks
 │   ├── coach.py             # Daily Coach — planning + coaching (calendar-integrated)
 │   ├── pmo.py               # PMO Advisor — multi-factor priority scoring
-│   ├── impact.py            # Impact Analyzer — ROI quantification
 │   ├── email_agent.py       # Email Agent — composition with voice (email-integrated)
-│   ├── analyst.py           # Data Analyst — business intelligence (analytics-integrated)
 │   └── specialist.py        # Specialist — verified Claude Code answers
 └── services/
     ├── abstract.py          # Abstract interfaces: EmailServiceBase, CalendarServiceBase, etc.
@@ -682,14 +652,14 @@ src/second_brain/
     ├── retry.py             # Circuit breaker + tenacity retry wrappers
     └── search_result.py     # SearchResult dataclass
 
-tests/                       # 789 tests
+tests/                       # 776 tests
 ├── conftest.py
 ├── test_agents.py           # Agent schema + tool registration
 ├── test_agentic.py          # Output validators, ModelRetry loops
 ├── test_chief_of_staff.py   # Orchestrator + pipeline
 ├── test_content_pipeline.py # Essay, Clarity, Synthesizer, TemplateBuilder
 ├── test_foundation.py       # Foundation schemas + abstract services
-├── test_operations.py       # Coach, PMO, Impact, Email, Analyst, Specialist
+├── test_operations.py       # Coach, PMO, Email, Specialist
 ├── test_projects.py         # Project lifecycle
 ├── test_services.py         # MemoryService + StorageService
 ├── test_mcp_server.py       # MCP tool tests
@@ -717,7 +687,7 @@ supabase/migrations/         # 13 SQL migration files
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
 | **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` loading, validation |
 | **Retry** | [Tenacity](https://tenacity.readthedocs.io/) | Circuit breaker, exponential backoff |
-| **Testing** | pytest + pytest-asyncio | 789 tests, async support |
+| **Testing** | pytest + pytest-asyncio | 776 tests, async support |
 
 ---
 

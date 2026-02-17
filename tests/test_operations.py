@@ -1,4 +1,4 @@
-"""Tests for operations agents: coach, pmo, impact, email, analyst, specialist."""
+"""Tests for operations agents: coach, pmo, email, specialist."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -6,13 +6,11 @@ from pydantic_ai import ModelRetry
 
 from second_brain.agents.coach import coach_agent
 from second_brain.agents.pmo import pmo_agent
-from second_brain.agents.impact import impact_agent
 from second_brain.agents.email_agent import email_agent
-from second_brain.agents.analyst import analyst_agent
 from second_brain.agents.specialist import specialist_agent
 from second_brain.schemas import (
-    CoachSession, PMOResult, PriorityScore, ImpactResult,
-    EmailAction, AnalysisResult, SpecialistAnswer,
+    CoachSession, PMOResult, PriorityScore,
+    EmailAction, SpecialistAnswer,
 )
 
 
@@ -29,17 +27,9 @@ class TestAgentToolRegistration:
         assert "load_strategic_context" in tools
         assert "get_scoring_weights" in tools
 
-    def test_impact_tools(self):
-        tools = impact_agent._function_toolset.tools
-        assert "load_business_context" in tools
-
     def test_email_tools(self):
         tools = email_agent._function_toolset.tools
         assert "load_email_voice" in tools
-
-    def test_analyst_tools(self):
-        tools = analyst_agent._function_toolset.tools
-        assert "load_business_metrics_context" in tools
 
     def test_specialist_tools(self):
         tools = specialist_agent._function_toolset.tools
@@ -53,8 +43,7 @@ class TestRetryConfig:
     def test_all_have_retries(self):
         for name, agent in [
             ("coach", coach_agent), ("pmo", pmo_agent),
-            ("impact", impact_agent), ("email", email_agent),
-            ("analyst", analyst_agent), ("specialist", specialist_agent),
+            ("email", email_agent), ("specialist", specialist_agent),
         ]:
             assert agent._max_result_retries == 3, f"{name} missing retries"
 
@@ -154,37 +143,6 @@ class TestPMOValidator:
         assert "LowPriority" not in result.this_week
 
 
-class TestImpactValidator:
-    @pytest.mark.asyncio
-    async def test_no_summary_triggers_retry(self):
-        output = ImpactResult(executive_summary="")
-        ctx = MagicMock()
-        validator = impact_agent._output_validators[0]
-        with pytest.raises(ModelRetry):
-            await validator.validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_no_metrics_triggers_retry(self):
-        from second_brain.schemas import ImpactMetric
-        output = ImpactResult(executive_summary="Good ROI", metrics=[])
-        ctx = MagicMock()
-        validator = impact_agent._output_validators[0]
-        with pytest.raises(ModelRetry):
-            await validator.validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_valid_impact_passes(self):
-        from second_brain.schemas import ImpactMetric
-        output = ImpactResult(
-            executive_summary="This initiative will save $100k annually",
-            metrics=[ImpactMetric(metric_name="Cost Savings", financial_impact="$100k/year")],
-        )
-        ctx = MagicMock()
-        validator = impact_agent._output_validators[0]
-        result = await validator.validate(output, ctx, wrap_validation_errors=False)
-        assert "100k" in result.executive_summary
-
-
 class TestEmailValidator:
     @pytest.mark.asyncio
     async def test_send_without_subject_triggers_retry(self):
@@ -221,41 +179,6 @@ class TestEmailValidator:
         validator = email_agent._output_validators[0]
         result = await validator.validate(output, ctx, wrap_validation_errors=False)
         assert result.action_type == "search"
-
-
-class TestAnalystValidator:
-    @pytest.mark.asyncio
-    async def test_no_summary_triggers_retry(self):
-        output = AnalysisResult(query_type="revenue", executive_summary="")
-        ctx = MagicMock()
-        validator = analyst_agent._output_validators[0]
-        with pytest.raises(ModelRetry):
-            await validator.validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_no_findings_or_recommendations_triggers_retry(self):
-        output = AnalysisResult(
-            query_type="revenue",
-            executive_summary="Summary here",
-            findings=[],
-            recommendations=[],
-        )
-        ctx = MagicMock()
-        validator = analyst_agent._output_validators[0]
-        with pytest.raises(ModelRetry):
-            await validator.validate(output, ctx, wrap_validation_errors=False)
-
-    @pytest.mark.asyncio
-    async def test_valid_analysis_passes(self):
-        output = AnalysisResult(
-            query_type="revenue",
-            executive_summary="Revenue is up 20%",
-            findings=["Revenue increased Q4"],
-        )
-        ctx = MagicMock()
-        validator = analyst_agent._output_validators[0]
-        result = await validator.validate(output, ctx, wrap_validation_errors=False)
-        assert result.query_type == "revenue"
 
 
 class TestSpecialistValidator:
@@ -312,10 +235,10 @@ class TestRegistryCompleteness:
     def test_all_operations_agents_in_registry(self):
         from second_brain.agents.utils import get_agent_registry
         registry = get_agent_registry()
-        for name in ["coach", "pmo", "impact", "email", "analyst", "specialist"]:
+        for name in ["coach", "pmo", "email", "specialist"]:
             assert name in registry, f"'{name}' missing from registry"
-        # Total: 5 original + chief of staff + 4 content + 6 operations = 16
-        assert len(registry) >= 15
+        # Total: 5 original + chief of staff + 4 content + 4 operations = 14
+        assert len(registry) >= 13
 
     def test_registry_descriptions_present(self):
         from second_brain.agents.utils import get_agent_registry
