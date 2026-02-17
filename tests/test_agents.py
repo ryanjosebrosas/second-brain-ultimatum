@@ -381,6 +381,17 @@ class TestCreateAgent:
         from second_brain.agents import create_agent
         assert create_agent is not None
 
+    def test_agent_instructions_require_full_draft(self):
+        """Guard against instructions that allow summary output in draft field."""
+        from second_brain.agents.create import create_agent
+        instructions = create_agent._instructions
+        assert "NEVER" in instructions or "MUST" in instructions, (
+            "Create agent instructions must explicitly require full draft content"
+        )
+        assert "draft" in instructions.lower(), (
+            "Create agent instructions must reference the draft field"
+        )
+
 
 class TestDimensionScoreSchema:
     def test_dimension_score_defaults(self):

@@ -170,7 +170,14 @@ class ContentTypeConfig(BaseModel):
 class CreateResult(BaseModel):
     """Output from the CreateAgent."""
 
-    draft: str = Field(description="The drafted content")
+    draft: str = Field(
+        description=(
+            "The COMPLETE written text of the content — the actual post, email, article, "
+            "or document itself. This must be the full publishable draft, NOT a summary, "
+            "description, or explanation of what was written. "
+            "Example: for a LinkedIn post, this is the actual post text the user will copy and paste."
+        )
+    )
     content_type: str = Field(description="Content type used (e.g., linkedin, email)")
     mode: str = Field(
         description="Communication mode: casual, professional, or formal"
@@ -188,7 +195,13 @@ class CreateResult(BaseModel):
         description="Example titles that informed the draft",
     )
     word_count: int = Field(default=0, description="Word count of the draft")
-    notes: str = Field(default="", description="Notes for the human editor")
+    notes: str = Field(
+        default="",
+        description=(
+            "Editorial notes for the human reviewer — suggestions about what to polish, "
+            "verify, or adjust. Meta-commentary about the draft goes here, NOT in the draft field."
+        ),
+    )
 
 
 class DimensionScore(BaseModel):

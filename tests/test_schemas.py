@@ -165,6 +165,23 @@ class TestCreateResult:
         assert result.patterns_applied == []
         assert result.examples_referenced == []
 
+    def test_draft_field_description_is_explicit(self):
+        """Guard against vague draft field descriptions that cause summary output."""
+        field_info = CreateResult.model_fields["draft"]
+        desc = field_info.description.lower()
+        assert "complete" in desc or "full" in desc, (
+            "draft field description must explicitly require complete/full text"
+        )
+        assert "not" in desc or "never" in desc, (
+            "draft field description must include anti-pattern guidance"
+        )
+
+    def test_notes_field_description_separates_from_draft(self):
+        """Verify notes field description clarifies it's for meta-commentary."""
+        field_info = CreateResult.model_fields["notes"]
+        desc = field_info.description.lower()
+        assert "note" in desc or "editorial" in desc or "suggestion" in desc
+
 
 class TestDimensionScore:
     """Tests for DimensionScore schema."""

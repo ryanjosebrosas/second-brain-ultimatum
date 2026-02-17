@@ -6,7 +6,7 @@ Second Brain is an AI-powered writing system built on 5 specialized agents that 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-463%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-525%20passing-brightgreen.svg)]()
 
 ---
 
@@ -151,9 +151,18 @@ from our case study, then addressing their integration concerns upfront..."
 
 ### CreateAgent — Content Creation
 
-Drafts content in your voice using your accumulated knowledge. Loads your voice guide, reference examples, applicable patterns, and audience context before writing.
+Drafts content in your voice using your accumulated knowledge. Loads your voice guide, reference examples, applicable patterns, and audience context before writing. Returns the **complete, publishable draft** — not a summary or description of what it wrote.
 
-**Tools**: `load_voice_guide`, `load_content_examples`, `find_applicable_patterns`, `load_audience_context`
+**Tools**: `load_voice_guide`, `load_content_examples`, `find_applicable_patterns`, `load_audience_context`, `validate_draft`
+
+The agent follows a structured process:
+
+1. **Load context** — voice guide, reference examples, audience data, and applicable patterns
+2. **Match mode** — selects casual, professional, or formal tone based on content type
+3. **Apply writing laws** — active voice, no filler words, no adverbs, simple language, strong opening
+4. **Filter AI patterns** — strips em dashes for drama, fake enthusiasm, generic intros, and cliched openers
+5. **Validate draft** — checks word count and structure against content type requirements
+6. **Output full text** — the `draft` field contains the actual content the user will publish, with editorial notes separated into the `notes` field
 
 ```bash
 brain create "Announce our new AI automation product" --type linkedin
@@ -792,6 +801,7 @@ src/second_brain/
 ├── mcp_server.py            # FastMCP server — 15 tools for Claude Code
 ├── migrate.py               # Markdown -> Mem0 + Supabase migration tool
 ├── agents/
+│   ├── utils.py             # Shared agent helpers — formatting, graph fallback, error handling
 │   ├── recall.py            # RecallAgent — semantic memory search
 │   ├── ask.py               # AskAgent — contextual Q&A with brain knowledge
 │   ├── learn.py             # LearnAgent — pattern extraction + consolidation
@@ -802,9 +812,11 @@ src/second_brain/
     ├── storage.py           # StorageService — Supabase CRUD + ContentTypeRegistry
     ├── health.py            # HealthService — brain health + growth metrics
     ├── graphiti.py          # GraphitiService — graph memory (Neo4j / FalkorDB)
+    ├── embeddings.py        # EmbeddingService — OpenAI embeddings + vector search
+    ├── retry.py             # Retry utilities — circuit breaker, tenacity wrappers
     └── search_result.py     # SearchResult dataclass — typed Mem0 results
 
-tests/                       # 463 tests
+tests/                       # 525 tests
 ├── conftest.py              # Shared fixtures (including subscription auth)
 ├── test_agents.py           # Agent schema + tool registration
 ├── test_auth.py             # OAuth token reading + validation (20 tests)
@@ -839,7 +851,7 @@ scripts/                     # Utility scripts
 | **MCP Server** | [FastMCP](https://github.com/jlowin/fastmcp) | Expose agents as Claude Code tools |
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
 | **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` file loading, validation |
-| **Testing** | pytest + pytest-asyncio | 463 tests, async support |
+| **Testing** | pytest + pytest-asyncio | 525 tests, async support |
 
 ---
 
