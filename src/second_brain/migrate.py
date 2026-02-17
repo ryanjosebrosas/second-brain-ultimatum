@@ -21,17 +21,27 @@ class BrainMigrator:
         self.storage = StorageService(config)
 
     async def migrate_all(self):
-        """Run full migration."""
+        """Run full migration with error tracking."""
         logger.info(f"Migrating from {self.data_path}")
-        await self.migrate_memory_content()
-        await self.migrate_patterns()
-        await self.migrate_experiences()
-        await self.migrate_examples()
-        await self.migrate_knowledge_repo()
-        logger.info("Migration complete!")
+        results = {"success": 0, "skipped": 0, "errors": 0}
+        try:
+            await self.migrate_memory_content(results)
+            await self.migrate_patterns(results)
+            await self.migrate_experiences(results)
+            await self.migrate_examples(results)
+            await self.migrate_knowledge_repo(results)
+            logger.info(
+                "Migration complete! Success: %d, Skipped: %d, Errors: %d",
+                results["success"], results["skipped"], results["errors"],
+            )
+        except Exception as e:
+            logger.error("Migration failed: %s. Partial data may exist.", e)
+            raise
 
-    async def migrate_memory_content(self):
+    async def migrate_memory_content(self, results: dict | None = None):
         """Migrate memory/ folders to Mem0 + Supabase memory_content table."""
+        if results is None:
+            results = {"success": 0, "skipped": 0, "errors": 0}
         categories = [
             ("company", ["products.md", "positioning.md", "differentiators.md"]),
             ("customers", ["ideal-customer-profile.md", "pain-points.md", "objections.md"]),
@@ -43,14 +53,17 @@ class BrainMigrator:
         for category, files in categories:
             for filename in files:
                 filepath = self.data_path / "memory" / category / filename
-                if filepath.exists():
+                if not filepath.exists():
+                    results["skipped"] += 1
+                    continue
+                try:
                     content = filepath.read_text(encoding="utf-8")
                     # Add to Mem0 (semantic)
                     await self.memory.add(
                         content,
                         metadata={"category": category, "source": str(filepath)},
                     )
-                    # Add to Supabase (structured)
+                    # Add to Supabase (structured, upsert for idempotency)
                     await self.storage.upsert_memory_content({
                         "category": category,
                         "subcategory": filepath.stem,
@@ -58,10 +71,16 @@ class BrainMigrator:
                         "content": content,
                         "source_file": str(filepath),
                     })
+                    results["success"] += 1
                     logger.info(f"Migrated: {category}/{filename}")
+                except Exception as e:
+                    results["errors"] += 1
+                    logger.warning("Failed to migrate %s/%s: %s", category, filename, e)
 
-    async def migrate_patterns(self):
+    async def migrate_patterns(self, results: dict | None = None):
         """Migrate memory/patterns/ to Supabase patterns table."""
+        if results is None:
+            results = {"success": 0, "skipped": 0, "errors": 0}
         patterns_dir = self.data_path / "memory" / "patterns"
         if not patterns_dir.exists():
             logger.warning(f"Patterns directory not found: {patterns_dir}")
@@ -73,16 +92,22 @@ class BrainMigrator:
             content = pattern_file.read_text(encoding="utf-8")
             patterns = self._parse_patterns(content, str(pattern_file))
             for p in patterns:
-                await self.storage.upsert_pattern(p)
-                # Also add to Mem0 for semantic search
-                await self.memory.add(
-                    f"Pattern: {p['name']}\n{p['pattern_text']}",
-                    metadata={"type": "pattern", "topic": p["topic"]},
-                )
+                try:
+                    await self.storage.upsert_pattern(p)
+                    await self.memory.add(
+                        f"Pattern: {p['name']}\n{p['pattern_text']}",
+                        metadata={"type": "pattern", "topic": p["topic"]},
+                    )
+                    results["success"] += 1
+                except Exception as e:
+                    results["errors"] += 1
+                    logger.warning("Failed to migrate pattern '%s': %s", p.get("name"), e)
             logger.info(f"Migrated {len(patterns)} patterns from {pattern_file.name}")
 
-    async def migrate_experiences(self):
+    async def migrate_experiences(self, results: dict | None = None):
         """Migrate experiences/ folders to Supabase experiences table."""
+        if results is None:
+            results = {"success": 0, "skipped": 0, "errors": 0}
         exp_dir = self.data_path / "experiences"
         if not exp_dir.exists():
             logger.warning(f"Experiences directory not found: {exp_dir}")
@@ -94,28 +119,34 @@ class BrainMigrator:
             for project_dir in category_dir.iterdir():
                 if not project_dir.is_dir():
                     continue
-                experience = {
-                    "name": project_dir.name,
-                    "category": category_dir.name,
-                    "source_path": str(project_dir),
-                }
-                # Read available files
-                for key, filename in [
-                    ("plan_summary", "plan.md"),
-                    ("learnings", "learnings.md"),
-                ]:
-                    filepath = project_dir / filename
-                    if filepath.exists():
-                        experience[key] = filepath.read_text(encoding="utf-8")[:5000]
-                await self.storage.add_experience(experience)
-                logger.info(f"Migrated experience: {project_dir.name}")
+                try:
+                    experience = {
+                        "name": project_dir.name,
+                        "category": category_dir.name,
+                        "source_path": str(project_dir),
+                    }
+                    for key, filename in [
+                        ("plan_summary", "plan.md"),
+                        ("learnings", "learnings.md"),
+                    ]:
+                        filepath = project_dir / filename
+                        if filepath.exists():
+                            experience[key] = filepath.read_text(encoding="utf-8")[:5000]
+                    await self.storage.add_experience(experience)
+                    results["success"] += 1
+                    logger.info(f"Migrated experience: {project_dir.name}")
+                except Exception as e:
+                    results["errors"] += 1
+                    logger.warning("Failed to migrate experience '%s': %s", project_dir.name, e)
 
-    async def migrate_examples(self):
+    async def migrate_examples(self, results: dict | None = None):
         """Migrate memory/examples/ folders to Supabase examples table.
 
         Supports any content type subdirectory — content_type is derived from
         the directory name (e.g., memory/examples/case-study/ → content_type="case-study").
         """
+        if results is None:
+            results = {"success": 0, "skipped": 0, "errors": 0}
         examples_dir = self.data_path / "memory" / "examples"
         if not examples_dir.exists():
             logger.warning(f"Examples directory not found: {examples_dir}")
@@ -129,22 +160,29 @@ class BrainMigrator:
             for md_file in type_dir.glob("*.md"):
                 if md_file.name in skip_files:
                     continue
-                content = md_file.read_text(encoding="utf-8")
-                title = md_file.stem.replace("-", " ").title()
-                await self.memory.add(
-                    content,
-                    metadata={"type": "example", "content_type": content_type},
-                )
-                await self.storage.upsert_example({
-                    "content_type": content_type,
-                    "title": title,
-                    "content": content,
-                    "source_file": str(md_file),
-                })
-                logger.info(f"Migrated example: {content_type}/{md_file.name}")
+                try:
+                    content = md_file.read_text(encoding="utf-8")
+                    title = md_file.stem.replace("-", " ").title()
+                    await self.memory.add(
+                        content,
+                        metadata={"type": "example", "content_type": content_type},
+                    )
+                    await self.storage.upsert_example({
+                        "content_type": content_type,
+                        "title": title,
+                        "content": content,
+                        "source_file": str(md_file),
+                    })
+                    results["success"] += 1
+                    logger.info(f"Migrated example: {content_type}/{md_file.name}")
+                except Exception as e:
+                    results["errors"] += 1
+                    logger.warning("Failed to migrate example '%s/%s': %s", content_type, md_file.name, e)
 
-    async def migrate_knowledge_repo(self):
+    async def migrate_knowledge_repo(self, results: dict | None = None):
         """Migrate memory/knowledge-repo/ folders to Supabase knowledge_repo table."""
+        if results is None:
+            results = {"success": 0, "skipped": 0, "errors": 0}
         repo_dir = self.data_path / "memory" / "knowledge-repo"
         if not repo_dir.exists():
             logger.warning(f"Knowledge repo directory not found: {repo_dir}")
@@ -158,19 +196,24 @@ class BrainMigrator:
             for md_file in category_dir.glob("*.md"):
                 if md_file.name in skip_files:
                     continue
-                content = md_file.read_text(encoding="utf-8")
-                title = md_file.stem.replace("-", " ").title()
-                await self.memory.add(
-                    content,
-                    metadata={"type": "knowledge", "category": category},
-                )
-                await self.storage.upsert_knowledge({
-                    "category": category,
-                    "title": title,
-                    "content": content,
-                    "source_file": str(md_file),
-                })
-                logger.info(f"Migrated knowledge: {category}/{md_file.name}")
+                try:
+                    content = md_file.read_text(encoding="utf-8")
+                    title = md_file.stem.replace("-", " ").title()
+                    await self.memory.add(
+                        content,
+                        metadata={"type": "knowledge", "category": category},
+                    )
+                    await self.storage.upsert_knowledge({
+                        "category": category,
+                        "title": title,
+                        "content": content,
+                        "source_file": str(md_file),
+                    })
+                    results["success"] += 1
+                    logger.info(f"Migrated knowledge: {category}/{md_file.name}")
+                except Exception as e:
+                    results["errors"] += 1
+                    logger.warning("Failed to migrate knowledge '%s/%s': %s", category, md_file.name, e)
 
     def _parse_patterns(self, content: str, source_file: str) -> list[dict]:
         """Parse markdown pattern file into structured pattern dicts."""

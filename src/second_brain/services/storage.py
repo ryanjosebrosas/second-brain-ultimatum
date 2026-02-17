@@ -9,7 +9,7 @@ from supabase import create_client, Client
 
 from second_brain.config import BrainConfig
 from second_brain.schemas import (
-    ConfidenceLevel, ContentTypeConfig, DEFAULT_CONTENT_TYPES, content_type_from_row,
+    ContentTypeConfig, DEFAULT_CONTENT_TYPES, content_type_from_row,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,64 +97,29 @@ class StorageService:
     async def reinforce_pattern(
         self, pattern_id: str, new_evidence: list[str] | None = None
     ) -> dict:
-        """Atomically reinforce a pattern: increment use_count, upgrade confidence, append evidence."""
-        # Fetch current state
+        """Atomically reinforce a pattern via DB RPC function."""
         try:
-            fetch_query = (
-                self._client.table("patterns")
-                .select("*")
-                .eq("id", pattern_id)
-                .limit(1)
+            result = await asyncio.to_thread(
+                self._client.rpc(
+                    "reinforce_pattern",
+                    {"p_pattern_id": pattern_id, "p_new_evidence": new_evidence or []}
+                ).execute
             )
-            current = await asyncio.to_thread(fetch_query.execute)
-        except Exception as e:
-            logger.warning("Supabase reinforce_pattern fetch failed: %s", type(e).__name__)
-            raise ValueError("Failed to fetch pattern for reinforcement") from e
-
-        if not current.data:
-            logger.warning("reinforce_pattern: pattern_id=%s not found", pattern_id)
-            raise ValueError(f"Pattern '{pattern_id}' not found for reinforcement")
-        pattern = current.data[0]
-
-        new_use_count = pattern.get("use_count", 1) + 1
-        # Confidence thresholds: 1→LOW, 2-4→MEDIUM, 5+→HIGH
-        new_confidence: ConfidenceLevel
-        if new_use_count >= 5:
-            new_confidence = "HIGH"
-        elif new_use_count >= 2:
-            new_confidence = "MEDIUM"
-        else:
-            new_confidence = "LOW"
-
-        existing_evidence = pattern.get("evidence") or []
-        merged_evidence = existing_evidence + (new_evidence or [])
-
-        update_data = {
-            "use_count": new_use_count,
-            "confidence": new_confidence,
-            "evidence": merged_evidence,
-            "date_updated": str(date.today()),
-        }
-
-        try:
-            update_query = (
-                self._client.table("patterns")
-                .update(update_data)
-                .eq("id", pattern_id)
+            if not result.data:
+                raise ValueError(f"Pattern '{pattern_id}' not found for reinforcement")
+            logger.info(
+                "Reinforced pattern '%s': use_count=%d, confidence=%s",
+                result.data[0].get("name", pattern_id),
+                result.data[0].get("use_count", 0),
+                result.data[0].get("confidence", "?"),
             )
-            result = await asyncio.to_thread(update_query.execute)
+            return result.data[0]
         except Exception as e:
-            logger.warning("Supabase reinforce_pattern update failed: %s", type(e).__name__)
-            raise ValueError("Failed to update pattern for reinforcement") from e
-
-        if not result.data:
-            logger.error("reinforce_pattern: update failed for pattern_id=%s", pattern_id)
-            raise ValueError(f"Failed to update pattern '{pattern_id}'")
-        logger.info(
-            "Reinforced pattern '%s': use_count=%d, confidence=%s",
-            pattern.get("name", pattern_id), new_use_count, new_confidence,
-        )
-        return result.data[0]
+            if "not found" in str(e).lower():
+                raise ValueError(f"Pattern '{pattern_id}' not found for reinforcement") from e
+            logger.warning("Supabase reinforce_pattern RPC failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            raise ValueError("Failed to reinforce pattern") from e
 
     async def delete_pattern(self, pattern_id: str) -> bool:
         """Delete a pattern by ID."""
