@@ -470,6 +470,46 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return False
 
+    async def vector_search(
+        self,
+        embedding: list[float],
+        table: str = "memory_content",
+        limit: int = 10,
+        similarity_threshold: float = 0.7,
+    ) -> list[dict]:
+        """Search by vector similarity using pgvector cosine distance.
+
+        Args:
+            embedding: Query embedding vector (1536 dimensions).
+            table: Table to search (must have 'embedding' column).
+            limit: Maximum results to return.
+            similarity_threshold: Minimum cosine similarity (0-1). Default 0.7.
+
+        Returns:
+            List of matching rows with similarity score added.
+        """
+        valid_tables = {"patterns", "memory_content", "examples", "knowledge_repo"}
+        if table not in valid_tables:
+            raise ValueError(f"Invalid table '{table}'. Must be one of: {valid_tables}")
+
+        try:
+            result = await asyncio.to_thread(
+                self._client.rpc(
+                    "vector_search",
+                    {
+                        "query_embedding": embedding,
+                        "match_table": table,
+                        "match_count": limit,
+                        "match_threshold": similarity_threshold,
+                    }
+                ).execute
+            )
+            return result.data if result.data else []
+        except Exception as e:
+            logger.warning("vector_search failed on %s: %s", table, type(e).__name__)
+            logger.debug("vector_search error detail: %s", e)
+            return []
+
     async def close(self) -> None:
         """Release Supabase client resources."""
         # supabase-py Client doesn't have an explicit close,

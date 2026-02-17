@@ -19,6 +19,25 @@ class BrainConfig(BaseSettings):
         default=None, description="OpenAI API key for Mem0 embeddings",
         repr=False,
     )
+
+    # Embeddings
+    embedding_model: str = Field(
+        default="text-embedding-3-small",
+        description="OpenAI embedding model for vector search",
+    )
+    embedding_dimensions: int = Field(
+        default=1536,
+        ge=256,
+        le=3072,
+        description="Embedding vector dimensions. Must match DB schema vector(1536) column definition.",
+    )
+    embedding_batch_size: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Batch size for embedding generation during migration. Range: 1-200.",
+    )
+
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama server URL",

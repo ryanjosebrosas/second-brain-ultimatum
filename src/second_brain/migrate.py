@@ -14,11 +14,22 @@ logger = logging.getLogger(__name__)
 class BrainMigrator:
     """Migrate markdown Second Brain data to Mem0 + Supabase."""
 
-    def __init__(self, config: BrainConfig):
+    def __init__(self, config: BrainConfig, embedding_service=None):
         self.config = config
         self.data_path = config.brain_data_path
         self.memory = MemoryService(config)
         self.storage = StorageService(config)
+        self.embedding = embedding_service
+
+    async def _get_embedding(self, text: str) -> list[float] | None:
+        """Generate embedding if service available. Non-critical."""
+        if not self.embedding:
+            return None
+        try:
+            return await self.embedding.embed(text[:8000])
+        except Exception as e:
+            logger.debug("Embedding generation failed (non-critical): %s", e)
+            return None
 
     async def migrate_all(self):
         """Run full migration with error tracking."""
@@ -63,14 +74,19 @@ class BrainMigrator:
                         content,
                         metadata={"category": category, "source": str(filepath)},
                     )
+                    # Generate embedding (non-critical)
+                    embedding = await self._get_embedding(content)
                     # Add to Supabase (structured, upsert for idempotency)
-                    await self.storage.upsert_memory_content({
+                    data = {
                         "category": category,
                         "subcategory": filepath.stem,
                         "title": filepath.stem.replace("-", " ").title(),
                         "content": content,
                         "source_file": str(filepath),
-                    })
+                    }
+                    if embedding is not None:
+                        data["embedding"] = embedding
+                    await self.storage.upsert_memory_content(data)
                     results["success"] += 1
                     logger.info(f"Migrated: {category}/{filename}")
                 except Exception as e:
@@ -93,6 +109,9 @@ class BrainMigrator:
             patterns = self._parse_patterns(content, str(pattern_file))
             for p in patterns:
                 try:
+                    embedding = await self._get_embedding(p.get("pattern_text", ""))
+                    if embedding is not None:
+                        p["embedding"] = embedding
                     await self.storage.upsert_pattern(p)
                     await self.memory.add(
                         f"Pattern: {p['name']}\n{p['pattern_text']}",
@@ -167,12 +186,16 @@ class BrainMigrator:
                         content,
                         metadata={"type": "example", "content_type": content_type},
                     )
-                    await self.storage.upsert_example({
+                    embedding = await self._get_embedding(content)
+                    data = {
                         "content_type": content_type,
                         "title": title,
                         "content": content,
                         "source_file": str(md_file),
-                    })
+                    }
+                    if embedding is not None:
+                        data["embedding"] = embedding
+                    await self.storage.upsert_example(data)
                     results["success"] += 1
                     logger.info(f"Migrated example: {content_type}/{md_file.name}")
                 except Exception as e:
@@ -203,12 +226,16 @@ class BrainMigrator:
                         content,
                         metadata={"type": "knowledge", "category": category},
                     )
-                    await self.storage.upsert_knowledge({
+                    embedding = await self._get_embedding(content)
+                    data = {
                         "category": category,
                         "title": title,
                         "content": content,
                         "source_file": str(md_file),
-                    })
+                    }
+                    if embedding is not None:
+                        data["embedding"] = embedding
+                    await self.storage.upsert_knowledge(data)
                     results["success"] += 1
                     logger.info(f"Migrated knowledge: {category}/{md_file.name}")
                 except Exception as e:
@@ -268,7 +295,14 @@ class BrainMigrator:
 async def run_migration():
     """Entry point for migration."""
     config = BrainConfig()
-    migrator = BrainMigrator(config)
+    embedding = None
+    if config.openai_api_key:
+        try:
+            from second_brain.services.embeddings import EmbeddingService
+            embedding = EmbeddingService(config)
+        except Exception as e:
+            logger.warning("EmbeddingService not available for migration: %s", e)
+    migrator = BrainMigrator(config, embedding_service=embedding)
     await migrator.migrate_all()
 
 

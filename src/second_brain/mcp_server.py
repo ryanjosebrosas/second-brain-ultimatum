@@ -641,5 +641,58 @@ async def manage_content_type(
         return f"Unknown action '{action}'. Use 'add' or 'remove'."
 
 
+@server.tool()
+async def vector_search(
+    query: str,
+    table: str = "memory_content",
+    limit: int = 10,
+) -> str:
+    """Search your Second Brain using vector similarity (pgvector).
+
+    Generates an embedding for the query and finds the most similar content
+    in the specified table. Complements semantic search (recall) with
+    pure vector similarity matching.
+
+    Args:
+        query: Text to search for (generates embedding automatically)
+        table: Table to search: memory_content, patterns, examples, knowledge_repo
+        limit: Maximum results (default 10)
+    """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+
+    if not deps.embedding_service:
+        return "Vector search unavailable: OPENAI_API_KEY not configured."
+
+    try:
+        timeout = deps.config.api_timeout_seconds
+        async with asyncio.timeout(timeout):
+            embedding = await deps.embedding_service.embed(query)
+            results = await deps.storage_service.vector_search(
+                embedding=embedding,
+                table=table,
+                limit=limit,
+            )
+    except TimeoutError:
+        return f"Vector search timed out after {timeout}s."
+    except ValueError as e:
+        return str(e)
+
+    if not results:
+        return f"No vector matches found in '{table}'."
+
+    formatted = [f"# Vector Search: {query}\n"]
+    for r in results:
+        sim = r.get("similarity", 0)
+        title = r.get("title", "Untitled")
+        content = r.get("content", "")[:200]
+        formatted.append(f"- [{sim:.3f}] **{title}**: {content}")
+    return "\n".join(formatted)
+
+
 if __name__ == "__main__":
     server.run()

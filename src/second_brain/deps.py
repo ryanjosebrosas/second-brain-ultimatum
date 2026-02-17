@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from second_brain.config import BrainConfig
 
 if TYPE_CHECKING:
+    from second_brain.services.embeddings import EmbeddingService
     from second_brain.services.graphiti import GraphitiService
     from second_brain.services.memory import MemoryService
     from second_brain.services.storage import ContentTypeRegistry, StorageService
@@ -20,6 +21,7 @@ class BrainDeps:
     memory_service: "MemoryService"
     storage_service: "StorageService"
     graphiti_service: "GraphitiService | None" = None
+    embedding_service: "EmbeddingService | None" = None
     content_type_registry: "ContentTypeRegistry | None" = None
 
     def get_content_type_registry(self) -> "ContentTypeRegistry":
@@ -62,9 +64,18 @@ def create_deps(config: BrainConfig | None = None) -> BrainDeps:
                 "graphiti-core not installed. Install with: pip install -e '.[graphiti]'"
             )
 
+    embedding = None
+    if config.openai_api_key:
+        try:
+            from second_brain.services.embeddings import EmbeddingService
+            embedding = EmbeddingService(config)
+        except Exception as e:
+            logger.warning("EmbeddingService init failed: %s", e)
+
     return BrainDeps(
         config=config,
         memory_service=MemoryService(config),
         storage_service=StorageService(config),
         graphiti_service=graphiti,
+        embedding_service=embedding,
     )
