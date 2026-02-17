@@ -48,7 +48,13 @@ class RecallResult(BaseModel):
 class AskResult(BaseModel):
     """Output from the AskAgent."""
 
-    answer: str = Field(description="The contextual response")
+    answer: str = Field(
+        description=(
+            "The COMPLETE response to the user's request. If they asked a question, "
+            "provide the full answer. If they asked you to write or draft something, "
+            "include the FULL written text — NOT a summary or description of what you would write."
+        )
+    )
     context_used: list[str] = Field(
         default_factory=list,
         description="Brain context files/memories referenced",

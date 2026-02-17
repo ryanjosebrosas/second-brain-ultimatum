@@ -103,6 +103,17 @@ class TestAskResult:
         with pytest.raises(ValidationError):
             AskResult(answer="ok", confidence="INVALID")
 
+    def test_answer_field_description_is_explicit(self):
+        """Guard against vague answer field descriptions that cause summary output."""
+        field_info = AskResult.model_fields["answer"]
+        desc = field_info.description.lower()
+        assert "complete" in desc or "full" in desc, (
+            "answer field description must explicitly require complete/full response"
+        )
+        assert "not" in desc or "never" in desc, (
+            "answer field description must include anti-pattern guidance"
+        )
+
 
 class TestPatternExtract:
     """Tests for PatternExtract schema."""

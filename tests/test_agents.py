@@ -96,6 +96,17 @@ class TestAskAgent:
         tool_names = list(ask_agent._function_toolset.tools.keys())
         assert "search_knowledge" in tool_names
 
+    def test_agent_instructions_require_full_answer(self):
+        """Guard against instructions that allow summary output in answer field."""
+        from second_brain.agents.ask import ask_agent
+        instructions = ask_agent._instructions
+        assert "NEVER" in instructions or "MUST" in instructions, (
+            "Ask agent instructions must explicitly require full response content"
+        )
+        assert "answer" in instructions.lower(), (
+            "Ask agent instructions must reference the answer field"
+        )
+
 
 class TestLearnResult:
     def test_learn_result_defaults(self):
