@@ -171,6 +171,21 @@ class ContentTypeConfig(BaseModel):
         default=False,
         description="True for seed types that ship with the system.",
     )
+    writing_instructions: str = Field(
+        default="",
+        description="Type-specific writing rules and protocols injected into agent instructions "
+        "at runtime. Example: STIRC scoring protocol for essays, hook/CTA rules for LinkedIn.",
+    )
+    validation_rules: dict = Field(
+        default_factory=dict,
+        description="Type-specific validation rules applied by validate_draft tool. "
+        "Keys: min_words (int), required_sections (list[str]), custom_checks (list[str]).",
+    )
+    ui_config: dict = Field(
+        default_factory=dict,
+        description="Frontend UI metadata. Keys: icon (str), color (str), category (str), "
+        "input_placeholder (str), show_framework_selector (bool).",
+    )
 
 
 class CreateResult(BaseModel):
@@ -560,6 +575,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=300,
         description="LinkedIn feed post",
         is_builtin=True,
+        writing_instructions=(
+            "LINKEDIN RULES:\n"
+            "1. First line is the hook — must stop the scroll\n"
+            "2. Use short paragraphs (1-2 sentences each)\n"
+            "3. Include a clear CTA or question at the end\n"
+            "4. No hashtag spam — 3-5 relevant hashtags max\n"
+            "5. Write conversationally, not corporately"
+        ),
+        validation_rules={"min_words": 30},
+        ui_config={"icon": "linkedin", "color": "#0077b5", "category": "social"},
     ),
     "email": ContentTypeConfig(
         name="Professional Email",
@@ -569,6 +594,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=500,
         description="Client or prospect email",
         is_builtin=True,
+        writing_instructions=(
+            "EMAIL RULES:\n"
+            "1. Subject line must be specific and action-oriented\n"
+            "2. Opening line states purpose — no fluff\n"
+            "3. One main ask per email\n"
+            "4. End with clear next step and timeline\n"
+            "5. Professional but warm — not robotic"
+        ),
+        validation_rules={"min_words": 50},
+        ui_config={"icon": "mail", "color": "#ea580c", "category": "communication"},
     ),
     "landing-page": ContentTypeConfig(
         name="Landing Page",
@@ -578,6 +613,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=1000,
         description="Homepage or landing page copy",
         is_builtin=True,
+        writing_instructions=(
+            "LANDING PAGE RULES:\n"
+            "1. Headline must communicate the core value in under 10 words\n"
+            "2. Subheadline elaborates the how/what\n"
+            "3. Problem section uses customer language\n"
+            "4. Social proof with specific numbers\n"
+            "5. Single clear CTA — no competing actions"
+        ),
+        validation_rules={"min_words": 200},
+        ui_config={"icon": "layout", "color": "#0ea5e9", "category": "marketing"},
     ),
     "comment": ContentTypeConfig(
         name="Comment/Reply",
@@ -587,6 +632,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=150,
         description="Social media comment or reply",
         is_builtin=True,
+        writing_instructions=(
+            "COMMENT RULES:\n"
+            "1. Acknowledge the original content first\n"
+            "2. Add genuine value or a unique perspective\n"
+            "3. Keep it concise — under 3 sentences\n"
+            "4. Ask a follow-up question if natural\n"
+            "5. Never be promotional"
+        ),
+        validation_rules={"min_words": 10},
+        ui_config={"icon": "message-circle", "color": "#22c55e", "category": "social"},
     ),
     "case-study": ContentTypeConfig(
         name="Case Study",
@@ -596,6 +651,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=1500,
         description="Client success story with measurable results",
         is_builtin=True,
+        writing_instructions=(
+            "CASE STUDY RULES:\n"
+            "1. Lead with the result — numbers first\n"
+            "2. Client context must be relatable\n"
+            "3. Challenge section uses before/after framing\n"
+            "4. Approach section shows methodology, not just actions\n"
+            "5. Results MUST be quantified — no vague claims"
+        ),
+        validation_rules={"min_words": 500},
+        ui_config={"icon": "bar-chart", "color": "#8b5cf6", "category": "long-form"},
     ),
     "proposal": ContentTypeConfig(
         name="Sales Proposal",
@@ -605,6 +670,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=2000,
         description="Sales or project proposal with scope and pricing",
         is_builtin=True,
+        writing_instructions=(
+            "PROPOSAL RULES:\n"
+            "1. Executive summary must standalone — assume reader skips the rest\n"
+            "2. Problem section uses client language from discovery\n"
+            "3. Solution maps directly to stated problems\n"
+            "4. Deliverables are specific and measurable\n"
+            "5. Investment section anchors on value, not cost"
+        ),
+        validation_rules={"min_words": 800},
+        ui_config={"icon": "file-text", "color": "#f59e0b", "category": "business"},
     ),
     "one-pager": ContentTypeConfig(
         name="One-Pager",
@@ -614,6 +689,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=500,
         description="Compact executive summary or overview document",
         is_builtin=True,
+        writing_instructions=(
+            "ONE-PAGER RULES:\n"
+            "1. Must be scannable in 60 seconds\n"
+            "2. Headline sells, body informs\n"
+            "3. Benefits over features — max 4 bullets\n"
+            "4. One piece of social proof\n"
+            "5. Single CTA with clear next step"
+        ),
+        validation_rules={"min_words": 100},
+        ui_config={"icon": "file", "color": "#14b8a6", "category": "business"},
     ),
     "presentation": ContentTypeConfig(
         name="Presentation Script",
@@ -623,6 +708,16 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=800,
         description="Presentation talking points and script (not slide text)",
         is_builtin=True,
+        writing_instructions=(
+            "PRESENTATION RULES:\n"
+            "1. Opening hook must earn the next 30 seconds\n"
+            "2. Max 3-5 key points — audience remembers 3\n"
+            "3. Each point needs one supporting story or data point\n"
+            "4. Transitions between points must be explicit\n"
+            "5. End with a memorable closing, not just 'any questions?'"
+        ),
+        validation_rules={"min_words": 200},
+        ui_config={"icon": "monitor", "color": "#ec4899", "category": "communication"},
     ),
     "instagram": ContentTypeConfig(
         name="Instagram Post",
@@ -632,6 +727,61 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=200,
         description="Instagram caption with hook, story, and hashtags",
         is_builtin=True,
+        writing_instructions=(
+            "INSTAGRAM RULES:\n"
+            "1. First line is the hook — visible before 'more'\n"
+            "2. Tell a micro-story in 2-3 short paragraphs\n"
+            "3. Use line breaks for readability\n"
+            "4. CTA should feel natural, not salesy\n"
+            "5. 5-10 relevant hashtags at the end"
+        ),
+        validation_rules={"min_words": 20},
+        ui_config={"icon": "instagram", "color": "#e1306c", "category": "social"},
+    ),
+    "essay": ContentTypeConfig(
+        name="Long-Form Essay",
+        default_mode="professional",
+        structure_hint="Title -> Central Question -> Thesis -> Body (3-5 sections with evidence) -> Conclusion",
+        example_type="essay",
+        max_words=3000,
+        description="Intellectually rigorous, stylistically compelling essay",
+        is_builtin=True,
+        writing_instructions=(
+            "WRITING PROCESS (follow in order):\n"
+            "1. Identify the topic and evaluate the angle using STIRC scoring\n"
+            "2. Formulate a central question the essay answers\n"
+            "3. Choose structural framework: argumentative/explanatory/narrative\n"
+            "4. Load voice guide and relevant patterns from brain\n"
+            "5. Write the essay following the Five Laws\n"
+            "6. Self-review against the quality checklist\n\n"
+            "STIRC ANGLE SCORING (each 1-5, threshold 18/25):\n"
+            "- Surprising: Contradicts common assumptions\n"
+            "- True: Supported by evidence\n"
+            "- Important: Matters to people\n"
+            "- Relevant: Connects to current concerns\n"
+            "- Cool: Inherently interesting\n\n"
+            "FIVE WRITING LAWS:\n"
+            "1. Active voice always (object then action)\n"
+            "2. Remove needless words — every word earns its place\n"
+            "3. No adverbs — strong verbs don't need modification\n"
+            "4. Write simply — 4th-7th grade reading level\n"
+            "5. First sentence must demand attention\n\n"
+            "AI PATTERNS TO AVOID: em dashes for drama, 'Here's the thing:', "
+            "'Let me explain why', Three. Word. Sentences., fake enthusiasm "
+            "(amazing, incredible), rhetorical questions as transitions, 'In conclusion'."
+        ),
+        validation_rules={
+            "min_words": 300,
+            "required_sections": [],
+            "custom_checks": ["title_required", "substantial_content"],
+        },
+        ui_config={
+            "icon": "pen-tool",
+            "color": "#6366f1",
+            "category": "long-form",
+            "input_placeholder": "What topic should the essay explore?",
+            "show_framework_selector": True,
+        },
     ),
 }
 
@@ -640,7 +790,7 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
 
 AgentRoute = Literal[
     "recall", "ask", "learn", "create", "review",
-    "essay_writer", "clarity", "synthesizer", "template_builder",
+    "clarity", "synthesizer", "template_builder",
     "coach", "pmo", "email", "specialist",
     "pipeline",
 ]
@@ -663,21 +813,6 @@ class RoutingDecision(BaseModel):
 
 
 # --- Content Pipeline Agents ---
-
-
-class EssayResult(BaseModel):
-    """Output from the Essay Writer agent."""
-
-    title: str = Field(description="Essay title")
-    essay: str = Field(
-        description="The COMPLETE essay text — full publishable content, NOT a summary."
-    )
-    central_question: str = Field(default="", description="The central question the essay answers")
-    stirc_score: int = Field(default=0, description="STIRC angle score (0-25, threshold 18)")
-    framework: str = Field(default="", description="Structural framework used: argumentative/explanatory/narrative")
-    word_count: int = Field(default=0, description="Word count of the essay")
-    patterns_applied: list[str] = Field(default_factory=list, description="Brain patterns applied")
-    notes: str = Field(default="", description="Editorial notes for the reviewer")
 
 
 class ClarityFinding(BaseModel):
@@ -880,4 +1015,7 @@ def content_type_from_row(row: dict) -> ContentTypeConfig:
         description=row.get("description", ""),
         review_dimensions=review_dims,
         is_builtin=row.get("is_builtin", False),
+        writing_instructions=row.get("writing_instructions") or "",
+        validation_rules=row.get("validation_rules") or {},
+        ui_config=row.get("ui_config") or {},
     )

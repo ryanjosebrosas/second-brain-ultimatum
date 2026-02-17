@@ -246,11 +246,6 @@ class BrainConfig(BaseSettings):
         },
         description="PMO priority scoring weights (must sum to 1.0)",
     )
-    stirc_threshold: int = Field(
-        default=18,
-        description="Minimum STIRC score (out of 25) for essay angle to proceed",
-    )
-
     @model_validator(mode="after")
     def _validate_graph_config(self) -> "BrainConfig":
         if self.graph_provider == "graphiti":
