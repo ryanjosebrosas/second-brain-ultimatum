@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from second_brain.services.graphiti import GraphitiService
     from second_brain.services.memory import MemoryService
     from second_brain.services.storage import ContentTypeRegistry, StorageService
+    from second_brain.services.voyage import VoyageService
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class BrainDeps:
     storage_service: "StorageService"
     graphiti_service: "GraphitiService | None" = None
     embedding_service: "EmbeddingService | None" = None
+    voyage_service: "VoyageService | None" = None
     content_type_registry: "ContentTypeRegistry | None" = None
 
     def get_content_type_registry(self) -> "ContentTypeRegistry":
@@ -65,7 +67,16 @@ def create_deps(config: BrainConfig | None = None) -> BrainDeps:
             )
 
     embedding = None
-    if config.openai_api_key:
+    voyage = None
+    if config.voyage_api_key:
+        try:
+            from second_brain.services.voyage import VoyageService
+            voyage = VoyageService(config)
+            from second_brain.services.embeddings import EmbeddingService
+            embedding = EmbeddingService(config)
+        except Exception as e:
+            logger.warning("VoyageService init failed: %s", e)
+    elif config.openai_api_key:
         try:
             from second_brain.services.embeddings import EmbeddingService
             embedding = EmbeddingService(config)
@@ -78,4 +89,5 @@ def create_deps(config: BrainConfig | None = None) -> BrainDeps:
         storage_service=StorageService(config),
         graphiti_service=graphiti,
         embedding_service=embedding,
+        voyage_service=voyage,
     )

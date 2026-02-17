@@ -20,16 +20,36 @@ class BrainConfig(BaseSettings):
         repr=False,
     )
 
+    # Voyage AI
+    voyage_api_key: str | None = Field(
+        default=None, description="Voyage AI API key for embeddings and reranking",
+        repr=False,
+    )
+    voyage_embedding_model: str = Field(
+        default="voyage-4-lite",
+        description="Voyage embedding model. Options: voyage-4-large, voyage-4, voyage-4-lite",
+    )
+    voyage_rerank_model: str = Field(
+        default="rerank-2-lite",
+        description="Voyage rerank model. Options: rerank-2.5, rerank-2.5-lite, rerank-2-lite",
+    )
+    voyage_rerank_top_k: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Number of top results to return after reranking. Range: 1-100.",
+    )
+
     # Embeddings
     embedding_model: str = Field(
-        default="text-embedding-3-small",
-        description="OpenAI embedding model for vector search",
+        default="voyage-4-lite",
+        description="Embedding model for vector search",
     )
     embedding_dimensions: int = Field(
-        default=1536,
+        default=1024,
         ge=256,
-        le=3072,
-        description="Embedding vector dimensions. Must match DB schema vector(1536) column definition.",
+        le=2048,
+        description="Embedding vector dimensions. Must match DB schema vector column definition.",
     )
     embedding_batch_size: int = Field(
         default=50,

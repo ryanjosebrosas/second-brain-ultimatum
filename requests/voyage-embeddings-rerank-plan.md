@@ -1196,28 +1196,28 @@ python -m second_brain.mcp_server
 ## ACCEPTANCE CRITERIA
 
 - [x] VoyageService provides embed, embed_query, embed_batch, and rerank methods
-- [ ] EmbeddingService delegates to Voyage when VOYAGE_API_KEY is set
-- [ ] EmbeddingService falls back to OpenAI when only OPENAI_API_KEY is set
-- [ ] All 5 agents use rerank_memories after Mem0 search calls
-- [ ] Reranking degrades gracefully (returns original results on failure)
-- [ ] Supabase schema migrated to vector(1024)
-- [ ] MCP vector_search uses embed_query for better retrieval
-- [ ] Config has voyage_api_key, voyage_embedding_model, voyage_rerank_model fields
-- [ ] All existing tests pass (minus known pre-existing failures)
-- [ ] New tests cover VoyageService and reranking (10+ new tests)
-- [ ] No regressions in existing functionality
+- [x] EmbeddingService delegates to Voyage when VOYAGE_API_KEY is set
+- [x] EmbeddingService falls back to OpenAI when only OPENAI_API_KEY is set
+- [x] All 5 agents use rerank_memories after Mem0 search calls
+- [x] Reranking degrades gracefully (returns original results on failure)
+- [x] Supabase schema migrated to vector(1024)
+- [x] MCP vector_search uses embed_query for better retrieval
+- [x] Config has voyage_api_key, voyage_embedding_model, voyage_rerank_model fields
+- [x] All existing tests pass (minus known pre-existing failures)
+- [x] New tests cover VoyageService and reranking (10+ new tests)
+- [x] No regressions in existing functionality
 
 ---
 
 ## COMPLETION CHECKLIST
 
-- [ ] All tasks completed in order
-- [ ] Each task validation passed
-- [ ] All validation commands executed successfully
-- [ ] Full test suite passes (unit + integration)
-- [ ] No linting or type checking errors
+- [x] All tasks completed in order
+- [x] Each task validation passed
+- [x] All validation commands executed successfully
+- [x] Full test suite passes (unit + integration)
+- [x] No linting or type checking errors
 - [ ] Manual testing confirms feature works
-- [ ] Acceptance criteria all met
+- [x] Acceptance criteria all met
 
 ---
 

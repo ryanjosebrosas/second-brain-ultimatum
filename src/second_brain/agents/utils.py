@@ -77,6 +77,54 @@ async def search_with_graph_fallback(
     return relations
 
 
+async def rerank_memories(
+    deps: "BrainDeps",
+    query: str,
+    memories: list[dict],
+    top_k: int | None = None,
+) -> list[dict]:
+    """Rerank Mem0 search results using Voyage reranker.
+
+    Graceful degradation: returns original memories if Voyage unavailable.
+
+    Args:
+        deps: BrainDeps with optional voyage_service.
+        query: Original search query.
+        memories: Raw Mem0 results (dicts with 'memory'/'result' key).
+        top_k: Max results after reranking. None = config default.
+
+    Returns:
+        Reranked list of memory dicts, or original list if reranking unavailable.
+    """
+    if not deps.voyage_service or not memories:
+        return memories
+
+    # Extract text from memory dicts
+    documents = [
+        m.get("memory", m.get("result", ""))
+        for m in memories
+    ]
+    documents = [d for d in documents if d]  # filter empties
+
+    if not documents:
+        return memories
+
+    try:
+        reranked = await deps.voyage_service.rerank(query, documents, top_k=top_k)
+        # Rebuild memory dicts in reranked order
+        result = []
+        for r in reranked:
+            idx = r["index"]
+            if idx < len(memories):
+                mem = dict(memories[idx])
+                mem["rerank_score"] = r["relevance_score"]
+                result.append(mem)
+        return result
+    except Exception as e:
+        logger.debug("Reranking failed (non-critical): %s", e)
+        return memories
+
+
 def tool_error(tool_name: str, error: Exception) -> str:
     """Standard error format for agent tool failures.
 

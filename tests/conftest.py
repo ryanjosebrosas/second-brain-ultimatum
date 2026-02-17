@@ -171,8 +171,23 @@ def mock_storage():
 def mock_embedding_service():
     """Create a mocked EmbeddingService for tests."""
     service = MagicMock()
-    service.embed = AsyncMock(return_value=[0.1] * 1536)
-    service.embed_batch = AsyncMock(return_value=[[0.1] * 1536])
+    service.embed = AsyncMock(return_value=[0.1] * 1024)
+    service.embed_query = AsyncMock(return_value=[0.1] * 1024)
+    service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
+    service.close = AsyncMock()
+    return service
+
+
+@pytest.fixture
+def mock_voyage_service():
+    """Create a mocked VoyageService for tests."""
+    service = MagicMock()
+    service.embed = AsyncMock(return_value=[0.1] * 1024)
+    service.embed_query = AsyncMock(return_value=[0.1] * 1024)
+    service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
+    service.rerank = AsyncMock(return_value=[
+        {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
+    ])
     service.close = AsyncMock()
     return service
 
@@ -197,13 +212,14 @@ def mock_graphiti():
 
 
 @pytest.fixture
-def mock_deps(brain_config, mock_memory, mock_storage, mock_embedding_service):
+def mock_deps(brain_config, mock_memory, mock_storage, mock_embedding_service, mock_voyage_service):
     """Create a BrainDeps with all mocked services."""
     return BrainDeps(
         config=brain_config,
         memory_service=mock_memory,
         storage_service=mock_storage,
         embedding_service=mock_embedding_service,
+        voyage_service=mock_voyage_service,
     )
 
 

@@ -296,7 +296,7 @@ async def run_migration():
     """Entry point for migration."""
     config = BrainConfig()
     embedding = None
-    if config.openai_api_key:
+    if config.voyage_api_key or config.openai_api_key:
         try:
             from second_brain.services.embeddings import EmbeddingService
             embedding = EmbeddingService(config)

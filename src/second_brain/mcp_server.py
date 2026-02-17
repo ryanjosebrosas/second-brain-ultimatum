@@ -666,12 +666,12 @@ async def vector_search(
     deps = _get_deps()
 
     if not deps.embedding_service:
-        return "Vector search unavailable: OPENAI_API_KEY not configured."
+        return "Vector search unavailable: VOYAGE_API_KEY or OPENAI_API_KEY not configured."
 
     try:
         timeout = deps.config.api_timeout_seconds
         async with asyncio.timeout(timeout):
-            embedding = await deps.embedding_service.embed(query)
+            embedding = await deps.embedding_service.embed_query(query)
             results = await deps.storage_service.vector_search(
                 embedding=embedding,
                 table=table,

@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from second_brain.agents.utils import (
     format_memories,
     format_relations,
+    rerank_memories,
     search_with_graph_fallback,
     tool_error,
 )
@@ -70,6 +71,7 @@ async def find_relevant_patterns(
     try:
         # Semantic memory search (general)
         result = await ctx.deps.memory_service.search(query)
+        reranked_memories = await rerank_memories(ctx.deps, query, result.memories)
 
         # Semantic pattern search (filtered to patterns)
         pattern_memories = []
@@ -83,12 +85,14 @@ async def find_relevant_patterns(
         except Exception:
             logger.debug("Semantic pattern search failed in ask_agent")
 
+        pattern_memories = await rerank_memories(ctx.deps, query, pattern_memories)
+
         # Collect graph relations
         relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
         sources = []
         formatted = ["## Semantic Memory Matches"]
-        for r in result.memories[:5]:
+        for r in reranked_memories[:5]:
             memory = r.get("memory", r.get("result", ""))
             formatted.append(f"- {memory}")
 
@@ -130,6 +134,7 @@ async def find_similar_experiences(
             f"past experience: {query}",
             enable_graph=True,
         )
+        result.memories = await rerank_memories(ctx.deps, query, result.memories)
         experiences = await ctx.deps.storage_service.get_experiences(limit=ctx.deps.config.experience_limit)
 
         relations = await search_with_graph_fallback(ctx.deps, query, result.relations)

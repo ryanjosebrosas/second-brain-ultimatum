@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from second_brain.agents.utils import (
     format_memories,
     format_relations,
+    rerank_memories,
     search_with_graph_fallback,
     tool_error,
 )
@@ -102,6 +103,7 @@ async def find_applicable_patterns(
     try:
         # Semantic search for general memories about the topic
         result = await ctx.deps.memory_service.search(topic)
+        reranked_general = await rerank_memories(ctx.deps, topic, result.memories)
 
         # Semantic search for patterns (optionally filtered by content type)
         pattern_memories = []
@@ -126,6 +128,8 @@ async def find_applicable_patterns(
             pattern_relations = pattern_result.relations
         except Exception:
             logger.debug("Semantic pattern search failed in create_agent")
+
+        pattern_memories = await rerank_memories(ctx.deps, topic, pattern_memories)
 
         # Also check Graphiti for deeper entity relationships
         graphiti_relations = await search_with_graph_fallback(ctx.deps, topic)
@@ -165,9 +169,9 @@ async def find_applicable_patterns(
                 )
             sections.append("\n".join(pattern_lines))
 
-        if result.memories:
+        if reranked_general:
             mem_lines = ["## Semantic Memory"]
-            for m in result.memories[:5]:
+            for m in reranked_general[:5]:
                 memory = m.get("memory", m.get("result", ""))
                 mem_lines.append(f"- {memory}")
             sections.append("\n".join(mem_lines))

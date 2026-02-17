@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from second_brain.agents.utils import (
     format_memories,
     format_relations,
+    rerank_memories,
     search_with_graph_fallback,
     tool_error,
 )
@@ -37,12 +38,13 @@ async def search_semantic_memory(
     """Search Mem0 semantic memory for relevant content."""
     try:
         result = await ctx.deps.memory_service.search(query)
+        memories = await rerank_memories(ctx.deps, query, result.memories)
         relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
-        if not result.memories and not relations:
+        if not memories and not relations:
             return "No semantic matches found."
 
-        parts = [format_memories(result.memories)]
+        parts = [format_memories(memories)]
         rel_text = format_relations(relations)
         if rel_text:
             parts.append(rel_text)
@@ -74,6 +76,8 @@ async def search_patterns(
             semantic_relations = result.relations
         except Exception:
             logger.debug("Semantic pattern search failed, falling back to Supabase")
+
+        semantic_results = await rerank_memories(ctx.deps, topic or "patterns", semantic_results)
 
         # Always include Supabase patterns (source of truth)
         patterns = await ctx.deps.storage_service.get_patterns(topic=topic)

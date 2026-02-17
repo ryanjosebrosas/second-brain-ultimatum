@@ -12,10 +12,12 @@ dependencies = [
     "fastmcp>=0.1.0,<1.0.0",
     "click>=8.0.0,<9.0.0",
     "tenacity>=8.0.0,<9.0.0",
+    "voyageai>=0.3.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
 ollama = ["pydantic-ai[ollama]>=0.1.0,<1.0.0"]
+voyage = ["voyageai>=0.3.0,<1.0.0"]
 graphiti = ["graphiti-core[anthropic,falkordb]>=0.1.0,<1.0.0"]
 subscription = ["claude-agent-sdk>=0.1.0"]
 dev = [
