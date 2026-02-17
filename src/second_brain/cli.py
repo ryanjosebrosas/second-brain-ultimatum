@@ -852,30 +852,6 @@ def route(request: str, execute: bool):
 
 
 @cli.command()
-@click.argument("topic")
-@click.option("--framework", default=None, help="Essay framework: argumentative/explanatory/narrative")
-def essay(topic: str, framework: str | None):
-    """Write a long-form essay on a topic."""
-    topic = _validate_input(topic, label="topic")
-    from second_brain.agents.essay_writer import essay_writer_agent
-
-    deps = create_deps()
-    model = get_model(deps.config)
-    prompt = f"Write an essay about: {topic}"
-    if framework:
-        prompt += f"\nUse {framework} framework."
-
-    async def run():
-        result = await essay_writer_agent.run(prompt, deps=deps, model=model)
-        click.echo(f"\n# {result.output.title}\n")
-        click.echo(result.output.essay)
-        if result.output.notes:
-            click.echo(f"\n---\nNotes: {result.output.notes}")
-
-    asyncio.run(run())
-
-
-@cli.command()
 @click.argument("content")
 def clarity(content: str):
     """Analyze content for clarity and readability."""

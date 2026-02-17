@@ -48,16 +48,35 @@ create_agent = Agent(
 
 @create_agent.instructions
 async def inject_content_types(ctx: RunContext[BrainDeps]) -> str:
-    """Inject available content types and their structure hints."""
+    """Inject available content types and per-type writing instructions."""
     try:
         registry = ctx.deps.get_content_type_registry()
         types = await registry.get_all()
         if not types:
             return "No custom content types configured. Use default types: linkedin, email, comment."
+
         type_list = []
         for slug, ct in types.items():
-            type_list.append(f"- {slug}: {ct.name} (max {ct.max_words} words, mode: {ct.default_mode})")
-        return "Available content types:\n" + "\n".join(type_list)
+            type_list.append(
+                f"- {slug}: {ct.name} (max {ct.max_words} words, mode: {ct.default_mode})"
+            )
+
+        parts = ["Available content types:\n" + "\n".join(type_list)]
+
+        # Inject writing instructions for all types that have them
+        instructions_section = []
+        for slug, ct in types.items():
+            if ct.writing_instructions:
+                instructions_section.append(
+                    f"\n### {ct.name} ({slug}) — Writing Rules:\n{ct.writing_instructions}"
+                )
+        if instructions_section:
+            parts.append(
+                "\n## Per-Type Writing Instructions"
+                + "".join(instructions_section)
+            )
+
+        return "\n".join(parts)
     except Exception:
         return "Content type registry unavailable. Use default types."
 
@@ -277,7 +296,7 @@ async def validate_draft(
 ) -> str:
     """Validate a draft against content type requirements.
 
-    Checks word count against max_words and verifies structure hints.
+    Checks word count, required sections, and type-specific validation rules.
     Call this before finalizing the draft.
     """
     try:
@@ -289,6 +308,7 @@ async def validate_draft(
         issues = []
         word_count = len(draft.split())
 
+        # Word count from max_words (existing check)
         if config.max_words and config.max_words > 0:
             if word_count > config.max_words:
                 issues.append(
@@ -301,12 +321,38 @@ async def validate_draft(
                     f"(target: {config.max_words}). Consider expanding."
                 )
 
-        # Check structure hints if available
+        # Min words from validation_rules
+        min_words = config.validation_rules.get("min_words", 0)
+        if min_words and word_count < min_words:
+            issues.append(
+                f"Word count ({word_count}) is below minimum ({min_words}) for {content_type}."
+            )
+
+        # Required sections from validation_rules
+        required = config.validation_rules.get("required_sections", [])
+        for section in required:
+            if section.lower() not in draft.lower():
+                issues.append(f"Missing required section: '{section}'")
+
+        # Structure hints (existing check)
         if config.structure_hint:
             hint_sections = [s.strip() for s in config.structure_hint.split("|") if s.strip()]
             for section in hint_sections:
                 if section.lower() not in draft.lower():
                     issues.append(f"Missing expected section: '{section}'")
+
+        # Custom checks from validation_rules
+        custom = config.validation_rules.get("custom_checks", [])
+        if "title_required" in custom:
+            first_line = draft.strip().split("\n")[0].strip()
+            if len(first_line) > 200 or first_line.endswith("."):
+                issues.append("Content should start with a clear title (first line, no period).")
+        if "substantial_content" in custom:
+            if word_count < 100:
+                issues.append(
+                    f"Content is only {word_count} words. This content type requires "
+                    "substantial, complete content — not a summary or outline."
+                )
 
         if not issues:
             return f"Draft validates OK. Word count: {word_count}/{config.max_words or 'unlimited'}."

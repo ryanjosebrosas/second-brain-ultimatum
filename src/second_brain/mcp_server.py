@@ -1003,28 +1003,6 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
 
 
 @server.tool()
-async def write_essay(topic: str, framework: str = "") -> str:
-    """Write a long-form essay on a topic using the Essay Writer agent."""
-    try:
-        topic = _validate_mcp_input(topic, label="topic")
-    except ValueError as e:
-        return str(e)
-    deps = _get_deps()
-    model = _get_model()
-    from second_brain.agents.essay_writer import essay_writer_agent
-    prompt = f"Write an essay about: {topic}"
-    if framework:
-        prompt += f"\nUse {framework} framework."
-    timeout = deps.config.api_timeout_seconds
-    try:
-        async with asyncio.timeout(timeout):
-            result = await essay_writer_agent.run(prompt, deps=deps, model=model)
-    except TimeoutError:
-        return f"Essay writing timed out after {timeout}s."
-    return f"# {result.output.title}\n\n{result.output.essay}"
-
-
-@server.tool()
 async def analyze_clarity(content: str) -> str:
     """Analyze content for clarity and readability issues."""
     try:

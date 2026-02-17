@@ -302,12 +302,7 @@ def get_agent_registry() -> dict:
         "review": (review_agent, "Single-dimension content review"),
     }
 
-    # Lazily add new agents as they become available (sub-plans 04, 05)
-    try:
-        from second_brain.agents.essay_writer import essay_writer_agent
-        registry["essay_writer"] = (essay_writer_agent, "Long-form essay writing")
-    except ImportError:
-        pass
+    # Lazily add new agents as they become available
     try:
         from second_brain.agents.clarity import clarity_agent
         registry["clarity"] = (clarity_agent, "Content clarity analysis")

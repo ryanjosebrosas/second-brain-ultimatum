@@ -33,7 +33,7 @@ chief_of_staff = Agent(
         "- Pattern extraction from work sessions → 'learn'\n"
         "- Content creation (posts, emails, copy) → 'create'\n"
         "- Content quality review → 'review'\n"
-        "- Long-form essays/articles → 'essay_writer'\n"
+        "- Long-form essays/articles → 'create' (use content_type='essay')\n"
         "- Content clarity/readability check → 'clarity'\n"
         "- Consolidating multiple review findings → 'synthesizer'\n"
         "- Identifying reusable templates → 'template_builder'\n"
