@@ -801,6 +801,57 @@ def patterns():
 
 
 @cli.command()
+@click.argument("request")
+@click.option("--execute/--no-execute", default=False, help="Execute routed agent (not just route)")
+def route(request: str, execute: bool):
+    """Route a request through the Chief of Staff orchestrator."""
+    request = _validate_input(request, label="request")
+    from second_brain.agents.chief_of_staff import chief_of_staff
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        # Step 1: Get routing decision
+        result = await chief_of_staff.run(request, deps=deps, model=model)
+        routing = result.output
+
+        click.echo(f"\nRoute: {routing.target_agent}")
+        click.echo(f"Reasoning: {routing.reasoning}")
+        if routing.pipeline_steps:
+            click.echo(f"Pipeline: {' -> '.join(routing.pipeline_steps)}")
+        click.echo(f"Confidence: {routing.confidence}")
+
+        if not execute:
+            click.echo("\nUse --execute to run the routed agent.")
+            return
+
+        # Step 2: Execute
+        if routing.target_agent == "pipeline" and routing.pipeline_steps:
+            from second_brain.agents.utils import run_pipeline
+            results = await run_pipeline(
+                steps=routing.pipeline_steps,
+                initial_prompt=request,
+                deps=deps,
+                model=model,
+            )
+            final = results.get("final")
+            if final:
+                click.echo(f"\nPipeline result:\n{final}")
+        else:
+            from second_brain.agents.utils import get_agent_registry
+            registry = get_agent_registry()
+            if routing.target_agent in registry:
+                agent, desc = registry[routing.target_agent]
+                agent_result = await agent.run(request, deps=deps, model=model)
+                click.echo(f"\nResult:\n{agent_result.output}")
+            else:
+                click.echo(f"\nAgent '{routing.target_agent}' not available yet.")
+
+    asyncio.run(run())
+
+
+@cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""
     from second_brain.migrate import run_migration

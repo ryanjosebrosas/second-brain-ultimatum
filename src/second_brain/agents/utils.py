@@ -213,6 +213,242 @@ def format_pattern_registry(patterns: list[dict], config=None) -> str:
     return "\n".join(lines)
 
 
+async def run_agent_with_retry(
+    agent,
+    prompt: str,
+    deps: "BrainDeps",
+    model=None,
+    max_attempts: int = 3,
+    validate_fn=None,
+):
+    """Run an agent with optional external validation and retry.
+
+    If validate_fn is provided, it receives the agent output and should return
+    (True, output) on success or (False, feedback_message) on failure.
+    On failure, the agent is re-run with the feedback appended to the prompt.
+
+    This is for cases where @output_validator can't be used (e.g., validation
+    requires calling another agent or external service).
+
+    Args:
+        agent: Pydantic AI Agent instance.
+        prompt: User prompt.
+        deps: BrainDeps instance.
+        model: Optional model override.
+        max_attempts: Maximum retry attempts (default 3).
+        validate_fn: Optional async callable(output) -> (bool, str).
+
+    Returns:
+        The agent's output (typed per agent's output_type).
+    """
+    from pydantic_ai.usage import UsageLimits
+
+    limits = UsageLimits(request_limit=deps.config.agent_request_limit)
+    kwargs = {"deps": deps, "usage_limits": limits}
+    if model is not None:
+        kwargs["model"] = model
+
+    last_result = None
+    current_prompt = prompt
+
+    for attempt in range(max_attempts):
+        result = await agent.run(current_prompt, **kwargs)
+        last_result = result.output
+
+        if validate_fn is None:
+            return last_result
+
+        is_valid, feedback = await validate_fn(last_result)
+        if is_valid:
+            return last_result
+
+        # Append feedback and retry
+        current_prompt = (
+            f"{prompt}\n\n"
+            f"[Validation feedback from attempt {attempt + 1}]: {feedback}\n"
+            f"Please address this feedback and try again."
+        )
+        logger.debug(
+            "Agent validation failed (attempt %d/%d): %s",
+            attempt + 1, max_attempts, feedback,
+        )
+
+    # Return last result even if validation failed
+    logger.warning("Agent validation exhausted %d attempts", max_attempts)
+    return last_result
+
+
+def get_agent_registry() -> dict:
+    """Get the agent registry mapping route names to agent instances.
+
+    Lazy-loaded to avoid circular imports. Each agent module is imported
+    only when the registry is first requested.
+
+    Returns:
+        Dict mapping AgentRoute string to (agent_instance, description) tuples.
+    """
+    from second_brain.agents.recall import recall_agent
+    from second_brain.agents.ask import ask_agent
+    from second_brain.agents.learn import learn_agent
+    from second_brain.agents.create import create_agent
+    from second_brain.agents.review import review_agent
+    from second_brain.agents.chief_of_staff import chief_of_staff  # noqa: F401
+
+    registry = {
+        "recall": (recall_agent, "Semantic memory search"),
+        "ask": (ask_agent, "Contextual Q&A with brain knowledge"),
+        "learn": (learn_agent, "Pattern extraction and learning"),
+        "create": (create_agent, "Content creation with voice and patterns"),
+        "review": (review_agent, "Single-dimension content review"),
+    }
+
+    # Lazily add new agents as they become available (sub-plans 04, 05)
+    try:
+        from second_brain.agents.essay_writer import essay_writer_agent
+        registry["essay_writer"] = (essay_writer_agent, "Long-form essay writing")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.clarity import clarity_agent
+        registry["clarity"] = (clarity_agent, "Content clarity analysis")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.synthesizer import synthesizer_agent
+        registry["synthesizer"] = (synthesizer_agent, "Feedback consolidation")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.template_builder import template_builder_agent
+        registry["template_builder"] = (template_builder_agent, "Template identification")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.coach import coach_agent
+        registry["coach"] = (coach_agent, "Daily accountability coaching")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.pmo import pmo_agent
+        registry["pmo"] = (pmo_agent, "Priority advisory")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.impact import impact_agent
+        registry["impact"] = (impact_agent, "Business impact analysis")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.email_agent import email_agent
+        registry["email"] = (email_agent, "Email operations")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.analyst import analyst_agent
+        registry["analyst"] = (analyst_agent, "Data analytics")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.specialist import specialist_agent
+        registry["specialist"] = (specialist_agent, "Claude Code expertise")
+    except ImportError:
+        pass
+
+    return registry
+
+
+async def run_pipeline(
+    steps: list[str],
+    initial_prompt: str,
+    deps: "BrainDeps",
+    model=None,
+    content_type: str | None = None,
+) -> dict:
+    """Run a multi-agent pipeline, chaining results between agents.
+
+    Each step's output is formatted and prepended to the next step's prompt.
+    Special handling for 'review' step (uses run_full_review).
+
+    Args:
+        steps: Ordered list of AgentRoute names (e.g., ["recall", "create", "review"])
+        initial_prompt: The user's original request
+        deps: BrainDeps instance
+        model: Optional model override
+        content_type: Content type for create/review steps
+
+    Returns:
+        Dict mapping step name to its output, plus "final" key with last step's output.
+    """
+    from pydantic_ai.usage import UsageLimits
+
+    registry = get_agent_registry()
+    limits = UsageLimits(request_limit=deps.config.pipeline_request_limit)
+    results = {}
+    current_context = initial_prompt
+
+    for i, step_name in enumerate(steps):
+        if step_name not in registry:
+            logger.warning("Pipeline step '%s' not in registry, skipping", step_name)
+            continue
+
+        agent, description = registry[step_name]
+        logger.info("Pipeline step %d/%d: %s (%s)", i + 1, len(steps), step_name, description)
+
+        try:
+            # Special handling for review — uses run_full_review()
+            if step_name == "review":
+                from second_brain.agents.review import run_full_review
+                # Use previous step's output as content to review
+                content_to_review = current_context
+                if "create" in results:
+                    content_to_review = str(results["create"])
+                review_result = await run_full_review(
+                    content=content_to_review,
+                    deps=deps,
+                    model=model,
+                    content_type=content_type,
+                )
+                results[step_name] = review_result
+                current_context = (
+                    f"{current_context}\n\n"
+                    f"[Review result]: Score {review_result.overall_score}/10 — "
+                    f"{review_result.verdict}\n"
+                    f"Strengths: {', '.join(review_result.top_strengths[:3])}\n"
+                    f"Issues: {', '.join(review_result.critical_issues[:3])}"
+                )
+                continue
+
+            # Standard agent execution
+            kwargs = {"deps": deps, "usage_limits": limits}
+            if model is not None:
+                kwargs["model"] = model
+
+            result = await agent.run(current_context, **kwargs)
+            results[step_name] = result.output
+
+            # Build context for next step
+            output_str = str(result.output)
+            if hasattr(result.output, "summary") and result.output.summary:
+                output_str = result.output.summary
+            elif hasattr(result.output, "draft") and result.output.draft:
+                output_str = result.output.draft
+            elif hasattr(result.output, "answer") and result.output.answer:
+                output_str = result.output.answer
+
+            current_context = (
+                f"{initial_prompt}\n\n"
+                f"[Context from {step_name}]: {output_str}"
+            )
+
+        except Exception as e:
+            logger.error("Pipeline step '%s' failed: %s", step_name, e)
+            results[step_name] = {"error": str(e)}
+            # Continue pipeline — don't block remaining steps
+
+    results["final"] = results.get(steps[-1], None) if steps else None
+    return results
+
+
 def tool_error(tool_name: str, error: Exception) -> str:
     """Standard error format for agent tool failures.
 

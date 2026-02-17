@@ -848,5 +848,83 @@ async def pattern_registry() -> str:
         return f"Error loading pattern registry: {e}"
 
 
+# --- Chief of Staff / Orchestration ---
+
+@server.tool()
+async def route_request(request: str) -> str:
+    """Route a request to the optimal brain agent using Chief of Staff.
+
+    Args:
+        request: The user's request to classify and route
+    """
+    try:
+        request = _validate_mcp_input(request, label="request")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.chief_of_staff import chief_of_staff
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await chief_of_staff.run(request, deps=deps, model=model)
+    except TimeoutError:
+        return f"Route request timed out after {timeout}s."
+    routing = result.output
+    parts = [
+        f"Route: {routing.target_agent}",
+        f"Reasoning: {routing.reasoning}",
+        f"Pipeline: {' -> '.join(routing.pipeline_steps) if routing.pipeline_steps else 'N/A'}",
+        f"Confidence: {routing.confidence}",
+    ]
+    return "\n".join(parts)
+
+
+@server.tool()
+async def run_brain_pipeline(request: str, steps: str = "") -> str:
+    """Run a multi-agent pipeline. Steps is a comma-separated list of agent names.
+
+    If steps is empty, uses Chief of Staff to determine the optimal pipeline.
+    Example steps: "recall,create,review"
+
+    Args:
+        request: The user's request to process through the pipeline
+        steps: Comma-separated agent names (e.g., "recall,create,review"). Empty = auto-route.
+    """
+    try:
+        request = _validate_mcp_input(request, label="request")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.utils import run_pipeline
+
+    if not steps:
+        # Auto-route via Chief of Staff
+        from second_brain.agents.chief_of_staff import chief_of_staff
+        timeout = deps.config.api_timeout_seconds
+        try:
+            async with asyncio.timeout(timeout):
+                routing = await chief_of_staff.run(request, deps=deps, model=model)
+        except TimeoutError:
+            return f"Pipeline routing timed out after {timeout}s."
+        routing_output = routing.output
+        if routing_output.target_agent == "pipeline":
+            step_list = list(routing_output.pipeline_steps)
+        else:
+            step_list = [routing_output.target_agent]
+    else:
+        step_list = [s.strip() for s in steps.split(",") if s.strip()]
+
+    results = await run_pipeline(
+        steps=step_list,
+        initial_prompt=request,
+        deps=deps,
+        model=model,
+    )
+    final = results.get("final")
+    return str(final) if final else "Pipeline completed with no output."
+
+
 if __name__ == "__main__":
     server.run()
