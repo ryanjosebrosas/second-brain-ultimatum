@@ -26,7 +26,7 @@ class TestServiceMCPTools:
         )
         mock_deps.return_value = MagicMock(memory_service=mock_memory)
 
-        result = await search_memory.fn(query="test query")
+        result = await search_memory(query="test query")
         assert "test memory" in result
         assert "0.95" in result
 
@@ -39,7 +39,7 @@ class TestServiceMCPTools:
         mock_memory.search.return_value = SearchResult(memories=[], relations=[])
         mock_deps.return_value = MagicMock(memory_service=mock_memory)
 
-        result = await search_memory.fn(query="nothing")
+        result = await search_memory(query="nothing")
         assert "No semantic matches" in result
 
     @patch("second_brain.service_mcp._get_deps")
@@ -53,7 +53,7 @@ class TestServiceMCPTools:
         ]
         mock_deps.return_value = MagicMock(storage_service=mock_storage)
 
-        result = await get_patterns.fn()
+        result = await get_patterns()
         assert "Test Pattern" in result
         assert "HIGH" in result
 
@@ -68,7 +68,7 @@ class TestServiceMCPTools:
         ]
         mock_deps.return_value = MagicMock(storage_service=mock_storage)
 
-        result = await get_experiences.fn()
+        result = await get_experiences()
         assert "Client call" in result
         assert "clients" in result
 
@@ -81,7 +81,7 @@ class TestServiceMCPTools:
         mock_storage.insert_pattern.return_value = {"id": "test-id"}
         mock_deps.return_value = MagicMock(storage_service=mock_storage)
 
-        result = await store_pattern.fn(
+        result = await store_pattern(
             name="Test", topic="Messaging", pattern_text="Do X always"
         )
         assert "Stored pattern" in result
@@ -94,7 +94,7 @@ class TestServiceMCPTools:
 
         mock_deps.return_value = MagicMock(graphiti_service=None)
 
-        result = await graph_search.fn(query="test")
+        result = await graph_search(query="test")
         assert "not enabled" in result
 
     def test_get_service_mcp_config(self):

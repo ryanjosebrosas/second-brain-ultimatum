@@ -1,5 +1,6 @@
 """Structured storage via Supabase for patterns, experiences, metrics."""
 
+import asyncio
 import logging
 import time
 from datetime import date, timedelta
@@ -35,7 +36,8 @@ class StorageService:
                 query = query.eq("topic", topic)
             if confidence:
                 query = query.eq("confidence", confidence)
-            result = query.order("date_updated", desc=True).execute()
+            query = query.order("date_updated", desc=True)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_patterns failed: %s", type(e).__name__)
@@ -57,7 +59,8 @@ class StorageService:
 
     async def upsert_pattern(self, pattern: dict) -> dict:
         try:
-            result = self._client.table("patterns").upsert(pattern).execute()
+            query = self._client.table("patterns").upsert(pattern)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase upsert_pattern failed: %s", type(e).__name__)
@@ -67,7 +70,8 @@ class StorageService:
     async def insert_pattern(self, pattern: dict) -> dict:
         """Insert a new pattern. Raises on duplicate name (DB UNIQUE constraint)."""
         try:
-            result = self._client.table("patterns").insert(pattern).execute()
+            query = self._client.table("patterns").insert(pattern)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase insert_pattern failed: %s", type(e).__name__)
@@ -77,13 +81,13 @@ class StorageService:
     async def get_pattern_by_name(self, name: str) -> dict | None:
         """Find a pattern by name (case-insensitive). Returns the pattern dict or None."""
         try:
-            result = (
+            query = (
                 self._client.table("patterns")
                 .select("*")
                 .ilike("name", name)
                 .limit(1)
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else None
         except Exception as e:
             logger.warning("Supabase get_pattern_by_name failed: %s", type(e).__name__)
@@ -96,13 +100,13 @@ class StorageService:
         """Atomically reinforce a pattern: increment use_count, upgrade confidence, append evidence."""
         # Fetch current state
         try:
-            current = (
+            fetch_query = (
                 self._client.table("patterns")
                 .select("*")
                 .eq("id", pattern_id)
                 .limit(1)
-                .execute()
             )
+            current = await asyncio.to_thread(fetch_query.execute)
         except Exception as e:
             logger.warning("Supabase reinforce_pattern fetch failed: %s", type(e).__name__)
             raise ValueError("Failed to fetch pattern for reinforcement") from e
@@ -133,12 +137,12 @@ class StorageService:
         }
 
         try:
-            result = (
+            update_query = (
                 self._client.table("patterns")
                 .update(update_data)
                 .eq("id", pattern_id)
-                .execute()
             )
+            result = await asyncio.to_thread(update_query.execute)
         except Exception as e:
             logger.warning("Supabase reinforce_pattern update failed: %s", type(e).__name__)
             raise ValueError("Failed to update pattern for reinforcement") from e
@@ -155,7 +159,8 @@ class StorageService:
     async def delete_pattern(self, pattern_id: str) -> bool:
         """Delete a pattern by ID."""
         try:
-            result = self._client.table("patterns").delete().eq("id", pattern_id).execute()
+            query = self._client.table("patterns").delete().eq("id", pattern_id)
+            result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
             logger.warning("Supabase delete_pattern failed: %s", type(e).__name__)
@@ -166,7 +171,8 @@ class StorageService:
 
     async def add_experience(self, experience: dict) -> dict:
         try:
-            result = self._client.table("experiences").insert(experience).execute()
+            query = self._client.table("experiences").insert(experience)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase add_experience failed: %s", type(e).__name__)
@@ -180,7 +186,8 @@ class StorageService:
             query = self._client.table("experiences").select("*")
             if category:
                 query = query.eq("category", category)
-            result = query.order("created_at", desc=True).limit(limit).execute()
+            query = query.order("created_at", desc=True).limit(limit)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_experiences failed: %s", type(e).__name__)
@@ -190,7 +197,8 @@ class StorageService:
     async def delete_experience(self, experience_id: str) -> bool:
         """Delete an experience by ID."""
         try:
-            result = self._client.table("experiences").delete().eq("id", experience_id).execute()
+            query = self._client.table("experiences").delete().eq("id", experience_id)
+            result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
             logger.warning("Supabase delete_experience failed: %s", type(e).__name__)
@@ -201,7 +209,8 @@ class StorageService:
 
     async def add_health_snapshot(self, snapshot: dict) -> dict:
         try:
-            result = self._client.table("brain_health").insert(snapshot).execute()
+            query = self._client.table("brain_health").insert(snapshot)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase add_health_snapshot failed: %s", type(e).__name__)
@@ -210,13 +219,13 @@ class StorageService:
 
     async def get_health_history(self, limit: int = 30) -> list[dict]:
         try:
-            result = (
+            query = (
                 self._client.table("brain_health")
                 .select("*")
                 .order("date", desc=True)
                 .limit(limit)
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_health_history failed: %s", type(e).__name__)
@@ -228,7 +237,8 @@ class StorageService:
     async def add_growth_event(self, event: dict) -> dict:
         """Record a brain growth event."""
         try:
-            result = self._client.table("growth_log").insert(event).execute()
+            query = self._client.table("growth_log").insert(event)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase add_growth_event failed: %s", type(e).__name__)
@@ -246,8 +256,8 @@ class StorageService:
             query = self._client.table("growth_log").select("*")
             if event_type:
                 query = query.eq("event_type", event_type)
-            query = query.gte("event_date", cutoff)
-            result = query.order("event_date", desc=True).execute()
+            query = query.gte("event_date", cutoff).order("event_date", desc=True)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_growth_events failed: %s", type(e).__name__)
@@ -273,7 +283,8 @@ class StorageService:
     async def add_review_history(self, entry: dict) -> dict:
         """Record a review result for quality trending."""
         try:
-            result = self._client.table("review_history").insert(entry).execute()
+            query = self._client.table("review_history").insert(entry)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase add_review_history failed: %s", type(e).__name__)
@@ -290,7 +301,8 @@ class StorageService:
             query = self._client.table("review_history").select("*")
             if content_type:
                 query = query.eq("content_type", content_type)
-            result = query.order("review_date", desc=True).limit(limit).execute()
+            query = query.order("review_date", desc=True).limit(limit)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_review_history failed: %s", type(e).__name__)
@@ -302,7 +314,8 @@ class StorageService:
     async def add_confidence_transition(self, transition: dict) -> dict:
         """Record a confidence level change."""
         try:
-            result = self._client.table("confidence_history").insert(transition).execute()
+            query = self._client.table("confidence_history").insert(transition)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase add_confidence_transition failed: %s", type(e).__name__)
@@ -319,7 +332,8 @@ class StorageService:
             query = self._client.table("confidence_history").select("*")
             if pattern_name:
                 query = query.eq("pattern_name", pattern_name)
-            result = query.order("transition_date", desc=True).limit(limit).execute()
+            query = query.order("transition_date", desc=True).limit(limit)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_confidence_history failed: %s", type(e).__name__)
@@ -336,7 +350,7 @@ class StorageService:
             query = query.eq("category", category)
             if subcategory:
                 query = query.eq("subcategory", subcategory)
-            result = query.execute()
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_memory_content failed: %s", type(e).__name__)
@@ -345,7 +359,8 @@ class StorageService:
 
     async def upsert_memory_content(self, content: dict) -> dict:
         try:
-            result = self._client.table("memory_content").upsert(content).execute()
+            query = self._client.table("memory_content").upsert(content)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase upsert_memory_content failed: %s", type(e).__name__)
@@ -361,7 +376,8 @@ class StorageService:
             query = self._client.table("examples").select("*")
             if content_type:
                 query = query.eq("content_type", content_type)
-            result = query.order("created_at", desc=True).execute()
+            query = query.order("created_at", desc=True)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_examples failed: %s", type(e).__name__)
@@ -370,7 +386,8 @@ class StorageService:
 
     async def upsert_example(self, example: dict) -> dict:
         try:
-            result = self._client.table("examples").upsert(example).execute()
+            query = self._client.table("examples").upsert(example)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase upsert_example failed: %s", type(e).__name__)
@@ -380,7 +397,8 @@ class StorageService:
     async def delete_example(self, example_id: str) -> bool:
         """Delete an example by ID."""
         try:
-            result = self._client.table("examples").delete().eq("id", example_id).execute()
+            query = self._client.table("examples").delete().eq("id", example_id)
+            result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
             logger.warning("Supabase delete_example failed: %s", type(e).__name__)
@@ -396,7 +414,8 @@ class StorageService:
             query = self._client.table("knowledge_repo").select("*")
             if category:
                 query = query.eq("category", category)
-            result = query.order("created_at", desc=True).execute()
+            query = query.order("created_at", desc=True)
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_knowledge failed: %s", type(e).__name__)
@@ -405,7 +424,8 @@ class StorageService:
 
     async def upsert_knowledge(self, knowledge: dict) -> dict:
         try:
-            result = self._client.table("knowledge_repo").upsert(knowledge).execute()
+            query = self._client.table("knowledge_repo").upsert(knowledge)
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase upsert_knowledge failed: %s", type(e).__name__)
@@ -415,7 +435,8 @@ class StorageService:
     async def delete_knowledge(self, knowledge_id: str) -> bool:
         """Delete a knowledge entry by ID."""
         try:
-            result = self._client.table("knowledge_repo").delete().eq("id", knowledge_id).execute()
+            query = self._client.table("knowledge_repo").delete().eq("id", knowledge_id)
+            result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
             logger.warning("Supabase delete_knowledge failed: %s", type(e).__name__)
@@ -427,12 +448,12 @@ class StorageService:
     async def get_content_types(self) -> list[dict]:
         """Get all content types ordered by name."""
         try:
-            result = (
+            query = (
                 self._client.table("content_types")
                 .select("*")
                 .order("name")
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return result.data
         except Exception as e:
             logger.warning("Supabase get_content_types failed: %s", type(e).__name__)
@@ -442,13 +463,13 @@ class StorageService:
     async def get_content_type_by_slug(self, slug: str) -> dict | None:
         """Get a content type by its slug (e.g., 'linkedin', 'newsletter')."""
         try:
-            result = (
+            query = (
                 self._client.table("content_types")
                 .select("*")
                 .eq("slug", slug)
                 .limit(1)
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else None
         except Exception as e:
             logger.warning("Supabase get_content_type_by_slug failed: %s", type(e).__name__)
@@ -458,11 +479,11 @@ class StorageService:
     async def upsert_content_type(self, content_type: dict) -> dict:
         """Create or update a content type. Uses slug as the conflict key."""
         try:
-            result = (
+            query = (
                 self._client.table("content_types")
                 .upsert(content_type, on_conflict="slug")
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
             logger.warning("Supabase upsert_content_type failed: %s", type(e).__name__)
@@ -472,12 +493,12 @@ class StorageService:
     async def delete_content_type(self, slug: str) -> bool:
         """Delete a content type by slug. Returns True if deleted."""
         try:
-            result = (
+            query = (
                 self._client.table("content_types")
                 .delete()
                 .eq("slug", slug)
-                .execute()
             )
+            result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
             logger.warning("Supabase delete_content_type failed: %s", type(e).__name__)

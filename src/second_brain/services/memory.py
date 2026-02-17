@@ -1,5 +1,6 @@
 """Semantic memory via Mem0 (cloud primary, local fallback)."""
 
+import asyncio
 import logging
 
 from second_brain.config import BrainConfig
@@ -70,7 +71,7 @@ class MemoryService:
         if use_graph and self._is_cloud:
             kwargs["enable_graph"] = True
         try:
-            result = self._client.add(messages, **kwargs)
+            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
             return result
         except Exception as e:
             logger.warning("Mem0 add failed: %s", type(e).__name__)
@@ -102,7 +103,7 @@ class MemoryService:
         if use_graph and self._is_cloud:
             kwargs["enable_graph"] = True
         try:
-            result = self._client.add(messages, **kwargs)
+            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
             return result
         except Exception as e:
             logger.warning("Mem0 add_with_metadata failed: %s", type(e).__name__)
@@ -122,7 +123,7 @@ class MemoryService:
             logger.warning("Graph provider is not 'mem0' — skipping project graph enablement")
             return
         try:
-            self._client.project.update(enable_graph=True)
+            await asyncio.to_thread(lambda: self._client.project.update(enable_graph=True))
             logger.info("Enabled graph memory at Mem0 project level")
         except Exception as e:
             logger.error(f"Failed to enable project-level graph: {e}")
@@ -138,7 +139,7 @@ class MemoryService:
             if use_graph:
                 kwargs["enable_graph"] = True
         try:
-            results = self._client.search(query, **kwargs)
+            results = await asyncio.to_thread(self._client.search, query, **kwargs)
         except Exception as e:
             logger.warning("Mem0 search failed: %s", type(e).__name__)
             logger.debug("Mem0 search error detail: %s", e)
@@ -195,11 +196,11 @@ class MemoryService:
 
         try:
             try:
-                results = self._client.search(query, **kwargs)
+                results = await asyncio.to_thread(self._client.search, query, **kwargs)
             except TypeError:
                 logger.warning("Mem0 client doesn't support filters, falling back to unfiltered search")
                 kwargs.pop("filters", None)
-                results = self._client.search(query, **kwargs)
+                results = await asyncio.to_thread(self._client.search, query, **kwargs)
         except Exception as e:
             logger.warning("Mem0 search_with_filters failed: %s", type(e).__name__)
             logger.debug("Mem0 search_with_filters error detail: %s", e)
@@ -242,11 +243,15 @@ class MemoryService:
                 if metadata is not None:
                     kwargs["metadata"] = metadata
                 if kwargs:
-                    self._client.update(memory_id=memory_id, **kwargs)
+                    await asyncio.to_thread(
+                        self._client.update, memory_id=memory_id, **kwargs
+                    )
             else:
                 # Local client only supports data= parameter
                 if content is not None:
-                    self._client.update(memory_id=memory_id, data=content)
+                    await asyncio.to_thread(
+                        self._client.update, memory_id=memory_id, data=content
+                    )
                 elif metadata is not None:
                     logger.warning("Local Mem0 client doesn't support metadata-only updates")
         except Exception as e:
@@ -259,7 +264,7 @@ class MemoryService:
             kwargs: dict = {"user_id": self.user_id}
             if self._is_cloud:
                 kwargs["filters"] = {"user_id": self.user_id}
-            results = self._client.get_all(**kwargs)
+            results = await asyncio.to_thread(self._client.get_all, **kwargs)
             if isinstance(results, dict):
                 return results.get("results", [])
             return results
@@ -281,7 +286,7 @@ class MemoryService:
     async def delete(self, memory_id: str) -> None:
         """Delete a specific memory."""
         try:
-            self._client.delete(memory_id)
+            await asyncio.to_thread(self._client.delete, memory_id)
         except Exception as e:
             logger.warning("Mem0 delete failed: %s", type(e).__name__)
             logger.debug("Mem0 delete error detail: %s", e)
@@ -289,5 +294,5 @@ class MemoryService:
     async def close(self) -> None:
         """Release Mem0 client resources."""
         if hasattr(self._client, "close"):
-            self._client.close()
+            await asyncio.to_thread(self._client.close)
         self._client = None

@@ -133,7 +133,16 @@ class BrainConfig(BaseSettings):
     # API timeouts
     api_timeout_seconds: int = Field(
         default=30,
-        description="Timeout in seconds for external API calls (Mem0, Supabase, LLM)",
+        ge=5,
+        le=300,
+        description="Timeout in seconds for external API calls (Mem0, Supabase, LLM). Range: 5-300.",
+    )
+
+    mcp_review_timeout_multiplier: int = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description="Multiplier for review tool timeout (runs 6 parallel reviews). Range: 1-5.",
     )
 
     # Input validation

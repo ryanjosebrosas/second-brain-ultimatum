@@ -1,6 +1,7 @@
 ---
 description: "Create comprehensive feature plan with deep codebase analysis and research"
 argument-hint: [feature-description]
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects, mcp__archon__rag_get_available_sources, mcp__archon__rag_search_knowledge_base, mcp__archon__rag_search_code_examples, mcp__archon__rag_list_pages_for_source, mcp__archon__rag_read_full_page, mcp__archon__find_documents, mcp__archon__manage_document, mcp__archon__get_project_features, mcp__archon__health_check, mcp__archon__session_info
 ---
 
 # Planning: Comprehensive Feature Plan
@@ -143,13 +144,18 @@ Cross-check key findings — do code patterns still exist? Are library versions 
 
 ## PHASE 4.5: Plan Decomposition Decision
 
-**Decompose if**: High complexity, 4+ phases, 15+ tasks, 3+ systems, or user requests it.
+**Decompose if ANY of these apply**:
+- High complexity, 4+ phases, 15+ tasks, 3+ systems
+- Research produced robust context (extensive RAG results, many codebase patterns, detailed external docs)
+- Main plan would exceed 1200 lines as a single file
+- User requests it
 
 **If decomposing**:
 1. Read `templates/PLAN-OVERVIEW-TEMPLATE.md` and `templates/SUB-PLAN-TEMPLATE.md`
 2. Split into sub-plans (1 phase = 1 sub-plan, max 8 tasks each)
 3. Assign shared context to overview, per-phase context to sub-plans
-4. Proceed to Phase 5 in "decomposed mode"
+4. Each sub-plan MUST be **600-700 lines minimum**. You have failed if a sub-plan is under 600 lines. Include full context: patterns with line numbers, imports, code examples, validation commands, gotchas — everything an agent needs in a fresh conversation.
+5. Proceed to Phase 5 in "decomposed mode"
 
 **If NOT decomposing** (default): Proceed to Phase 5 normally (single plan, 700-1000 lines).
 
@@ -171,7 +177,7 @@ Cross-check key findings — do code patterns still exist? Are library versions 
 
 Break Phase 4's implementation phases into atomic tasks. Order by dependency. Ensure top-to-bottom execution without backtracking.
 
-**If decomposed mode**: Each sub-plan gets 5-8 tasks max using same 7-field format. Include HANDOFF NOTES at end of each sub-plan. Each sub-plan must be self-contained.
+**If decomposed mode**: Each sub-plan gets 5-8 tasks max using same 7-field format. Include HANDOFF NOTES at end of each sub-plan. Each sub-plan must be **fully self-contained** (600-700 lines minimum) — duplicate shared context (patterns, imports, architecture notes) rather than referencing the overview. An agent executing a sub-plan in a fresh conversation must have everything it needs without reading the overview.
 
 ---
 
@@ -200,6 +206,8 @@ Use `templates/STRUCTURED-PLAN-TEMPLATE.md`. Every section must be filled — sp
 Save to multiple files:
 - `requests/{feature}-plan-overview.md` (use `templates/PLAN-OVERVIEW-TEMPLATE.md`)
 - `requests/{feature}-plan-01-{phase}.md` through `-NN-` (use `templates/SUB-PLAN-TEMPLATE.md`)
+
+**Sub-plan line requirements**: Each sub-plan MUST be **600-700 lines minimum**. Include full duplicated context (patterns, imports, architecture, gotchas) so each sub-plan is executable standalone.
 
 Include EXECUTION ROUTING in overview: Recommended model per sub-plan (e.g., Sonnet for execution, Opus for planning).
 

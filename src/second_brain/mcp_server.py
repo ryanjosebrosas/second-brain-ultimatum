@@ -4,6 +4,7 @@ Exposes recall and ask agents as tools callable from Claude Code.
 Run: python -m second_brain.mcp_server
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -39,16 +40,29 @@ def _validate_mcp_input(text: str, label: str = "input") -> str:
 # Initialize server
 server = FastMCP("Second Brain")
 
-# Lazy-init deps (created on first tool call)
+# Lazy-init deps (created on first tool call) with circuit breaker
 _deps: BrainDeps | None = None
 _model = None
+_deps_failed: bool = False
+_deps_error: str = ""
 
 
 def _get_deps() -> BrainDeps:
-    global _deps, _model
+    global _deps, _model, _deps_failed, _deps_error
+    if _deps_failed:
+        raise RuntimeError(
+            f"Second Brain initialization failed: {_deps_error}. "
+            "Restart the MCP server to retry."
+        )
     if _deps is None:
-        _deps = create_deps()
-        _model = get_model(_deps.config)
+        try:
+            _deps = create_deps()
+            _model = get_model(_deps.config)
+        except Exception as e:
+            _deps_failed = True
+            _deps_error = str(e)
+            logger.error("Failed to initialize deps: %s", e)
+            raise RuntimeError(f"Second Brain initialization failed: {e}") from e
     return _deps
 
 
@@ -72,11 +86,16 @@ async def recall(query: str) -> str:
         return str(e)
     deps = _get_deps()
     model = _get_model()
-    result = await recall_agent.run(
-        f"Search memory for: {query}",
-        deps=deps,
-        model=model,
-    )
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await recall_agent.run(
+                f"Search memory for: {query}",
+                deps=deps,
+                model=model,
+            )
+    except TimeoutError:
+        return f"Recall timed out after {timeout}s. Try a simpler query."
     output = result.output
 
     # Format as readable text for Claude Code
@@ -116,11 +135,16 @@ async def ask(question: str) -> str:
         return str(e)
     deps = _get_deps()
     model = _get_model()
-    result = await ask_agent.run(
-        question,
-        deps=deps,
-        model=model,
-    )
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await ask_agent.run(
+                question,
+                deps=deps,
+                model=model,
+            )
+    except TimeoutError:
+        return f"Ask timed out after {timeout}s. Try a simpler question."
     output = result.output
 
     # Format as readable text for Claude Code
@@ -155,11 +179,16 @@ async def learn(content: str, category: str = "general") -> str:
         return str(e)
     deps = _get_deps()
     model = _get_model()
-    result = await learn_agent.run(
-        f"Extract learnings from this work session (category: {category}):\n\n{content}",
-        deps=deps,
-        model=model,
-    )
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await learn_agent.run(
+                f"Extract learnings from this work session (category: {category}):\n\n{content}",
+                deps=deps,
+                model=model,
+            )
+    except TimeoutError:
+        return f"Learn timed out after {timeout}s. Try submitting less content."
     output = result.output
 
     parts = [f"# Learn: {output.input_summary}\n"]
@@ -223,7 +252,12 @@ async def create_content(
         enhanced += f"Target length: ~{type_config.max_words} words\n"
     enhanced += f"\nRequest: {prompt}"
 
-    result = await create_agent.run(enhanced, deps=deps, model=model)
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await create_agent.run(enhanced, deps=deps, model=model)
+    except TimeoutError:
+        return f"Create timed out after {timeout}s. Try a simpler prompt."
     output = result.output
 
     parts = [
@@ -262,7 +296,12 @@ async def review_content(content: str, content_type: str | None = None) -> str:
         return str(e)
     deps = _get_deps()
     model = _get_model()
-    result = await run_full_review(content, deps, model, content_type)
+    timeout = deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
+    try:
+        async with asyncio.timeout(timeout):
+            result = await run_full_review(content, deps, model, content_type)
+    except TimeoutError:
+        return f"Review timed out after {timeout}s. Try shorter content."
 
     parts = [f"# Review: {result.overall_score}/10 — {result.verdict}\n"]
 
@@ -446,14 +485,19 @@ async def consolidate_brain(min_cluster_size: int = 3) -> str:
     """
     deps = _get_deps()
     model = _get_model()
-    result = await learn_agent.run(
-        f"Run memory consolidation with min_cluster_size={min_cluster_size}. "
-        f"Use the consolidate_memories tool to review accumulated memories, "
-        f"then use store_pattern and reinforce_existing_pattern to act on findings. "
-        f"Tag graduated memories with tag_graduated_memories when done.",
-        deps=deps,
-        model=model,
-    )
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await learn_agent.run(
+                f"Run memory consolidation with min_cluster_size={min_cluster_size}. "
+                f"Use the consolidate_memories tool to review accumulated memories, "
+                f"then use store_pattern and reinforce_existing_pattern to act on findings. "
+                f"Tag graduated memories with tag_graduated_memories when done.",
+                deps=deps,
+                model=model,
+            )
+    except TimeoutError:
+        return f"Consolidation timed out after {timeout}s. Try again later."
     output = result.output
 
     parts = [f"# Brain Consolidation\n", f"**Summary**: {output.input_summary}\n"]

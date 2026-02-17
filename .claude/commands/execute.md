@@ -1,7 +1,7 @@
 ---
 description: Execute an implementation plan
 argument-hint: [path-to-plan]
-allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects
+allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects, mcp__archon__rag_get_available_sources, mcp__archon__rag_search_knowledge_base, mcp__archon__rag_search_code_examples, mcp__archon__rag_list_pages_for_source, mcp__archon__rag_read_full_page, mcp__archon__find_documents, mcp__archon__manage_document, mcp__archon__get_project_features, mcp__archon__health_check, mcp__archon__session_info
 ---
 
 # Execute: Implement from Plan
@@ -33,7 +33,15 @@ Read the plan file.
 
 ### 1.5. Archon Setup (if available)
 
-Create project and tasks: `manage_project("create", ...)`, then `manage_task("create", ...)` for each plan task with dependency-based task_order. Skip if Archon unavailable.
+**a. Check availability**: `health_check()` — if fails, skip all Archon steps.
+
+**b. Create project and tasks**: `manage_project("create", ...)`, then `manage_task("create", ...)` for each plan task with dependency-based task_order.
+
+**c. RAG Research**: If the plan references external libraries or APIs, search for relevant docs:
+1. `rag_get_available_sources()` — list indexed documentation
+2. For each relevant source, `rag_search_knowledge_base(query="...", source_id="...")` with SHORT 2-5 keyword queries
+3. `rag_search_code_examples(query="...")` for implementation patterns
+4. Use findings to inform implementation — prefer RAG results over assumptions
 
 ### 2. Execute Tasks in Order
 
