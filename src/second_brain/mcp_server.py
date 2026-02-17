@@ -527,7 +527,8 @@ async def growth_report(days: int = 30) -> str:
     from second_brain.services.health import HealthService
 
     deps = _get_deps()
-    metrics = await HealthService().compute_growth(deps, days=days)
+    health = HealthService()
+    metrics = await health.compute_growth(deps, days=days)
 
     parts = [
         f"# Growth Report ({days} days)\n",
@@ -558,6 +559,27 @@ async def growth_report(days: int = 30) -> str:
         parts.append(f"\n## Patterns by Topic")
         for t, c in sorted(metrics.topics.items()):
             parts.append(f"  - {t}: {c}")
+
+    # Milestones
+    try:
+        milestone_data = await health.compute_milestones(deps)
+        parts.append(f"\nBrain Level: {milestone_data['level']}")
+        parts.append(f"  {milestone_data['level_description']}")
+        parts.append(f"  Milestones: {milestone_data['milestones_completed']}/{milestone_data['milestones_total']}")
+        if milestone_data.get("next_milestone"):
+            parts.append(f"  Next: {milestone_data['next_milestone']}")
+    except Exception:
+        logger.debug("Milestone computation failed (non-critical)")
+
+    # Quality trending
+    try:
+        quality = await health.compute_quality_trend(deps, days=days)
+        if quality.get("total_reviews", 0) > 0:
+            parts.append(f"\nQuality ({days}d): {quality['total_reviews']} reviews, avg {quality['avg_score']}, trend: {quality['score_trend']}")
+            if quality.get("recurring_issues"):
+                parts.append(f"  Recurring issues: {', '.join(quality['recurring_issues'][:3])}")
+    except Exception:
+        logger.debug("Quality trending failed (non-critical)")
 
     return "\n".join(parts)
 
@@ -692,6 +714,138 @@ async def vector_search(
         content = r.get("content", "")[:200]
         formatted.append(f"- [{sim:.3f}] **{title}**: {content}")
     return "\n".join(formatted)
+
+
+# --- Project Lifecycle ---
+
+@server.tool()
+async def create_project(
+    name: str,
+    category: str = "content",
+    description: str | None = None,
+) -> str:
+    """Create a new project for lifecycle tracking (plan -> execute -> review -> learn).
+    Categories: content, prospects, clients, products, general."""
+    try:
+        name = _validate_mcp_input(name, label="name")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        project_data = {"name": name, "category": category, "lifecycle_stage": "planning"}
+        if description:
+            project_data["description"] = description
+        result = await deps.storage_service.create_project(project_data)
+        if result:
+            return (
+                f"Project created: {result.get('name', name)} "
+                f"(ID: {result.get('id', 'unknown')})\n"
+                f"Stage: planning\n"
+                f"Next: Add plan artifact or advance to executing"
+            )
+        return "Failed to create project."
+    except Exception as e:
+        return f"Error creating project: {e}"
+
+
+@server.tool()
+async def project_status(project_id: str) -> str:
+    """Get project status, artifacts, and next action."""
+    try:
+        project_id = _validate_mcp_input(project_id, label="project_id")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        proj = await deps.storage_service.get_project(project_id)
+        if not proj:
+            return f"Project not found: {project_id}"
+        parts = [
+            f"Project: {proj['name']}",
+            f"Stage: {proj.get('lifecycle_stage', 'unknown')}",
+            f"Category: {proj.get('category', 'unknown')}",
+        ]
+        if proj.get("review_score"):
+            parts.append(f"Review Score: {proj['review_score']}/10")
+        artifacts = proj.get("project_artifacts", [])
+        if artifacts:
+            parts.append(f"\nArtifacts ({len(artifacts)}):")
+            for a in artifacts:
+                parts.append(f"  - {a['artifact_type']}: {a.get('title', 'untitled')}")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error getting project status: {e}"
+
+
+@server.tool()
+async def advance_project(project_id: str, target_stage: str | None = None) -> str:
+    """Advance a project to the next lifecycle stage. Stages: planning -> executing ->
+    reviewing -> learning -> complete. Specify target_stage to jump to a specific stage."""
+    try:
+        project_id = _validate_mcp_input(project_id, label="project_id")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    stage_order = ["planning", "executing", "reviewing", "learning", "complete"]
+    try:
+        proj = await deps.storage_service.get_project(project_id)
+        if not proj:
+            return f"Project not found: {project_id}"
+        current = proj.get("lifecycle_stage", "planning")
+        if target_stage:
+            next_stage = target_stage
+        else:
+            try:
+                idx = stage_order.index(current)
+                next_stage = stage_order[idx + 1] if idx + 1 < len(stage_order) else current
+            except ValueError:
+                return f"Cannot auto-advance from stage: {current}"
+        result = await deps.storage_service.update_project_stage(project_id, next_stage)
+        if result:
+            return f"Project '{proj['name']}' advanced: {current} -> {next_stage}"
+        return "Failed to advance project."
+    except Exception as e:
+        return f"Error advancing project: {e}"
+
+
+@server.tool()
+async def brain_setup() -> str:
+    """Check brain setup/onboarding status. Shows which memory categories are populated
+    and what steps remain to fully configure the brain."""
+    deps = _get_deps()
+    try:
+        from second_brain.services.health import HealthService
+        health = HealthService()
+        status = await health.compute_setup_status(deps)
+        completed = status.get("completed_count", 0)
+        total = status.get("total_steps", 0)
+        pct = int(completed / total * 100) if total > 0 else 0
+        parts = [f"Brain Setup: {pct}% complete ({completed}/{total} steps)"]
+        for step in status.get("steps", []):
+            icon = "[x]" if step["completed"] else "[ ]"
+            parts.append(f"  {icon} {step['description']}")
+        if not status.get("is_complete"):
+            missing = status.get("missing_categories", [])
+            if missing:
+                parts.append(f"\nMissing categories: {', '.join(missing)}")
+            parts.append("Use 'learn' tool or migration to populate missing categories.")
+        else:
+            parts.append("\nBrain is fully configured!")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error checking setup: {e}"
+
+
+@server.tool()
+async def pattern_registry() -> str:
+    """View the full pattern registry -- all patterns with confidence, usage, and status."""
+    deps = _get_deps()
+    try:
+        from second_brain.agents.utils import format_pattern_registry
+        registry = await deps.storage_service.get_pattern_registry()
+        return format_pattern_registry(registry, config=deps.config)
+    except Exception as e:
+        return f"Error loading pattern registry: {e}"
 
 
 if __name__ == "__main__":

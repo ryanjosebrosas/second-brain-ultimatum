@@ -154,6 +154,18 @@ class BrainMigrator:
                     await self.storage.add_experience(experience)
                     results["success"] += 1
                     logger.info(f"Migrated experience: {project_dir.name}")
+
+                    # Also create a project record for the migrated experience
+                    try:
+                        await self.storage.create_project({
+                            "name": project_dir.name,
+                            "category": category_dir.name,
+                            "lifecycle_stage": "complete",
+                            "description": f"Migrated from {project_dir}",
+                        })
+                    except Exception:
+                        logger.debug("Project creation for migrated experience failed (non-critical)")
+
                 except Exception as e:
                     results["errors"] += 1
                     logger.warning("Failed to migrate experience '%s': %s", project_dir.name, e)

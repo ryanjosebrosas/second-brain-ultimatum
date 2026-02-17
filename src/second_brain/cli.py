@@ -363,7 +363,8 @@ def growth(days: int):
     deps = create_deps()
 
     async def _growth():
-        metrics = await HealthService().compute_growth(deps, days=days)
+        health = HealthService()
+        metrics = await health.compute_growth(deps, days=days)
 
         click.echo(f"\n# Growth Report ({days} days)\n")
         click.echo(f"Status: {metrics.status}")
@@ -392,6 +393,44 @@ def growth(days: int):
             click.echo(f"\nPatterns by Topic:")
             for t, c in sorted(metrics.topics.items()):
                 click.echo(f"  {t}: {c}")
+
+        # Milestones
+        try:
+            milestone_data = await health.compute_milestones(deps)
+            click.echo(f"\n--- Brain Level: {milestone_data['level']} ---")
+            click.echo(f"  {milestone_data['level_description']}")
+            click.echo(f"  Milestones: {milestone_data['milestones_completed']}/{milestone_data['milestones_total']}")
+            if milestone_data.get("next_milestone"):
+                click.echo(f"  Next: {milestone_data['next_milestone']}")
+            click.echo()
+            for m in milestone_data.get("milestones", []):
+                icon = "[x]" if m["completed"] else "[ ]"
+                click.echo(f"  {icon} {m['description']}")
+        except Exception:
+            logger.debug("Milestone computation failed (non-critical)")
+
+        # Quality trending
+        try:
+            quality = await health.compute_quality_trend(deps, days=days)
+            if quality.get("total_reviews", 0) > 0:
+                click.echo(f"\n--- Quality Trending ({days} days) ---")
+                click.echo(f"  Reviews: {quality['total_reviews']}")
+                click.echo(f"  Avg Score: {quality['avg_score']}")
+                click.echo(f"  Trend: {quality['score_trend']}")
+                if quality.get("excellence_count"):
+                    click.echo(f"  Excellence (9+): {quality['excellence_count']}")
+                if quality.get("needs_work_count"):
+                    click.echo(f"  Needs Work (<6): {quality['needs_work_count']}")
+                if quality.get("by_content_type"):
+                    click.echo("  By Type:")
+                    for ct, score in quality["by_content_type"].items():
+                        click.echo(f"    {ct}: {score}")
+                if quality.get("recurring_issues"):
+                    click.echo("  Recurring Issues:")
+                    for issue in quality["recurring_issues"][:5]:
+                        click.echo(f"    - {issue}")
+        except Exception:
+            logger.debug("Quality trending failed (non-critical)")
 
     asyncio.run(_growth())
 
@@ -564,6 +603,201 @@ def graph_search(query: str, limit: int):
         click.echo(f"\nFound {len(results)} relationship(s)")
 
     asyncio.run(_search())
+
+
+# --- Project Lifecycle ---
+
+@cli.group()
+def project():
+    """Manage project lifecycle (plan -> execute -> review -> learn)."""
+    pass
+
+
+@project.command("create")
+@click.argument("name")
+@click.option("--category", type=click.Choice(["content", "prospects", "clients", "products", "general"]),
+              default="content", help="Project category")
+@click.option("--description", default=None, help="Project description")
+def project_create(name: str, category: str, description: str | None):
+    """Create a new project and start planning phase."""
+    name = _validate_input(name, label="name")
+    deps = create_deps()
+
+    async def run():
+        project_data = {
+            "name": name,
+            "category": category,
+            "lifecycle_stage": "planning",
+        }
+        if description:
+            project_data["description"] = description
+        result = await deps.storage_service.create_project(project_data)
+        if result:
+            click.echo(f"\nProject created: {result.get('name', name)}")
+            click.echo(f"  ID: {result.get('id', 'unknown')}")
+            click.echo(f"  Stage: planning")
+            click.echo(f"  Category: {category}")
+            click.echo(f"\nNext: Add a plan artifact or advance to 'executing'")
+        else:
+            click.echo("Failed to create project.", err=True)
+
+    asyncio.run(run())
+
+
+@project.command("status")
+@click.argument("project_id")
+def project_status(project_id: str):
+    """Show project status and artifacts."""
+    project_id = _validate_input(project_id, label="project_id")
+    deps = create_deps()
+
+    async def run():
+        proj = await deps.storage_service.get_project(project_id)
+        if not proj:
+            click.echo(f"Project not found: {project_id}", err=True)
+            return
+
+        stage_icons = {
+            "planning": "[plan]", "executing": "[exec]", "reviewing": "[review]",
+            "learning": "[learn]", "complete": "[done]", "archived": "[arch]",
+        }
+        icon = stage_icons.get(proj.get("lifecycle_stage", ""), "[?]")
+        click.echo(f"\n{icon} {proj['name']}")
+        click.echo(f"  Stage: {proj.get('lifecycle_stage', 'unknown')}")
+        click.echo(f"  Category: {proj.get('category', 'unknown')}")
+        if proj.get("review_score"):
+            click.echo(f"  Review Score: {proj['review_score']}/10")
+
+        artifacts = proj.get("project_artifacts", [])
+        if artifacts:
+            click.echo(f"\n  Artifacts ({len(artifacts)}):")
+            for a in artifacts:
+                click.echo(f"    - {a['artifact_type']}: {a.get('title', 'untitled')}")
+        else:
+            click.echo("\n  No artifacts yet")
+
+        next_actions = {
+            "planning": "Create a plan artifact, then advance to 'executing'",
+            "executing": "Work on the project, then advance to 'reviewing'",
+            "reviewing": "Run review, then advance to 'learning'",
+            "learning": "Run /learn, then advance to 'complete'",
+            "complete": "Project complete! Patterns extracted and experiences recorded.",
+        }
+        stage = proj.get("lifecycle_stage", "")
+        if stage in next_actions:
+            click.echo(f"\n  Next: {next_actions[stage]}")
+
+    asyncio.run(run())
+
+
+@project.command("list")
+@click.option("--stage", type=click.Choice(["planning", "executing", "reviewing",
+              "learning", "complete", "archived"]), default=None)
+@click.option("--category", default=None)
+def project_list(stage: str | None, category: str | None):
+    """List projects with optional filtering."""
+    deps = create_deps()
+
+    async def run():
+        projects = await deps.storage_service.list_projects(
+            lifecycle_stage=stage, category=category
+        )
+        if not projects:
+            click.echo("No projects found.")
+            return
+
+        click.echo(f"\n--- Projects ({len(projects)}) ---")
+        for p in projects:
+            icon = {"planning": "[plan]", "executing": "[exec]", "reviewing": "[review]",
+                    "learning": "[learn]", "complete": "[done]", "archived": "[arch]"
+            }.get(p.get("lifecycle_stage", ""), "[?]")
+            score = f" (score: {p['review_score']})" if p.get("review_score") else ""
+            click.echo(f"  {icon} {p['name']} [{p.get('lifecycle_stage')}]{score}")
+            click.echo(f"     ID: {p['id']}")
+
+    asyncio.run(run())
+
+
+@project.command("advance")
+@click.argument("project_id")
+@click.option("--stage", default=None, help="Target stage (auto-advances if not specified)")
+def project_advance(project_id: str, stage: str | None):
+    """Advance project to next lifecycle stage."""
+    project_id = _validate_input(project_id, label="project_id")
+    deps = create_deps()
+    stage_order = ["planning", "executing", "reviewing", "learning", "complete"]
+
+    async def run():
+        proj = await deps.storage_service.get_project(project_id)
+        if not proj:
+            click.echo(f"Project not found: {project_id}", err=True)
+            return
+
+        current = proj.get("lifecycle_stage", "planning")
+        if stage:
+            next_stage = stage
+        else:
+            try:
+                idx = stage_order.index(current)
+                next_stage = stage_order[idx + 1] if idx + 1 < len(stage_order) else current
+            except ValueError:
+                click.echo(f"Cannot auto-advance from stage: {current}", err=True)
+                return
+
+        result = await deps.storage_service.update_project_stage(project_id, next_stage)
+        if result:
+            click.echo(f"Project '{proj['name']}' advanced: {current} -> {next_stage}")
+        else:
+            click.echo("Failed to advance project.", err=True)
+
+    asyncio.run(run())
+
+
+@cli.command()
+def setup():
+    """Check brain setup status and get onboarding guidance."""
+    deps = create_deps()
+
+    async def run():
+        from second_brain.services.health import HealthService
+        health = HealthService()
+        status = await health.compute_setup_status(deps)
+
+        completed = status.get("completed_count", 0)
+        total = status.get("total_steps", 0)
+        pct = int(completed / total * 100) if total > 0 else 0
+
+        click.echo(f"\n--- Brain Setup ({pct}% complete) ---")
+        click.echo(f"  {completed}/{total} steps done\n")
+
+        for step in status.get("steps", []):
+            icon = "[x]" if step["completed"] else "[ ]"
+            click.echo(f"  {icon} {step['description']}")
+
+        if status.get("is_complete"):
+            click.echo("\n  Your brain is fully configured!")
+        else:
+            missing = status.get("missing_categories", [])
+            if missing:
+                click.echo(f"\n  Missing memory categories: {', '.join(missing)}")
+                click.echo("  Use 'brain learn' or migration to populate them.")
+            click.echo("\n  Run 'brain migrate' to import from your template system.")
+
+    asyncio.run(run())
+
+
+@cli.command()
+def patterns():
+    """View the pattern registry -- all patterns with confidence and status."""
+    deps = create_deps()
+
+    async def run():
+        from second_brain.agents.utils import format_pattern_registry
+        registry = await deps.storage_service.get_pattern_registry()
+        click.echo(f"\n--- Pattern Registry ---\n")
+        click.echo(format_pattern_registry(registry, config=deps.config))
+
+    asyncio.run(run())
 
 
 @cli.command()
