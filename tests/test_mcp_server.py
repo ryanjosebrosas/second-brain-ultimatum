@@ -1,5 +1,6 @@
 """Tests for MCP server tool functions."""
 
+import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.schemas import (
@@ -445,6 +446,130 @@ class TestMCPTools:
         assert "Messaging" in result
         assert "Brand Voice" in result
         assert "Clear value prop" in result
+
+
+class TestMCPAgentFailures:
+    """Tests for MCP tool behavior when agents fail."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.recall_agent")
+    async def test_recall_agent_timeout(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """Recall tool returns timeout message when agent hangs."""
+        from second_brain.mcp_server import recall
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await recall(query="test query")
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_ask_agent_timeout(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """Ask tool returns timeout message when agent hangs."""
+        from second_brain.mcp_server import ask
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await ask(question="test question")
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.learn_agent")
+    async def test_learn_agent_timeout(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """Learn tool returns timeout message when agent hangs."""
+        from second_brain.mcp_server import learn
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await learn(content="test content")
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_agent_timeout(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """Create tool returns timeout message when agent hangs."""
+        from second_brain.mcp_server import create_content
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_deps = _mock_deps()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
+
+        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        assert "timed out" in result.lower()
+
+    async def test_deps_circuit_breaker(self):
+        """After first deps failure, subsequent calls fail fast."""
+        import second_brain.mcp_server as mcp_mod
+
+        # Save original state
+        orig_deps = mcp_mod._deps
+        orig_failed = mcp_mod._deps_failed
+        orig_error = mcp_mod._deps_error
+
+        try:
+            mcp_mod._deps = None
+            mcp_mod._deps_failed = False
+            mcp_mod._deps_error = ""
+
+            with patch("second_brain.mcp_server.create_deps", side_effect=RuntimeError("DB down")):
+                # First call should raise
+                with pytest.raises(RuntimeError, match="initialization failed"):
+                    mcp_mod._get_deps()
+
+                # Second call should fail fast (circuit breaker)
+                with pytest.raises(RuntimeError, match="initialization failed"):
+                    mcp_mod._get_deps()
+        finally:
+            # Restore state
+            mcp_mod._deps = orig_deps
+            mcp_mod._deps_failed = orig_failed
+            mcp_mod._deps_error = orig_error
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_vector_search_no_embedding_service(self, mock_get_deps):
+        """Vector search returns message when OPENAI_API_KEY not set."""
+        from second_brain.mcp_server import vector_search
+
+        mock_deps = MagicMock()
+        mock_deps.embedding_service = None
+        mock_get_deps.return_value = mock_deps
+
+        result = await vector_search(query="test")
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.run_full_review")
+    async def test_review_timeout(self, mock_review, mock_deps_fn, mock_model_fn):
+        """Review tool returns timeout message when review hangs."""
+        from second_brain.mcp_server import review_content
+
+        mock_review.side_effect = TimeoutError()
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await review_content(content="Test content")
+        assert "timed out" in result.lower()
 
 
 class TestMCPInputValidation:

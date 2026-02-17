@@ -641,6 +641,63 @@ class TestTypesRemoveCommand:
         assert "Removed" in result.output
 
 
+class TestCLIAgentErrors:
+    """Tests for CLI behavior when agents raise exceptions."""
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.recall.recall_agent")
+    def test_recall_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
+        """CLI shows traceback/error when recall agent fails."""
+        mock_model.return_value = MagicMock()
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("LLM timeout"))
+        result = runner.invoke(cli, ["recall", "test query"])
+        assert result.exit_code != 0
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.ask.ask_agent")
+    def test_ask_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
+        """CLI shows traceback/error when ask agent fails."""
+        mock_model.return_value = MagicMock()
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("Service unavailable"))
+        result = runner.invoke(cli, ["ask", "test question"])
+        assert result.exit_code != 0
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.create.create_agent")
+    def test_create_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
+        """CLI shows traceback/error when create agent fails."""
+        mock_model.return_value = MagicMock()
+        # Set up registry to return a valid type config
+        type_config = MagicMock()
+        type_config.name = "LinkedIn Post"
+        type_config.default_mode = "casual"
+        type_config.structure_hint = "Hook -> Body -> CTA"
+        type_config.max_words = 300
+        registry = mock_create_deps.get_content_type_registry()
+        registry.get = AsyncMock(return_value=type_config)
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("Model unavailable"))
+        result = runner.invoke(cli, ["create", "test", "--type", "linkedin"])
+        assert result.exit_code != 0
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.review.run_full_review")
+    def test_review_agent_error(self, mock_review, mock_model, runner, mock_create_deps):
+        """CLI shows traceback/error when review fails."""
+        mock_model.return_value = MagicMock()
+        mock_review.side_effect = RuntimeError("Review failed")
+        result = runner.invoke(cli, ["review", "Test content"])
+        assert result.exit_code != 0
+
+    @patch("second_brain.cli.get_model")
+    @patch("second_brain.agents.learn.learn_agent")
+    def test_learn_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
+        """CLI shows traceback/error when learn agent fails."""
+        mock_model.return_value = MagicMock()
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("Learn failed"))
+        result = runner.invoke(cli, ["learn", "test content"])
+        assert result.exit_code != 0
+
+
 class TestCLIInputValidation:
     """Test input validation on CLI commands."""
 

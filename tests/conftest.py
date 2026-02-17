@@ -168,6 +168,16 @@ def mock_storage():
 
 
 @pytest.fixture
+def mock_embedding_service():
+    """Create a mocked EmbeddingService for tests."""
+    service = MagicMock()
+    service.embed = AsyncMock(return_value=[0.1] * 1536)
+    service.embed_batch = AsyncMock(return_value=[[0.1] * 1536])
+    service.close = AsyncMock()
+    return service
+
+
+@pytest.fixture
 def mock_graphiti():
     """Create a mocked GraphitiService."""
     graphiti = MagicMock()
@@ -187,12 +197,13 @@ def mock_graphiti():
 
 
 @pytest.fixture
-def mock_deps(brain_config, mock_memory, mock_storage):
+def mock_deps(brain_config, mock_memory, mock_storage, mock_embedding_service):
     """Create a BrainDeps with all mocked services."""
     return BrainDeps(
         config=brain_config,
         memory_service=mock_memory,
         storage_service=mock_storage,
+        embedding_service=mock_embedding_service,
     )
 
 
