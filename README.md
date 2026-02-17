@@ -6,7 +6,7 @@ Second Brain is an AI-powered writing system built on 5 specialized agents that 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-525%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-540%20passing-brightgreen.svg)]()
 
 ---
 
@@ -90,7 +90,7 @@ graph TD
 
 ### RecallAgent — Memory Search
 
-Searches across semantic memory, the pattern registry, past experiences, and content examples. Returns ranked matches with sources and graph relationships.
+Searches across semantic memory, the pattern registry, past experiences, and content examples. Results are reranked using Voyage `rerank-2-lite` for better relevance ordering. Returns ranked matches with sources and graph relationships.
 
 **Tools**: `search_semantic_memory`, `search_patterns`, `search_experiences`, `search_examples`
 
@@ -116,7 +116,7 @@ brain recall "enterprise objection handling"
 
 ### AskAgent — Contextual Q&A
 
-Answers questions using accumulated brain knowledge — company context, customer insights, patterns, and past experiences. Grounds every response in actual data.
+Answers questions using accumulated brain knowledge — company context, customer insights, patterns, and past experiences. Grounds every response in actual data. Memory results are reranked with Voyage `rerank-2-lite` to surface the most relevant context.
 
 **Tools**: `load_brain_context`, `find_relevant_patterns`, `find_similar_experiences`, `search_knowledge`
 
@@ -151,7 +151,7 @@ from our case study, then addressing their integration concerns upfront..."
 
 ### CreateAgent — Content Creation
 
-Drafts content in your voice using your accumulated knowledge. Loads your voice guide, reference examples, applicable patterns, and audience context before writing. Returns the **complete, publishable draft** — not a summary or description of what it wrote.
+Drafts content in your voice using your accumulated knowledge. Loads your voice guide, reference examples, applicable patterns, and audience context before writing. Pattern and memory results are reranked with Voyage `rerank-2-lite` to prioritize the most relevant context for the draft. Returns the **complete, publishable draft** — not a summary or description of what it wrote.
 
 **Tools**: `load_voice_guide`, `load_content_examples`, `find_applicable_patterns`, `load_audience_context`, `validate_draft`
 
@@ -279,12 +279,15 @@ graph TD
         SS["StorageService"]
         HS["HealthService"]
         GS["GraphitiService"]
+        ES["EmbeddingService"]
+        VS["VoyageService"]
     end
 
     subgraph "External Backends"
         M0["Mem0<br/><i>semantic memory</i>"]
         SB["Supabase<br/><i>PostgreSQL + pgvector</i>"]
         N4["Neo4j / FalkorDB<br/><i>knowledge graph</i>"]
+        VA["Voyage AI<br/><i>embeddings + reranking</i>"]
     end
 
     subgraph "LLM Layer"
@@ -302,6 +305,8 @@ graph TD
     MS --> M0
     SS --> SB
     GS --> N4
+    ES --> VA
+    VS --> VA
     HS --> SS & MS & GS
 
     RA & AA & LA & CA & RV -.-> CLAUDE
@@ -316,6 +321,9 @@ graph TD
     style M0 fill:#27ae60,color:#fff
     style SB fill:#27ae60,color:#fff
     style N4 fill:#27ae60,color:#fff
+    style VA fill:#27ae60,color:#fff
+    style ES fill:#1abc9c,color:#fff
+    style VS fill:#1abc9c,color:#fff
 ```
 
 ### Data Flow
@@ -331,7 +339,7 @@ User ← Formatted Output ← Typed Result (Pydantic) ← Agent ← Tool Results
 | Layer | What | Files |
 |-------|------|-------|
 | **Config** | Loads `.env`, resolves LLM provider, OAuth auth | `config.py`, `models.py`, `models_sdk.py`, `auth.py` |
-| **Services** | Wraps external backends with error handling | `services/memory.py`, `services/storage.py`, `services/graphiti.py`, `services/health.py` |
+| **Services** | Wraps external backends with error handling | `services/memory.py`, `services/storage.py`, `services/graphiti.py`, `services/health.py`, `services/voyage.py`, `services/embeddings.py` |
 | **Agents** | Pydantic AI agents with typed deps and tools | `agents/recall.py`, `agents/ask.py`, `agents/learn.py`, `agents/create.py`, `agents/review.py` |
 | **Interfaces** | CLI (Click) and MCP server (FastMCP) | `cli.py`, `mcp_server.py` |
 
@@ -345,9 +353,13 @@ class BrainDeps:
     config: BrainConfig
     memory_service: MemoryService
     storage_service: StorageService
+    embedding_service: EmbeddingService | None = None
+    voyage_service: VoyageService | None = None
     graphiti_service: GraphitiService | None = None
     content_type_registry: ContentTypeRegistry | None = None
 ```
+
+The `VoyageService` provides two capabilities: **embeddings** (for Supabase vector search via `EmbeddingService`) and **reranking** (post-retrieval cross-encoder reranking applied directly in agent tools). When `VOYAGE_API_KEY` is set, `EmbeddingService` delegates to Voyage automatically; otherwise it falls back to OpenAI.
 
 ---
 
@@ -430,6 +442,18 @@ graph TD
 
 **Knowledge Graph (Graphiti)** — Optional deep relationship layer using Neo4j or FalkorDB. Agents dual-write to both Mem0 and Graphiti for entity extraction. Provides graph traversal for discovering non-obvious connections between patterns, experiences, and content.
 
+### Voyage AI Embeddings + Reranking
+
+Second Brain uses [Voyage AI](https://www.voyageai.com/) for two capabilities:
+
+**Embeddings (`voyage-4-lite`)** — Generates 1024-dimensional vectors for Supabase pgvector search. Used for patterns, examples, knowledge, and memory content. When `VOYAGE_API_KEY` is set, `EmbeddingService` delegates to Voyage automatically. Falls back to OpenAI `text-embedding-3-small` (1536 dims) if only `OPENAI_API_KEY` is available.
+
+**Reranking (`rerank-2-lite`)** — Cross-encoder reranking applied after Mem0 semantic search in RecallAgent, AskAgent, and CreateAgent. Mem0 returns initial results using its own embeddings, then Voyage reranking reorders them by relevance to the query. This produces better result ordering than embedding similarity alone. Reranking degrades gracefully — if the Voyage API is unavailable, agents return the original Mem0 ordering.
+
+```
+User Query → Mem0 Search (semantic) → Voyage Rerank (cross-encoder) → Agent receives top-K results
+```
+
 ### Pattern Lifecycle
 
 ```mermaid
@@ -460,7 +484,7 @@ The LearnAgent scans uncategorized memories, clusters recurring themes, and eith
 
 ## Database Schema
 
-5 SQL migrations create the Supabase schema:
+11 SQL migrations create the Supabase schema:
 
 ```mermaid
 erDiagram
@@ -703,7 +727,7 @@ python -m second_brain.mcp_server
 
 - Python 3.11+
 - A Supabase project (free tier works)
-- An OpenAI API key (for Mem0 embeddings — uses `text-embedding-3-small`)
+- A Voyage AI API key (for `voyage-4-lite` embeddings + `rerank-2-lite` reranking) — **or** an OpenAI API key (fallback, uses `text-embedding-3-small`)
 - **One of**: Anthropic API key, Claude Pro/Max subscription, or Ollama for local inference
 
 ### Install
@@ -729,7 +753,9 @@ ANTHROPIC_API_KEY=sk-ant-...   # Option A: API key (pay-per-token)
 USE_SUBSCRIPTION=true          # Option B: Claude Pro/Max (no API key needed)
 # Option C: Ollama only (no keys needed, local GPU)
 
-OPENAI_API_KEY=sk-...          # For Mem0 embeddings (always required)
+# Embeddings + Reranking (pick one)
+VOYAGE_API_KEY=pa-...          # Recommended: Voyage voyage-4-lite + rerank-2-lite
+OPENAI_API_KEY=sk-...          # Fallback: OpenAI text-embedding-3-small (no reranking)
 
 # Optional: Mem0 Cloud
 MEM0_API_KEY=m0-...
@@ -753,6 +779,12 @@ Run the SQL migrations in your Supabase SQL Editor, in order:
 3. `supabase/migrations/003_pattern_constraints.sql` — Pattern name uniqueness and content type columns
 4. `supabase/migrations/004_content_types.sql` — Dynamic content type registry
 5. `supabase/migrations/005_growth_tracking_tables.sql` — Growth log, review history, confidence history
+6. `supabase/migrations/006_rls_policies.sql` — Row-level security policies
+7. `supabase/migrations/007_foreign_keys_checks.sql` — Foreign key constraints and CHECK constraints
+8. `supabase/migrations/008_atomic_rpcs.sql` — Atomic RPC functions (reinforce_pattern)
+9. `supabase/migrations/009_embedding_columns.sql` — Embedding columns for vector search
+10. `supabase/migrations/010_vector_search_rpc.sql` — Vector search RPC function
+11. `supabase/migrations/011_voyage_dimensions.sql` — Migrate embedding columns from vector(1536) to vector(1024) for Voyage AI
 
 ### Verify
 
@@ -812,11 +844,12 @@ src/second_brain/
     ├── storage.py           # StorageService — Supabase CRUD + ContentTypeRegistry
     ├── health.py            # HealthService — brain health + growth metrics
     ├── graphiti.py          # GraphitiService — graph memory (Neo4j / FalkorDB)
-    ├── embeddings.py        # EmbeddingService — OpenAI embeddings + vector search
+    ├── voyage.py            # VoyageService — Voyage AI embeddings + reranking
+    ├── embeddings.py        # EmbeddingService — delegates to Voyage or OpenAI fallback
     ├── retry.py             # Retry utilities — circuit breaker, tenacity wrappers
     └── search_result.py     # SearchResult dataclass — typed Mem0 results
 
-tests/                       # 525 tests
+tests/                       # 540 tests
 ├── conftest.py              # Shared fixtures (including subscription auth)
 ├── test_agents.py           # Agent schema + tool registration
 ├── test_auth.py             # OAuth token reading + validation (20 tests)
@@ -829,9 +862,10 @@ tests/                       # 525 tests
 ├── test_models.py           # LLM model resolution
 ├── test_models_sdk.py       # ClaudeSDKModel + fallback chain (14 tests)
 ├── test_service_mcp.py      # Service MCP bridge tools (11 tests)
-└── test_services.py         # MemoryService + StorageService
+├── test_services.py         # MemoryService + StorageService
+└── test_voyage.py           # VoyageService, reranking, embedding delegation (22 tests)
 
-supabase/migrations/         # 5 SQL migration files
+supabase/migrations/         # 11 SQL migration files
 scripts/                     # Utility scripts
 ```
 
@@ -842,6 +876,7 @@ scripts/                     # Utility scripts
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | **Agent Framework** | [Pydantic AI](https://ai.pydantic.dev/) | Typed deps, structured output, tool definitions |
+| **Embeddings + Reranking** | [Voyage AI](https://www.voyageai.com/) | `voyage-4-lite` embeddings (1024d) + `rerank-2-lite` cross-encoder reranking |
 | **Semantic Memory** | [Mem0](https://mem0.ai/) | Auto fact extraction, semantic search, graph relations |
 | **Structured Storage** | [Supabase](https://supabase.com/) | PostgreSQL + pgvector for patterns, experiences, metrics |
 | **Knowledge Graph** | [Graphiti](https://github.com/getzep/graphiti) | Entity extraction, graph traversal (Neo4j / FalkorDB) |
@@ -851,7 +886,7 @@ scripts/                     # Utility scripts
 | **MCP Server** | [FastMCP](https://github.com/jlowin/fastmcp) | Expose agents as Claude Code tools |
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
 | **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` file loading, validation |
-| **Testing** | pytest + pytest-asyncio | 525 tests, async support |
+| **Testing** | pytest + pytest-asyncio | 540 tests, async support |
 
 ---
 
