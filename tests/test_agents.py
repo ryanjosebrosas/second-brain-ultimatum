@@ -1060,3 +1060,52 @@ class TestAgentGraphitiIntegration:
         from second_brain.agents.create import create_agent
         tools = list(create_agent._function_toolset.tools.keys())
         assert "find_applicable_patterns" in tools
+
+
+class TestAgentEnhancements:
+    """Test agent enhancements from adopt-original-system sub-plans."""
+
+    def test_learn_agent_has_learn_from_review_tool(self):
+        from second_brain.agents.learn import learn_agent
+        tools = list(learn_agent._function_toolset.tools.keys())
+        assert "learn_from_review" in tools
+
+    def test_recall_agent_has_search_projects_tool(self):
+        from second_brain.agents.recall import recall_agent
+        tools = list(recall_agent._function_toolset.tools.keys())
+        assert "search_projects" in tools
+
+    def test_format_pattern_registry_empty(self):
+        from second_brain.agents.utils import format_pattern_registry
+        result = format_pattern_registry([])
+        assert "No patterns" in result
+
+    def test_format_pattern_registry_with_data(self):
+        from second_brain.agents.utils import format_pattern_registry
+        result = format_pattern_registry([
+            {"name": "Test Pattern", "topic": "Demo", "confidence": "HIGH",
+             "use_count": 5, "date_updated": "2026-01-01",
+             "consecutive_failures": 0},
+        ])
+        assert "Test Pattern" in result
+        assert "HIGH" in result
+        assert "Total: 1" in result
+
+    def test_format_pattern_registry_at_risk(self):
+        from second_brain.agents.utils import format_pattern_registry
+        result = format_pattern_registry([
+            {"name": "Risky", "topic": "Demo", "confidence": "LOW",
+             "use_count": 2, "date_updated": "2026-01-01",
+             "consecutive_failures": 3},
+        ])
+        assert "At Risk" in result
+
+    def test_pipeline_function_importable(self):
+        from second_brain.agents.utils import run_review_learn_pipeline
+        assert callable(run_review_learn_pipeline)
+
+    def test_tool_error_format(self):
+        from second_brain.agents.utils import tool_error
+        result = tool_error("search_memory", ValueError("bad input"))
+        assert "search_memory" in result
+        assert "ValueError" in result

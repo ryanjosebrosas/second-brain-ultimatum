@@ -19,6 +19,17 @@ from second_brain.schemas import (
     ReviewHistoryEntry,
     ConfidenceTransition,
     GrowthSummary,
+    ProjectResult,
+    ProjectArtifact,
+    QualityTrend,
+    BrainGrowthStatus,
+    BrainMilestone,
+    PatternRegistryEntry,
+    SetupStatus,
+    DimensionBreakdown,
+    BRAIN_MILESTONES,
+    BRAIN_LEVEL_THRESHOLDS,
+    QUALITY_GATE_SCORE,
     DEFAULT_CONTENT_TYPES,
     DEFAULT_REVIEW_DIMENSIONS,
     REVIEW_DIMENSIONS,
@@ -353,3 +364,114 @@ class TestReviewHistoryEntry:
         assert entry.overall_score == 8.0
         assert entry.content_preview == ""
         assert entry.dimension_scores == []
+
+
+class TestProjectSchemas:
+    """Tests for project lifecycle schemas and constants."""
+
+    def test_project_result_defaults(self):
+        pr = ProjectResult(
+            project_id="proj-1", name="Test", lifecycle_stage="planning"
+        )
+        assert pr.project_id == "proj-1"
+        assert pr.category == "content"
+        assert pr.artifacts == []
+        assert pr.review_score is None
+        assert pr.patterns_extracted == []
+        assert pr.patterns_upgraded == []
+        assert pr.message == ""
+
+    def test_project_result_with_artifacts(self):
+        art = ProjectArtifact(artifact_type="plan", title="My Plan")
+        pr = ProjectResult(
+            project_id="p1", name="Test", lifecycle_stage="executing",
+            artifacts=[art],
+        )
+        assert len(pr.artifacts) == 1
+        assert pr.artifacts[0].artifact_type == "plan"
+
+    def test_project_artifact_defaults(self):
+        art = ProjectArtifact(artifact_type="output")
+        assert art.title is None
+        assert art.content is None
+        assert art.metadata == {}
+
+    def test_quality_trend_defaults(self):
+        qt = QualityTrend(period_days=30)
+        assert qt.total_reviews == 0
+        assert qt.avg_score == 0.0
+        assert qt.score_trend == "stable"
+        assert qt.by_dimension == []
+        assert qt.by_content_type == {}
+        assert qt.recurring_issues == []
+        assert qt.excellence_count == 0
+        assert qt.needs_work_count == 0
+
+    def test_dimension_breakdown(self):
+        db = DimensionBreakdown(dimension="Messaging", avg_score=8.5)
+        assert db.dimension == "Messaging"
+        assert db.trend == "stable"
+        assert db.review_count == 0
+
+    def test_brain_growth_status_defaults(self):
+        bg = BrainGrowthStatus(level="EMPTY", level_description="No data yet")
+        assert bg.milestones == []
+        assert bg.next_milestone is None
+        assert bg.patterns_total == 0
+        assert bg.high_confidence_count == 0
+        assert bg.experiences_total == 0
+        assert bg.avg_review_score == 0.0
+
+    def test_brain_milestone(self):
+        bm = BrainMilestone(name="first_pattern", description="Extract first pattern")
+        assert bm.completed is False
+        assert bm.completed_date is None
+
+    def test_brain_milestone_completed(self):
+        bm = BrainMilestone(
+            name="first_pattern", description="Extract first pattern",
+            completed=True, completed_date="2026-01-15",
+        )
+        assert bm.completed is True
+        assert bm.completed_date == "2026-01-15"
+
+    def test_pattern_registry_entry(self):
+        pre = PatternRegistryEntry(
+            name="Hook First", topic="LinkedIn", confidence="HIGH",
+            date_added="2026-01-01", date_updated="2026-02-01",
+        )
+        assert pre.use_count == 0
+        assert pre.consecutive_failures == 0
+        assert pre.is_stale is False
+        assert pre.applicable_content_types == []
+
+    def test_setup_status_defaults(self):
+        ss = SetupStatus()
+        assert ss.is_complete is False
+        assert ss.steps == []
+        assert ss.missing_categories == []
+        assert ss.total_memory_entries == 0
+        assert ss.has_patterns is False
+        assert ss.has_examples is False
+
+    def test_growth_summary_new_fields(self):
+        gs = GrowthSummary(period_days=30)
+        assert gs.brain_level == "EMPTY"
+        assert gs.milestones_completed == 0
+        assert gs.quality_trend == {}
+
+    def test_brain_milestones_constant(self):
+        assert isinstance(BRAIN_MILESTONES, list)
+        assert len(BRAIN_MILESTONES) == 9
+        names = [m["name"] for m in BRAIN_MILESTONES]
+        assert "first_pattern" in names
+        assert "compound_returns" in names
+
+    def test_brain_level_thresholds_constant(self):
+        assert isinstance(BRAIN_LEVEL_THRESHOLDS, dict)
+        assert set(BRAIN_LEVEL_THRESHOLDS.keys()) == {
+            "EMPTY", "FOUNDATION", "GROWTH", "COMPOUND", "EXPERT"
+        }
+
+    def test_quality_gate_score_constant(self):
+        assert QUALITY_GATE_SCORE == 8.0

@@ -940,3 +940,102 @@ class TestManageContentType:
 
         result = await manage_content_type(action="invalid", slug="test")
         assert "Unknown action" in result
+
+
+class TestProjectMCPTools:
+    """Test project lifecycle MCP tools."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_create_project(self, mock_deps_fn):
+        from second_brain.mcp_server import create_project
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.create_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "Test"}
+        )
+        mock_deps_fn.return_value = mock_deps
+
+        result = await create_project(name="Test", category="content")
+        assert "Project created" in result
+        assert "Test" in result
+        assert "proj-1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_create_project_failure(self, mock_deps_fn):
+        from second_brain.mcp_server import create_project
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.create_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+
+        result = await create_project(name="Fail")
+        assert "Failed" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_project_status(self, mock_deps_fn):
+        from second_brain.mcp_server import project_status
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_project = AsyncMock(return_value={
+            "name": "My Project", "lifecycle_stage": "executing",
+            "category": "content", "project_artifacts": [],
+        })
+        mock_deps_fn.return_value = mock_deps
+
+        result = await project_status(project_id="proj-1")
+        assert "My Project" in result
+        assert "executing" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_project_status_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import project_status
+
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+
+        result = await project_status(project_id="missing")
+        assert "not found" in result.lower()
+
+    @patch("second_brain.services.health.HealthService")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_brain_setup(self, mock_deps_fn, mock_hs):
+        from second_brain.mcp_server import brain_setup
+
+        mock_deps = MagicMock()
+        mock_deps.config.api_timeout_seconds = 30
+        mock_deps_fn.return_value = mock_deps
+
+        mock_instance = MagicMock()
+        mock_instance.compute_setup_status = AsyncMock(return_value={
+            "completed_count": 6, "total_steps": 8, "is_complete": False,
+            "missing_categories": ["voice_guide"],
+            "steps": [
+                {"description": "Patterns loaded", "completed": True},
+                {"description": "Voice guide", "completed": False},
+            ],
+        })
+        mock_hs.return_value = mock_instance
+
+        result = await brain_setup()
+        assert "Brain Setup" in result
+        assert "75%" in result
+        assert "[x]" in result
+        assert "[ ]" in result
+
+    @patch("second_brain.agents.utils.format_pattern_registry")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_pattern_registry(self, mock_deps_fn, mock_format):
+        from second_brain.mcp_server import pattern_registry
+
+        mock_deps = MagicMock()
+        mock_deps.config.api_timeout_seconds = 30
+        mock_deps.storage_service.get_pattern_registry = AsyncMock(return_value=[
+            {"name": "Hook", "confidence": "HIGH"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        mock_format.return_value = "| Hook | HIGH |\nTotal: 1 patterns"
+
+        result = await pattern_registry()
+        assert "Hook" in result
+        assert "Total: 1" in result

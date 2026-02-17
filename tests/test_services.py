@@ -1479,3 +1479,147 @@ class TestHealthServiceErrorTracking:
         mock_deps.storage_service.get_review_history = AsyncMock(return_value=[])
         metrics = await HealthService().compute_growth(mock_deps)
         assert any("growth" in e for e in metrics.errors)
+
+
+class TestHealthMilestones:
+    """Test brain milestone and quality trending computation."""
+
+    def _setup_base_mocks(self, mock_deps, patterns=None, experiences=None,
+                          memory_count=0, review_history=None, growth_counts=None):
+        """Helper to set up common mocks for compute/compute_growth."""
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=patterns or [])
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=experiences or [])
+        mock_deps.memory_service.get_memory_count = AsyncMock(return_value=memory_count)
+        mock_deps.config.graph_provider = "none"
+        mock_deps.storage_service.get_growth_event_counts = AsyncMock(
+            return_value=growth_counts or {}
+        )
+        mock_deps.storage_service.get_review_history = AsyncMock(
+            return_value=review_history or []
+        )
+
+    async def test_compute_milestones_empty_brain(self, mock_deps):
+        from second_brain.services.health import HealthService
+        self._setup_base_mocks(mock_deps)
+        result = await HealthService().compute_milestones(mock_deps)
+        assert result["level"] == "EMPTY"
+        assert result["milestones_completed"] == 0
+        assert result["milestones_total"] == 9
+
+    async def test_compute_milestones_foundation(self, mock_deps):
+        from second_brain.services.health import HealthService
+        self._setup_base_mocks(
+            mock_deps,
+            patterns=[
+                {"confidence": "LOW", "topic": "t", "date_updated": "2026-02-15"},
+                {"confidence": "LOW", "topic": "t", "date_updated": "2026-02-15"},
+                {"confidence": "LOW", "topic": "t", "date_updated": "2026-02-15"},
+            ],
+            experiences=[{"name": "e1"}, {"name": "e2"}],
+        )
+        result = await HealthService().compute_milestones(mock_deps)
+        assert result["level"] == "FOUNDATION"
+        assert result["milestones_completed"] >= 1
+
+    async def test_compute_milestones_expert(self, mock_deps):
+        from second_brain.services.health import HealthService
+        patterns = (
+            [{"confidence": "HIGH", "topic": "t", "date_updated": "2026-02-15"}] * 10
+            + [{"confidence": "MEDIUM", "topic": "t", "date_updated": "2026-02-15"}] * 5
+            + [{"confidence": "LOW", "topic": "t", "date_updated": "2026-02-15"}] * 5
+        )
+        experiences = [{"name": f"e{i}"} for i in range(25)]
+        reviews = [{"overall_score": 9.5} for _ in range(10)]
+        self._setup_base_mocks(
+            mock_deps,
+            patterns=patterns,
+            experiences=experiences,
+            review_history=reviews,
+        )
+        result = await HealthService().compute_milestones(mock_deps)
+        assert result["level"] == "EXPERT"
+        assert result["milestones_completed"] >= 7
+
+    async def test_compute_setup_status(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_setup_status = AsyncMock(return_value={
+            "total_memory_entries": 5,
+            "populated_categories": ["company", "personal"],
+            "missing_categories": ["customers", "audience", "style-voice", "values-beliefs"],
+            "has_patterns": True,
+            "has_examples": False,
+        })
+        result = await HealthService().compute_setup_status(mock_deps)
+        assert not result["is_complete"]
+        assert result["completed_count"] == 3  # company + personal + first_pattern
+        assert result["total_steps"] == 8
+
+    async def test_compute_setup_status_complete(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_setup_status = AsyncMock(return_value={
+            "total_memory_entries": 20,
+            "populated_categories": [
+                "company", "personal", "customers",
+                "audience", "style-voice", "values-beliefs",
+            ],
+            "missing_categories": [],
+            "has_patterns": True,
+            "has_examples": True,
+        })
+        result = await HealthService().compute_setup_status(mock_deps)
+        assert result["is_complete"]
+        assert result["completed_count"] == 8
+
+    async def test_check_confidence_downgrades_no_failures(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.config.confidence_downgrade_consecutive = 2
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"id": "p1", "name": "Test", "confidence": "HIGH", "consecutive_failures": 0}
+        ])
+        result = await HealthService().check_confidence_downgrades(mock_deps)
+        assert len(result) == 0
+
+    async def test_check_confidence_downgrades_triggers(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.config.confidence_downgrade_consecutive = 2
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"id": "p1", "name": "Failing", "confidence": "HIGH",
+             "consecutive_failures": 3, "topic": "test", "use_count": 5}
+        ])
+        mock_deps.storage_service.downgrade_pattern_confidence = AsyncMock(return_value={
+            "name": "Failing", "confidence": "MEDIUM"
+        })
+        mock_deps.storage_service.add_growth_event = AsyncMock(return_value={})
+        mock_deps.storage_service.add_confidence_transition = AsyncMock(return_value={})
+        result = await HealthService().check_confidence_downgrades(mock_deps)
+        assert len(result) == 1
+        assert result[0]["old_confidence"] == "HIGH"
+        assert result[0]["new_confidence"] == "MEDIUM"
+
+    async def test_check_confidence_downgrades_skips_low(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.config.confidence_downgrade_consecutive = 2
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"id": "p1", "name": "Already Low", "confidence": "LOW",
+             "consecutive_failures": 5, "topic": "test"}
+        ])
+        result = await HealthService().check_confidence_downgrades(mock_deps)
+        assert len(result) == 0
+
+    async def test_compute_quality_trend(self, mock_deps):
+        from second_brain.services.health import HealthService
+        mock_deps.storage_service.get_quality_trending = AsyncMock(return_value={
+            "total_reviews": 5, "avg_score": 8.2,
+            "by_dimension": {"Messaging": {"avg_score": 8.5, "count": 5}},
+            "by_content_type": {"linkedin": 8.0},
+            "recurring_issues": [], "excellence_count": 2, "needs_work_count": 0,
+        })
+        mock_deps.storage_service.get_review_history = AsyncMock(return_value=[
+            {"overall_score": 8.5}, {"overall_score": 8.0},
+            {"overall_score": 7.5}, {"overall_score": 7.0},
+        ])
+        result = await HealthService().compute_quality_trend(mock_deps, days=30)
+        assert result["total_reviews"] == 5
+        assert result["avg_score"] == 8.2
+        assert result["period_days"] == 30
+        assert len(result["by_dimension"]) == 1

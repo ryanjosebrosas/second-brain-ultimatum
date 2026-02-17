@@ -778,6 +778,82 @@ class TestCLIGraph:
         assert "Bob" in result.output
 
 
+class TestProjectCLI:
+    """Test project lifecycle CLI commands."""
+
+    def test_project_create(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.create_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "Test Project"}
+        )
+        result = runner.invoke(cli, ["project", "create", "Test Project"])
+        assert result.exit_code == 0
+        assert "Project created" in result.output
+        assert "Test Project" in result.output
+
+    def test_project_create_failure(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.create_project = AsyncMock(return_value=None)
+        result = runner.invoke(cli, ["project", "create", "Fail"])
+        assert "Failed" in result.output
+
+    def test_project_list(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.list_projects = AsyncMock(return_value=[
+            {"id": "p1", "name": "Alpha", "lifecycle_stage": "planning"},
+            {"id": "p2", "name": "Beta", "lifecycle_stage": "complete"},
+        ])
+        result = runner.invoke(cli, ["project", "list"])
+        assert result.exit_code == 0
+        assert "Alpha" in result.output
+        assert "Beta" in result.output
+
+    def test_project_list_empty(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.list_projects = AsyncMock(return_value=[])
+        result = runner.invoke(cli, ["project", "list"])
+        assert "No projects found" in result.output
+
+    def test_project_status(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.get_project = AsyncMock(return_value={
+            "name": "My Project", "lifecycle_stage": "executing",
+            "category": "content", "project_artifacts": [],
+        })
+        result = runner.invoke(cli, ["project", "status", "proj-1"])
+        assert result.exit_code == 0
+        assert "My Project" in result.output
+        assert "executing" in result.output
+
+    def test_project_status_not_found(self, runner, mock_create_deps):
+        mock_create_deps.storage_service.get_project = AsyncMock(return_value=None)
+        result = runner.invoke(cli, ["project", "status", "missing"])
+        assert "not found" in result.output.lower()
+
+    @patch("second_brain.services.health.HealthService")
+    def test_setup_command(self, mock_hs, runner, mock_create_deps):
+        mock_instance = MagicMock()
+        mock_instance.compute_setup_status = AsyncMock(return_value={
+            "completed_count": 5, "total_steps": 8, "is_complete": False,
+            "missing_categories": ["voice_guide"],
+            "steps": [
+                {"description": "Patterns loaded", "completed": True},
+                {"description": "Voice guide", "completed": False},
+            ],
+        })
+        mock_hs.return_value = mock_instance
+        result = runner.invoke(cli, ["setup"])
+        assert result.exit_code == 0
+        assert "Brain Setup" in result.output
+        assert "[x]" in result.output
+        assert "[ ]" in result.output
+
+    @patch("second_brain.agents.utils.format_pattern_registry")
+    def test_patterns_command(self, mock_format, runner, mock_create_deps):
+        mock_create_deps.storage_service.get_pattern_registry = AsyncMock(return_value=[
+            {"name": "Hook", "confidence": "HIGH"},
+        ])
+        mock_format.return_value = "| Hook | HIGH |"
+        result = runner.invoke(cli, ["patterns"])
+        assert result.exit_code == 0
+        assert "Pattern Registry" in result.output
+
+
 class TestMigrateCommand:
     """Test migrate command."""
 
