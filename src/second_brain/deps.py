@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING
 from second_brain.config import BrainConfig
 
 if TYPE_CHECKING:
+    from second_brain.services.abstract import (
+        AnalyticsServiceBase,
+        CalendarServiceBase,
+        EmailServiceBase,
+        TaskManagementServiceBase,
+    )
     from second_brain.services.embeddings import EmbeddingService
     from second_brain.services.graphiti import GraphitiService
     from second_brain.services.memory import MemoryService
@@ -25,6 +31,10 @@ class BrainDeps:
     embedding_service: "EmbeddingService | None" = None
     voyage_service: "VoyageService | None" = None
     content_type_registry: "ContentTypeRegistry | None" = None
+    email_service: "EmailServiceBase | None" = None
+    calendar_service: "CalendarServiceBase | None" = None
+    analytics_service: "AnalyticsServiceBase | None" = None
+    task_service: "TaskManagementServiceBase | None" = None
 
     def get_content_type_registry(self) -> "ContentTypeRegistry":
         """Get or create the content type registry."""

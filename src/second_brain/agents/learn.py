@@ -3,7 +3,7 @@
 import logging
 from datetime import date
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import tool_error
 from second_brain.deps import BrainDeps
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 learn_agent = Agent(
     deps_type=BrainDeps,
     output_type=LearnResult,
+    retries=3,
     instructions=(
         "You are a learning extraction agent for an AI Second Brain. "
         "Your job: analyze raw text from work sessions and extract structured learnings. "
@@ -46,6 +47,37 @@ async def inject_existing_patterns(ctx: RunContext[BrainDeps]) -> str:
         f"Existing patterns (check for reinforcement before creating new): "
         f"{', '.join(names)}"
     )
+
+
+@learn_agent.output_validator
+async def validate_learn(ctx: RunContext[BrainDeps], output: LearnResult) -> LearnResult:
+    """Validate pattern extraction quality."""
+    # Must extract something from the input
+    if not output.patterns_extracted and not output.insights and not output.experience_recorded:
+        raise ModelRetry(
+            "You didn't extract any patterns, insights, or experiences. "
+            "Analyze the input more carefully. Look for:\n"
+            "1. Recurring approaches or techniques (patterns)\n"
+            "2. Key takeaways that don't fit a pattern (insights)\n"
+            "3. Work sessions or projects worth recording (experiences)\n"
+            "Search existing patterns first to check for reinforcement opportunities."
+        )
+
+    # Validate pattern names aren't generic
+    for pattern in output.patterns_extracted:
+        if len(pattern.name) < 5:
+            raise ModelRetry(
+                f"Pattern name '{pattern.name}' is too short/generic. "
+                "Use descriptive names like 'Hook-Then-Value LinkedIn Structure' "
+                "not 'hook' or 'value'."
+            )
+        if not pattern.evidence:
+            raise ModelRetry(
+                f"Pattern '{pattern.name}' has no evidence. "
+                "Every pattern MUST include at least one evidence item from the input."
+            )
+
+    return output
 
 
 @learn_agent.tool

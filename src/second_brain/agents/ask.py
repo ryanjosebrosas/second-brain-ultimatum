@@ -2,7 +2,7 @@
 
 import logging
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     format_memories,
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 ask_agent = Agent(
     deps_type=BrainDeps,
     output_type=AskResult,
+    retries=3,
     instructions=(
         "You are the AI Second Brain assistant for a knowledge worker. "
         "You help with any task by leveraging the brain's accumulated "
@@ -37,6 +38,25 @@ ask_agent = Agent(
         "If the task is complex, suggest using /plan instead."
     ),
 )
+
+
+@ask_agent.output_validator
+async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResult:
+    """Validate answer completeness and context grounding."""
+    # Check answer isn't a cop-out
+    if len(output.answer) < 50:
+        raise ModelRetry(
+            "Your answer is too brief. Provide a COMPLETE, detailed response. "
+            "Use the brain context tools to gather more information if needed."
+        )
+    # Check context was actually used
+    if not output.context_used and not output.patterns_applied:
+        raise ModelRetry(
+            "You didn't reference any brain context or patterns. "
+            "Use load_brain_context and find_relevant_patterns tools to ground "
+            "your response in the brain's actual knowledge."
+        )
+    return output
 
 
 @ask_agent.tool

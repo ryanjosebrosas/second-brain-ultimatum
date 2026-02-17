@@ -2,7 +2,7 @@
 
 import logging
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     format_memories,
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 create_agent = Agent(
     deps_type=BrainDeps,
     output_type=CreateResult,
+    retries=3,
     instructions=(
         "You are a content creation agent for an AI Second Brain. "
         "You draft content in the user's authentic voice using their accumulated knowledge.\n\n"
@@ -43,6 +44,63 @@ create_agent = Agent(
         "6. Produce a DRAFT for human editing, not final copy."
     ),
 )
+
+
+@create_agent.instructions
+async def inject_content_types(ctx: RunContext[BrainDeps]) -> str:
+    """Inject available content types and their structure hints."""
+    try:
+        registry = ctx.deps.get_content_type_registry()
+        types = await registry.get_all()
+        if not types:
+            return "No custom content types configured. Use default types: linkedin, email, comment."
+        type_list = []
+        for slug, ct in types.items():
+            type_list.append(f"- {slug}: {ct.name} (max {ct.max_words} words, mode: {ct.default_mode})")
+        return "Available content types:\n" + "\n".join(type_list)
+    except Exception:
+        return "Content type registry unavailable. Use default types."
+
+
+@create_agent.output_validator
+async def validate_create(ctx: RunContext[BrainDeps], output: CreateResult) -> CreateResult:
+    """Validate draft completeness and quality."""
+    # Draft must be substantial
+    word_count = len(output.draft.split())
+    if word_count < 20:
+        raise ModelRetry(
+            f"Draft is only {word_count} words. The draft field MUST contain the "
+            "COMPLETE written text — the actual post, email, or document. "
+            "NOT a summary or description. Write the full content."
+        )
+
+    # Detect summary-instead-of-draft anti-pattern
+    summary_indicators = [
+        "here is a draft", "here's a draft", "i would write",
+        "the draft would", "this draft covers", "i've created a",
+    ]
+    draft_lower = output.draft.lower()[:200]
+    for indicator in summary_indicators:
+        if indicator in draft_lower:
+            raise ModelRetry(
+                f"The draft appears to be a DESCRIPTION of content, not the content itself. "
+                f"Detected: '{indicator}'. The draft field must contain the actual "
+                "publishable text that the user will copy and paste. Remove any meta-commentary "
+                "and write the actual content."
+            )
+
+    # Check voice elements were loaded
+    if not output.voice_elements:
+        raise ModelRetry(
+            "No voice elements applied. Use the load_voice_guide tool to load "
+            "the brand voice guide, then apply those elements in the draft."
+        )
+
+    # Set word_count if not already set
+    if output.word_count == 0:
+        output.word_count = word_count
+
+    return output
 
 
 @create_agent.tool

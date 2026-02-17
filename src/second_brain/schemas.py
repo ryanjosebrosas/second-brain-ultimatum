@@ -636,6 +636,248 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
 }
 
 
+# --- Chief of Staff / Orchestration ---
+
+AgentRoute = Literal[
+    "recall", "ask", "learn", "create", "review",
+    "essay_writer", "clarity", "synthesizer", "template_builder",
+    "coach", "pmo", "impact", "email", "analyst", "specialist",
+    "pipeline",
+]
+
+
+class RoutingDecision(BaseModel):
+    """Output from the Chief of Staff routing agent."""
+
+    target_agent: AgentRoute = Field(description="Agent to route the request to")
+    reasoning: str = Field(description="Why this agent was selected")
+    context_to_inject: list[str] = Field(
+        default_factory=list,
+        description="Memory categories or files to load as context for the target agent",
+    )
+    pipeline_steps: list[AgentRoute] = Field(
+        default_factory=list,
+        description="If pipeline mode, ordered list of agents to chain. Empty for single agent.",
+    )
+    confidence: ConfidenceLevel = Field(default="MEDIUM", description="Routing confidence")
+
+
+# --- Content Pipeline Agents ---
+
+
+class EssayResult(BaseModel):
+    """Output from the Essay Writer agent."""
+
+    title: str = Field(description="Essay title")
+    essay: str = Field(
+        description="The COMPLETE essay text — full publishable content, NOT a summary."
+    )
+    central_question: str = Field(default="", description="The central question the essay answers")
+    stirc_score: int = Field(default=0, description="STIRC angle score (0-25, threshold 18)")
+    framework: str = Field(default="", description="Structural framework used: argumentative/explanatory/narrative")
+    word_count: int = Field(default=0, description="Word count of the essay")
+    patterns_applied: list[str] = Field(default_factory=list, description="Brain patterns applied")
+    notes: str = Field(default="", description="Editorial notes for the reviewer")
+
+
+class ClarityFinding(BaseModel):
+    """A single clarity issue found in content."""
+
+    severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"] = Field(description="Issue severity")
+    location: str = Field(description="Where in the content the issue appears")
+    issue: str = Field(description="Description of the clarity problem")
+    suggestion: str = Field(description="Specific improvement suggestion")
+    pattern: str = Field(default="", description="Pattern category: jargon, complexity, density, abstract")
+
+
+class ClarityResult(BaseModel):
+    """Output from the Clarity Maximizer agent."""
+
+    findings: list[ClarityFinding] = Field(default_factory=list, description="Clarity issues found")
+    overall_readability: str = Field(
+        default="MEDIUM",
+        description="Overall readability: HIGH (clear), MEDIUM (some issues), LOW (major barriers)",
+    )
+    summary: str = Field(default="", description="2-3 sentence readability assessment")
+    critical_count: int = Field(default=0, description="Number of CRITICAL findings")
+
+
+class SynthesizerTheme(BaseModel):
+    """A consolidated improvement theme from the Feedback Synthesizer."""
+
+    title: str = Field(description="Theme title (e.g., 'Strengthen Value Proposition')")
+    priority: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"] = Field(description="Priority level")
+    findings_consolidated: list[str] = Field(
+        default_factory=list,
+        description="Original finding descriptions merged into this theme",
+    )
+    action: str = Field(description="Specific implementation steps")
+    effort_minutes: int = Field(default=30, description="Estimated implementation time in minutes")
+    dependencies: list[str] = Field(
+        default_factory=list,
+        description="Theme titles that must be completed before this one",
+    )
+    owner: str = Field(default="user", description="Who should execute this action")
+
+
+class SynthesizerResult(BaseModel):
+    """Output from the Feedback Synthesizer agent."""
+
+    themes: list[SynthesizerTheme] = Field(default_factory=list, description="Consolidated improvement themes")
+    total_findings_input: int = Field(default=0, description="Total individual findings received")
+    total_themes_output: int = Field(default=0, description="Number of consolidated themes")
+    implementation_hours: float = Field(default=0.0, description="Total estimated hours")
+    summary: str = Field(default="", description="Executive summary of improvement plan")
+    parallel_opportunities: list[str] = Field(
+        default_factory=list,
+        description="Themes that can be worked on simultaneously",
+    )
+
+
+class TemplateOpportunity(BaseModel):
+    """A reusable template opportunity identified by the Template Builder."""
+
+    name: str = Field(description="Template name")
+    source_deliverable: str = Field(description="What deliverable inspired this template")
+    structure: str = Field(description="The reusable structure/framework")
+    when_to_use: str = Field(description="Scenarios where this template applies")
+    customization_guide: str = Field(default="", description="What to customize vs keep standard")
+    estimated_time_savings: str = Field(default="", description="Time saved per use")
+
+
+class TemplateBuilderResult(BaseModel):
+    """Output from the Template Builder agent."""
+
+    opportunities: list[TemplateOpportunity] = Field(
+        default_factory=list, description="Template opportunities identified"
+    )
+    templates_created: int = Field(default=0, description="Number of new templates created")
+    patterns_captured: list[str] = Field(
+        default_factory=list, description="Pattern names captured as templates"
+    )
+    summary: str = Field(default="", description="Summary of template analysis")
+
+
+# --- Operations & Advisory Agents ---
+
+
+class CoachSession(BaseModel):
+    """Output from the Daily Accountability Coach."""
+
+    session_type: Literal["morning", "evening", "check_in", "intervention"] = Field(
+        description="Type of coaching session"
+    )
+    priorities: list[dict] = Field(
+        default_factory=list,
+        description="Prioritized tasks with scores and rationale",
+    )
+    time_blocks: list[dict] = Field(
+        default_factory=list,
+        description="Suggested time blocks with start/end and task assignment",
+    )
+    energy_assessment: str = Field(default="", description="User energy level and recommendation")
+    coaching_notes: str = Field(default="", description="Coaching observations and suggestions")
+    next_action: str = Field(default="", description="Immediate next step for the user")
+    therapeutic_level: int = Field(
+        default=1,
+        description="Therapeutic depth level used (1=surface, 2=pattern, 3=core, 4=identity)",
+    )
+
+
+class PriorityScore(BaseModel):
+    """A single task with PMO priority scoring."""
+
+    task_name: str = Field(description="Task or project name")
+    total_score: float = Field(description="Composite priority score 0-100")
+    urgency: float = Field(default=0, description="Urgency score (35% weight)")
+    impact: float = Field(default=0, description="Impact score (25% weight)")
+    effort: float = Field(default=0, description="Effort score (15% weight, inverted)")
+    alignment: float = Field(default=0, description="Strategic alignment (15% weight)")
+    momentum: float = Field(default=0, description="Momentum score (10% weight)")
+    category: str = Field(default="backlog", description="today_focus/this_week/backlog")
+    rationale: str = Field(default="", description="Why this scored the way it did")
+
+
+class PMOResult(BaseModel):
+    """Output from the PMO Advisor agent."""
+
+    scored_tasks: list[PriorityScore] = Field(default_factory=list, description="Scored and ranked tasks")
+    today_focus: list[str] = Field(default_factory=list, description="Tasks for today (score >= 75)")
+    this_week: list[str] = Field(default_factory=list, description="Tasks for this week (score >= 60)")
+    quick_wins: list[str] = Field(default_factory=list, description="Tasks under 30 minutes")
+    recommended_sequence: list[str] = Field(
+        default_factory=list, description="Optimal execution order"
+    )
+    coaching_message: str = Field(default="", description="Conversational coaching guidance")
+    capacity_hours: float = Field(default=8.0, description="Available focused hours estimated")
+
+
+class ImpactMetric(BaseModel):
+    """A single quantified business impact metric."""
+
+    metric_name: str = Field(description="What is being measured")
+    current_value: str = Field(default="", description="Current state")
+    projected_value: str = Field(default="", description="Projected improvement")
+    financial_impact: str = Field(default="", description="Dollar value if quantifiable")
+    confidence: ConfidenceLevel = Field(default="MEDIUM", description="Confidence in projection")
+
+
+class ImpactResult(BaseModel):
+    """Output from the Impact Analyzer agent."""
+
+    metrics: list[ImpactMetric] = Field(default_factory=list, description="Quantified impact metrics")
+    total_roi: str = Field(default="", description="Overall ROI calculation")
+    payback_period: str = Field(default="", description="Time to recover investment")
+    risk_scenarios: dict = Field(
+        default_factory=dict,
+        description="Conservative/base/optimistic projections",
+    )
+    opportunity_cost: str = Field(default="", description="Cost of NOT taking action")
+    executive_summary: str = Field(default="", description="1-2 paragraph business case")
+
+
+class EmailAction(BaseModel):
+    """Output from the Email Agent."""
+
+    action_type: Literal["send", "draft", "search", "organize"] = Field(
+        description="What email action was performed"
+    )
+    subject: str = Field(default="", description="Email subject line")
+    body: str = Field(default="", description="Email body content")
+    recipients: list[str] = Field(default_factory=list, description="Email recipients")
+    voice_elements: list[str] = Field(default_factory=list, description="Brand voice elements applied")
+    template_used: str = Field(default="", description="Template name if one was used")
+    status: str = Field(default="draft", description="sent/draft/searched/organized")
+    notes: str = Field(default="", description="Notes for user review before sending")
+
+
+class AnalysisResult(BaseModel):
+    """Output from the Data Analyst agent."""
+
+    query_type: str = Field(description="Type of analysis performed")
+    data_sources: list[str] = Field(default_factory=list, description="Data sources queried")
+    findings: list[str] = Field(default_factory=list, description="Key findings")
+    metrics: dict = Field(default_factory=dict, description="Computed metrics")
+    recommendations: list[str] = Field(default_factory=list, description="Actionable recommendations")
+    sql_queries: list[str] = Field(default_factory=list, description="SQL queries executed (if any)")
+    visualization_suggestions: list[str] = Field(
+        default_factory=list, description="Suggested charts/graphs"
+    )
+    executive_summary: str = Field(default="", description="Business-friendly summary")
+    confidence: ConfidenceLevel = Field(default="MEDIUM", description="Confidence in analysis")
+
+
+class SpecialistAnswer(BaseModel):
+    """Output from the Claude Code Specialist agent."""
+
+    answer: str = Field(description="The verified answer with source citations")
+    confidence_level: Literal["VERIFIED", "LIKELY", "UNCERTAIN"] = Field(
+        description="Confidence: VERIFIED (from source), LIKELY (inferred), UNCERTAIN (needs verification)"
+    )
+    sources: list[str] = Field(default_factory=list, description="File paths or URLs cited")
+    related_topics: list[str] = Field(default_factory=list, description="Related topics to explore")
+
+
 # --- Brain Growth Milestone Definitions ---
 
 BRAIN_MILESTONES = [

@@ -215,6 +215,42 @@ class BrainConfig(BaseSettings):
         default=200, description="Character limit for pattern text in search results"
     )
 
+    # --- Agentic behavior ---
+    agent_max_retries: int = Field(
+        default=3,
+        description="Maximum ModelRetry attempts for output validators",
+    )
+    agent_request_limit: int = Field(
+        default=10,
+        description="Maximum LLM requests per agent run (UsageLimits bound)",
+    )
+    pipeline_request_limit: int = Field(
+        default=30,
+        description="Maximum LLM requests for multi-agent pipelines",
+    )
+    coach_pomodoro_minutes: int = Field(
+        default=25,
+        description="Pomodoro session duration in minutes",
+    )
+    coach_break_minutes: int = Field(
+        default=5,
+        description="Break duration between pomodoros in minutes",
+    )
+    pmo_score_weights: dict = Field(
+        default_factory=lambda: {
+            "urgency": 0.35,
+            "impact": 0.25,
+            "effort": 0.15,
+            "alignment": 0.15,
+            "momentum": 0.10,
+        },
+        description="PMO priority scoring weights (must sum to 1.0)",
+    )
+    stirc_threshold: int = Field(
+        default=18,
+        description="Minimum STIRC score (out of 25) for essay angle to proceed",
+    )
+
     @model_validator(mode="after")
     def _validate_graph_config(self) -> "BrainConfig":
         if self.graph_provider == "graphiti":

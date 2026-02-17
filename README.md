@@ -1,96 +1,76 @@
 # Second Brain
 
-**An AI copywriter that learns your voice.**
+**An agentic AI system that learns your voice, manages your work, and gets smarter every session.**
 
-Second Brain is an AI-powered writing system built on 5 specialized agents that learn from your past work — your tone, your patterns, your wins — and produce drafts that sound like you, not a robot. Feed it examples of your best content, and it extracts patterns, builds a knowledge graph, and applies what it learns to every new draft.
+Second Brain is a 16-agent Pydantic AI system built around a single principle: your accumulated knowledge should make every output better. Feed it your past work, coaching notes, business context, and patterns — and it applies all of it automatically, every time.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-540%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-789%20passing-brightgreen.svg)]()
 
 ---
 
-## How It Works
+## What It Does
 
-You write content every day — emails, LinkedIn posts, proposals, case studies. Your best work has patterns: specific phrasing, structural choices, tone shifts that land. Second Brain captures those patterns and uses them to generate drafts that match your voice.
+Most AI tools start fresh every session. Second Brain doesn't. It maintains a persistent knowledge layer — semantic memory, a pattern registry, a knowledge graph — and every agent taps into it before responding.
 
-```mermaid
-graph LR
-    INPUT["Your Past Work<br/><i>emails, posts, proposals</i>"] --> LEARN["LearnAgent<br/><i>extract patterns</i>"]
-    LEARN --> MEM0["Mem0<br/><i>semantic memory</i>"]
-    LEARN --> SUPA["Supabase<br/><i>pattern registry</i>"]
-    LEARN --> GRAPH["Knowledge Graph<br/><i>entity relationships</i>"]
+Write content? It loads your voice guide, past examples, and proven patterns first. Plan your day? It knows your goals, projects, and past sessions. Analyze business impact? It has your company context and metrics history.
 
-    PROMPT["'Write a LinkedIn post<br/>about our new product'"] --> CREATE["CreateAgent<br/><i>draft in your voice</i>"]
-    MEM0 --> CREATE
-    SUPA --> CREATE
-    GRAPH --> CREATE
-    CREATE --> DRAFT["Draft<br/><i>sounds like you</i>"]
-    DRAFT --> REVIEW["ReviewAgent<br/><i>6-dimension scoring</i>"]
-    REVIEW --> SCORECARD["Scorecard<br/><i>8.2/10 — READY TO SEND</i>"]
-
-    style INPUT fill:#e8e8e8,color:#333
-    style LEARN fill:#4a90d9,color:#fff
-    style CREATE fill:#7b68ee,color:#fff
-    style REVIEW fill:#e67e22,color:#fff
-    style MEM0 fill:#27ae60,color:#fff
-    style SUPA fill:#27ae60,color:#fff
-    style GRAPH fill:#27ae60,color:#fff
-    style DRAFT fill:#8e44ad,color:#fff
-    style SCORECARD fill:#27ae60,color:#fff
-```
-
-The system gets smarter over time. Each piece of content you feed it reinforces existing patterns or discovers new ones. Pattern confidence grows from LOW (first seen) to MEDIUM (2-4 uses) to HIGH (5+ uses). High-confidence patterns are prioritized in future drafts.
-
----
-
-## The 5 Agents
-
-Second Brain is built on [Pydantic AI](https://ai.pydantic.dev/) with typed dependencies and structured output. Each agent has a specific job, its own tools, and returns a typed result.
+The system also self-corrects. Every agent uses output validators with `ModelRetry` — if the first attempt doesn't meet quality criteria, the agent receives specific feedback and retries up to 3 times before returning the result.
 
 ```mermaid
 graph TD
-    subgraph "5 Specialized Agents"
-        RECALL["RecallAgent<br/><i>Memory search</i>"]
-        ASK["AskAgent<br/><i>Contextual Q&A</i>"]
-        LEARN["LearnAgent<br/><i>Pattern extraction</i>"]
-        CREATE["CreateAgent<br/><i>Content creation</i>"]
-        REVIEW["ReviewAgent<br/><i>Quality scoring</i>"]
-    end
+    USER["User Request"] --> COS["Chief of Staff<br/><i>routes to best agent</i>"]
 
-    subgraph "Shared Dependencies (BrainDeps)"
-        MS["MemoryService<br/><i>Mem0</i>"]
-        SS["StorageService<br/><i>Supabase</i>"]
-        GS["GraphitiService<br/><i>Neo4j / FalkorDB</i>"]
-    end
+    COS --> CONTENT["Content Pipeline<br/>Create → Clarity → Review → Synthesize"]
+    COS --> OPS["Operations<br/>Coach / PMO / Impact / Email / Analyst"]
+    COS --> BRAIN["Brain Core<br/>Recall / Ask / Learn"]
 
-    RECALL --> MS
-    RECALL --> SS
-    ASK --> MS
-    ASK --> SS
-    LEARN --> MS
-    LEARN --> SS
-    LEARN --> GS
-    CREATE --> MS
-    CREATE --> SS
-    CREATE --> GS
-    REVIEW --> MS
-    REVIEW --> SS
-    REVIEW --> GS
+    CONTENT --> MEM["Memory Layer<br/><i>Mem0 + Supabase + Graph</i>"]
+    OPS --> MEM
+    BRAIN --> MEM
 
-    style RECALL fill:#3498db,color:#fff
-    style ASK fill:#2ecc71,color:#fff
-    style LEARN fill:#e74c3c,color:#fff
-    style CREATE fill:#9b59b6,color:#fff
-    style REVIEW fill:#f39c12,color:#fff
-    style MS fill:#1abc9c,color:#fff
-    style SS fill:#1abc9c,color:#fff
-    style GS fill:#1abc9c,color:#fff
+    MEM --> OUT["Output<br/><i>Typed, validated, retried</i>"]
+
+    style COS fill:#2c3e50,color:#fff
+    style CONTENT fill:#8e44ad,color:#fff
+    style OPS fill:#2980b9,color:#fff
+    style BRAIN fill:#27ae60,color:#fff
+    style MEM fill:#e67e22,color:#fff
+    style OUT fill:#16a085,color:#fff
 ```
 
-### RecallAgent — Memory Search
+---
 
-Searches across semantic memory, the pattern registry, past experiences, and content examples. Results are reranked using Voyage `rerank-2-lite` for better relevance ordering. Returns ranked matches with sources and graph relationships.
+## 16 Agents
+
+Second Brain is built on [Pydantic AI](https://ai.pydantic.dev/) with typed dependencies, structured output, and `@output_validator` loops. All agents share a single `BrainDeps` dataclass injected at runtime.
+
+### Orchestration
+
+#### Chief of Staff — Router & Orchestrator
+
+The Chief of Staff routes any request to the right specialist and runs multi-agent pipelines. It knows all 15 specialist agents and their capabilities.
+
+```bash
+brain route "Help me plan today and write a LinkedIn post about it"
+# → routes to coach for planning, then create for the post
+```
+
+```bash
+brain pipeline "my draft" --steps create,clarity,review,synthesizer
+# → multi-step content improvement pipeline
+```
+
+**How routing works**: The Chief of Staff calls `get_agent_registry()` to load all available agents, reads the request, and delegates via agent-as-tool pattern — passing `ctx.deps` and `ctx.usage` for token aggregation across the full pipeline.
+
+---
+
+### Brain Core (5 agents)
+
+#### RecallAgent — Memory Search
+
+Searches across semantic memory, patterns, experiences, and content examples. Results reranked with Voyage `rerank-2-lite` for relevance ordering.
 
 **Tools**: `search_semantic_memory`, `search_patterns`, `search_experiences`, `search_examples`
 
@@ -98,161 +78,167 @@ Searches across semantic memory, the pattern registry, past experiences, and con
 brain recall "enterprise objection handling"
 ```
 
-```
-# Recall: enterprise objection handling
+#### AskAgent — Contextual Q&A
 
-## Matches
-  [HIGH] When prospects say "we already have a solution," pivot to integration...
-         Source: patterns/messaging
-
-## Related Patterns
-  - Objection Bridge Technique
-  - Enterprise Value Framing
-
-## Graph Relationships
-  Enterprise Sales --[requires]--> Objection Handling
-  Objection Handling --[uses]--> Value Pivot
-```
-
-### AskAgent — Contextual Q&A
-
-Answers questions using accumulated brain knowledge — company context, customer insights, patterns, and past experiences. Grounds every response in actual data. Memory results are reranked with Voyage `rerank-2-lite` to surface the most relevant context.
+Answers questions grounded in accumulated brain knowledge. Loads company context, customer insights, patterns, and past experiences before responding.
 
 **Tools**: `load_brain_context`, `find_relevant_patterns`, `find_similar_experiences`, `search_knowledge`
 
 ```bash
-brain ask "Help me write a follow-up email to a prospect who went silent"
+brain ask "What's our positioning for enterprise clients?"
 ```
 
-### LearnAgent — Pattern Extraction
+#### LearnAgent — Pattern Extraction
 
-Analyzes raw text from work sessions and extracts structured patterns. Detects duplicates, reinforces existing patterns, tracks confidence progression, and records experiences.
+Analyzes raw text and extracts structured patterns. Detects duplicates, reinforces existing patterns, tracks confidence progression, and records experiences. Triggers a review-learn pipeline on completed work.
 
 **Tools**: `search_existing_patterns`, `store_pattern`, `reinforce_existing_pattern`, `add_to_memory`, `store_experience`, `consolidate_memories`, `tag_graduated_memories`
 
 ```bash
-brain learn "Just closed a deal with Acme Corp. The key was leading with ROI data
-from our case study, then addressing their integration concerns upfront..."
+brain learn "Just closed a deal with Acme Corp. Led with ROI data from the case study..."
 ```
 
-```
-# Learn: Sales session with Acme Corp
+#### CreateAgent — Content Creation
 
-## Patterns Extracted
-  [MEDIUM] ROI-Led Opening (reinforced)
-           Lead with quantified outcomes before features
-  [LOW] Preemptive Objection Handling (new)
-        Address known concerns before the prospect raises them
-
-## Summary
-  New patterns: 1
-  Reinforced: 1
-```
-
-### CreateAgent — Content Creation
-
-Drafts content in your voice using your accumulated knowledge. Loads your voice guide, reference examples, applicable patterns, and audience context before writing. Pattern and memory results are reranked with Voyage `rerank-2-lite` to prioritize the most relevant context for the draft. Returns the **complete, publishable draft** — not a summary or description of what it wrote.
+Drafts content in your voice. Loads your voice guide, examples, patterns, and audience context before writing. Validates the draft before returning — word count, structure, completeness.
 
 **Tools**: `load_voice_guide`, `load_content_examples`, `find_applicable_patterns`, `load_audience_context`, `validate_draft`
-
-The agent follows a structured process:
-
-1. **Load context** — voice guide, reference examples, audience data, and applicable patterns
-2. **Match mode** — selects casual, professional, or formal tone based on content type
-3. **Apply writing laws** — active voice, no filler words, no adverbs, simple language, strong opening
-4. **Filter AI patterns** — strips em dashes for drama, fake enthusiasm, generic intros, and cliched openers
-5. **Validate draft** — checks word count and structure against content type requirements
-6. **Output full text** — the `draft` field contains the actual content the user will publish, with editorial notes separated into the `notes` field
 
 ```bash
 brain create "Announce our new AI automation product" --type linkedin
 brain create "Follow up with prospect after demo" --type email --mode professional
-brain create "Q4 results for investors" --type presentation
 ```
 
-```
-# Draft (LinkedIn Post - casual)
+#### ReviewAgent — Quality Scoring
 
-Stop hiring for tasks AI can do better.
-
-We just shipped an automation layer that handles the 40% of your team's
-work that's repetitive, predictable, and soul-crushing.
-
-Not "AI-powered." Actually automated. Set it up once, forget about it.
-
-Three clients in beta cut their ops overhead by 35% in 60 days.
-
-Want to see if it works for your team? Drop a comment or DM me.
-
----
-Words: 67
-Voice: direct, no-jargon, outcome-focused
-Patterns: Hook-First Opening, Specific Proof Point, Soft CTA
-Editor notes: Verify the 35% stat and adjust for your specific clients.
-```
-
-### ReviewAgent — Quality Scoring
-
-Evaluates content across 6 dimensions in parallel, producing a structured scorecard with per-dimension scores, strengths, issues, and a verdict.
+Evaluates content across 6 dimensions in parallel using `asyncio.gather`. Returns a structured scorecard with per-dimension scores, strengths, issues, and a verdict.
 
 ```mermaid
 graph LR
-    CONTENT["Content<br/>Draft"] --> R1["Messaging<br/><i>clarity & impact</i>"]
-    CONTENT --> R2["Positioning<br/><i>market alignment</i>"]
-    CONTENT --> R3["Quality<br/><i>completeness</i>"]
-    CONTENT --> R4["Data Accuracy<br/><i>factual claims</i>"]
-    CONTENT --> R5["Brand Voice<br/><i>tone consistency</i>"]
-    CONTENT --> R6["Competitive<br/><i>differentiation</i>"]
-
-    R1 --> SCORE["Scorecard<br/><i>weighted average</i>"]
-    R2 --> SCORE
-    R3 --> SCORE
-    R4 --> SCORE
-    R5 --> SCORE
-    R6 --> SCORE
-
-    SCORE --> VERDICT{"Verdict"}
-    VERDICT -->|">= 8.0"| READY["READY TO SEND"]
-    VERDICT -->|"5.0 - 7.9"| REVISE["NEEDS REVISION"]
-    VERDICT -->|"< 5.0"| REWORK["MAJOR REWORK"]
+    CONTENT["Draft"] --> R1["Messaging"] & R2["Positioning"] & R3["Quality"] & R4["Data Accuracy"] & R5["Brand Voice"] & R6["Competitive"]
+    R1 & R2 & R3 & R4 & R5 & R6 --> SCORE["Scorecard<br/>8.2/10 — READY TO SEND"]
 
     style CONTENT fill:#e8e8e8,color:#333
-    style R1 fill:#3498db,color:#fff
-    style R2 fill:#9b59b6,color:#fff
-    style R3 fill:#e67e22,color:#fff
-    style R4 fill:#e74c3c,color:#fff
-    style R5 fill:#f39c12,color:#fff
-    style R6 fill:#1abc9c,color:#fff
-    style SCORE fill:#2c3e50,color:#fff
-    style READY fill:#27ae60,color:#fff
-    style REVISE fill:#f39c12,color:#fff
-    style REWORK fill:#e74c3c,color:#fff
+    style SCORE fill:#27ae60,color:#fff
 ```
-
-All 6 dimensions run as parallel agent calls using `asyncio.gather`. Custom content types can override which dimensions are enabled and their weights.
 
 ```bash
 brain review "Your draft text here" --type linkedin
 ```
 
+---
+
+### Content Pipeline (4 agents)
+
+These four agents form a quality loop: write → analyze → synthesize → template.
+
+#### Essay Writer — Long-Form Content
+
+Creates essays using the STIRC angle evaluation protocol and Five Writing Laws. Scores every angle on Surprising/True/Important/Relevant/Cool (threshold 18/25). Validates word count (100+ minimum), title presence, and STIRC score before returning.
+
+**Tools**: `load_voice_and_patterns`, `load_examples`, `search_research_context`
+
+```bash
+brain essay "Why most productivity advice fails knowledge workers"
+brain essay "The case for async-first communication" --framework argumentative
 ```
-# Review: 8.2/10 — READY TO SEND
 
-## Scores by Dimension
-  Messaging            9/10  [pass]
-  Positioning          8/10  [pass]
-  Quality              8/10  [pass]
-  Data Accuracy        7/10  [pass]
-  Brand Voice          9/10  [pass]
-  Competitive          8/10  [pass]
+#### Clarity Maximizer — Readability Analysis
 
-## Strengths
-  - Strong opening hook that creates urgency
-  - Specific proof point (35% reduction) builds credibility
-  - Voice matches established casual-direct tone
+Finds comprehension barriers — jargon, complexity, density, abstraction — and ranks them CRITICAL/HIGH/MEDIUM/LOW. Every finding must include a specific improvement suggestion (not "improve clarity" but the exact replacement text). Auto-computes `critical_count` from findings.
 
-## Next Steps
-  - Verify the 35% statistic before publishing
+**Tools**: `load_audience_context`, `load_voice_reference`
+
+```bash
+brain clarity "Paste your draft here for readability analysis"
+```
+
+#### Feedback Synthesizer — Finding Consolidation
+
+Takes 30–50 individual review findings and collapses them into 4–8 actionable themes with priority, effort estimates (minutes), and dependencies. Validates theme count (too few = not synthesized, too many = not consolidated). Auto-computes `implementation_hours`.
+
+**Tools**: `load_past_reviews`
+
+```bash
+brain synthesize "Finding 1: Weak opening... Finding 2: Undefined acronym ROI..."
+```
+
+#### Template Builder — Pattern Capture
+
+Analyzes deliverables for reusable structures. Applies the "third time is the template" principle. Every identified template must specify `when_to_use` (and when NOT to use) and a concrete `structure`. Auto-computes `templates_created`.
+
+**Tools**: `search_existing_patterns`, `search_examples`
+
+```bash
+brain templates "Subject: Following up on our demo\n\nHi Sarah, ..."
+```
+
+---
+
+### Operations (6 agents)
+
+#### Daily Accountability Coach
+
+Plans productive days through strategic prioritization and therapeutic coaching. Supports morning planning, evening review, check-ins, and intervention sessions. Scales coaching depth from surface (energy check) to identity (values alignment). Integrates with CalendarService and TaskManagementService when configured — tools are hidden via `prepare=` when services aren't available.
+
+**Tools**: `load_goals_context`, `search_past_sessions`, `check_calendar`*, `create_time_block`*, `get_task_backlog`*
+*(conditional on service availability)*
+
+```bash
+brain coach "Help me plan my day" --session-type morning
+brain coach "I'm stuck on the proposal" --session-type intervention
+```
+
+#### PMO Advisor — Priority Scoring
+
+Scores tasks using a multi-factor algorithm (Urgency 35%, Impact 25%, Effort 15%, Alignment 15%, Momentum 10%). Auto-categorizes into Today Focus (≥75), This Week (60–74), and Backlog (<60). Quick wins are tasks with effort ≤ 3 regardless of score. Provides conversational coaching alongside the data.
+
+**Tools**: `load_strategic_context`, `get_scoring_weights`
+
+```bash
+brain prioritize "Task 1: Write proposal for Acme. Task 2: Fix staging bug. Task 3: Prep Q4 review..."
+```
+
+#### Impact Analyzer — Business ROI
+
+Transforms recommendations into quantified business cases. Framework: quantify status quo cost → calculate benefits → compute ROI metrics → risk scenarios at 75%/100%/125% → opportunity cost of inaction. Every analysis needs numbers — not activity metrics but business outcomes.
+
+**Tools**: `load_business_context`
+
+```bash
+brain impact "Implement automated email follow-up for sales leads"
+```
+
+#### Email Agent — Composition & Management
+
+Drafts emails in your brand voice using voice guide, past examples, and email history when EmailService is configured. Enforces draft-first safety — `send` actions are forced to `status="draft"` until you approve. Email history search and send are gated behind EmailService availability via `prepare=`.
+
+**Tools**: `load_email_voice`, `search_email_history`*, `send_email`*
+*(conditional on email service)*
+
+```bash
+brain email "Follow up with Sarah at Acme who went silent after the demo"
+```
+
+#### Data Analyst — Business Intelligence
+
+Analyzes business questions with data. Identifies relevant sources, runs SQL when AnalyticsService is configured, interprets results with business context, and delivers recommendations. Leads with findings, not methodology. SQL execution and revenue metrics are gated via `prepare=`.
+
+**Tools**: `load_business_metrics_context`, `run_query`*, `get_revenue_metrics`*
+*(conditional on analytics service)*
+
+```bash
+brain analyze "What's driving the drop in trial-to-paid conversion this quarter?"
+```
+
+#### Claude Code Specialist — Verified Technical Answers
+
+Provides accurate, sourced answers about Claude Code, Pydantic AI, and second brain architecture. Mandatory Truth & Attribution Protocol: cite source with file path or URL, state confidence (VERIFIED/LIKELY/UNCERTAIN), and never guess. `VERIFIED` answers without sources trigger a `ModelRetry`.
+
+**Tools**: `search_codebase_knowledge`, `search_patterns_for_answer`
+
+```bash
+brain specialist "How does agent-as-tool delegation work in Pydantic AI?"
 ```
 
 ---
@@ -262,462 +248,320 @@ brain review "Your draft text here" --type linkedin
 ```mermaid
 graph TD
     subgraph "Interfaces"
-        CLI["CLI<br/><i>Click</i>"]
-        MCP["MCP Server<br/><i>FastMCP</i>"]
+        CLI["CLI — 20+ commands<br/><i>Click</i>"]
+        MCP["MCP Server — 25+ tools<br/><i>FastMCP</i>"]
     end
 
-    subgraph "Agents"
-        RA["RecallAgent"]
-        AA["AskAgent"]
-        LA["LearnAgent"]
-        CA["CreateAgent"]
-        RV["ReviewAgent"]
+    subgraph "Orchestration"
+        COS["Chief of Staff<br/><i>router + pipeline</i>"]
+    end
+
+    subgraph "Core Agents"
+        RA["Recall"]
+        AA["Ask"]
+        LA["Learn"]
+        CA["Create"]
+        RV["Review"]
+    end
+
+    subgraph "Content Pipeline"
+        EW["Essay Writer"]
+        CL["Clarity"]
+        SY["Synthesizer"]
+        TB["Template Builder"]
+    end
+
+    subgraph "Operations"
+        CO["Coach"]
+        PM["PMO"]
+        IM["Impact"]
+        EM["Email"]
+        AN["Analyst"]
+        SP["Specialist"]
     end
 
     subgraph "Services"
-        MS["MemoryService"]
-        SS["StorageService"]
+        MS["MemoryService<br/><i>Mem0</i>"]
+        SS["StorageService<br/><i>Supabase</i>"]
         HS["HealthService"]
-        GS["GraphitiService"]
-        ES["EmbeddingService"]
-        VS["VoyageService"]
+        GS["GraphitiService<br/><i>Neo4j/FalkorDB</i>"]
+        ES["EmbeddingService<br/><i>Voyage/OpenAI</i>"]
+        AB["Abstract Services<br/><i>Email/Calendar/Analytics</i>"]
     end
 
-    subgraph "External Backends"
-        M0["Mem0<br/><i>semantic memory</i>"]
-        SB["Supabase<br/><i>PostgreSQL + pgvector</i>"]
-        N4["Neo4j / FalkorDB<br/><i>knowledge graph</i>"]
-        VA["Voyage AI<br/><i>embeddings + reranking</i>"]
-    end
-
-    subgraph "LLM Layer"
-        CLAUDE["Anthropic Claude<br/><i>API primary</i>"]
-        SDK["Claude SDK<br/><i>subscription</i>"]
-        OLLAMA["Ollama<br/><i>local fallback</i>"]
-    end
-
-    CLI --> RA & AA & LA & CA & RV
-    MCP --> RA & AA & LA & CA & RV
+    CLI & MCP --> COS
+    COS --> RA & AA & LA & CA & RV
+    COS --> EW & CL & SY & TB
+    COS --> CO & PM & IM & EM & AN & SP
 
     RA & AA & LA & CA & RV --> MS & SS
-    LA & CA & RV --> GS
+    EW & CL & SY & TB --> MS & SS
+    CO & PM & IM & EM & AN & SP --> MS & SS & AB
 
-    MS --> M0
-    SS --> SB
-    GS --> N4
-    ES --> VA
-    VS --> VA
-    HS --> SS & MS & GS
-
-    RA & AA & LA & CA & RV -.-> CLAUDE
-    RA & AA & LA & CA & RV -.-> SDK
-    RA & AA & LA & CA & RV -.-> OLLAMA
-
-    style CLI fill:#4a90d9,color:#fff
-    style MCP fill:#4a90d9,color:#fff
-    style CLAUDE fill:#8e44ad,color:#fff
-    style SDK fill:#6c3483,color:#fff
-    style OLLAMA fill:#8e44ad,color:#fff
-    style M0 fill:#27ae60,color:#fff
-    style SB fill:#27ae60,color:#fff
-    style N4 fill:#27ae60,color:#fff
-    style VA fill:#27ae60,color:#fff
-    style ES fill:#1abc9c,color:#fff
-    style VS fill:#1abc9c,color:#fff
+    style COS fill:#2c3e50,color:#fff
+    style AB fill:#c0392b,color:#fff
 ```
 
-### Data Flow
+### Agentic Patterns
 
-```
-User Request → CLI or MCP → Agent.run(deps=BrainDeps) → Agent Tools → Services → Backends
-                                                                                     ↓
-User ← Formatted Output ← Typed Result (Pydantic) ← Agent ← Tool Results ← Mem0 / Supabase / Neo4j
-```
-
-### Layers
-
-| Layer | What | Files |
-|-------|------|-------|
-| **Config** | Loads `.env`, resolves LLM provider, OAuth auth | `config.py`, `models.py`, `models_sdk.py`, `auth.py` |
-| **Services** | Wraps external backends with error handling | `services/memory.py`, `services/storage.py`, `services/graphiti.py`, `services/health.py`, `services/voyage.py`, `services/embeddings.py` |
-| **Agents** | Pydantic AI agents with typed deps and tools | `agents/recall.py`, `agents/ask.py`, `agents/learn.py`, `agents/create.py`, `agents/review.py` |
-| **Interfaces** | CLI (Click) and MCP server (FastMCP) | `cli.py`, `mcp_server.py` |
-
-### Dependency Injection
-
-All agents share a single `BrainDeps` dataclass created once and passed to every `agent.run()` call:
+**Output Validators with ModelRetry** — Every agent validates its own output and retries with specific feedback. Example from Essay Writer:
 
 ```python
-@dataclass
-class BrainDeps:
-    config: BrainConfig
-    memory_service: MemoryService
-    storage_service: StorageService
-    embedding_service: EmbeddingService | None = None
-    voyage_service: VoyageService | None = None
-    graphiti_service: GraphitiService | None = None
-    content_type_registry: ContentTypeRegistry | None = None
+@essay_writer_agent.output_validator
+async def validate_essay(ctx: RunContext[BrainDeps], output: EssayResult) -> EssayResult:
+    if len(output.essay.split()) < 100:
+        raise ModelRetry("Essay is too short. Write the complete essay, not a summary.")
+    if output.stirc_score > 0 and output.stirc_score < ctx.deps.config.stirc_threshold:
+        raise ModelRetry(f"STIRC score {output.stirc_score} below threshold. Find a stronger angle.")
+    output.word_count = len(output.essay.split())  # auto-compute
+    return output
 ```
 
-The `VoyageService` provides two capabilities: **embeddings** (for Supabase vector search via `EmbeddingService`) and **reranking** (post-retrieval cross-encoder reranking applied directly in agent tools). When `VOYAGE_API_KEY` is set, `EmbeddingService` delegates to Voyage automatically; otherwise it falls back to OpenAI.
+**Agent-as-Tool Delegation** — Chief of Staff delegates to specialists via Pydantic AI's agent-as-tool pattern, passing `ctx.usage` for unified token accounting:
 
----
+```python
+@chief_of_staff_agent.tool
+async def delegate_to_specialist(ctx: RunContext[BrainDeps], agent_name: str, request: str) -> str:
+    registry = get_agent_registry()
+    agent, _ = registry[agent_name]
+    result = await agent.run(request, deps=ctx.deps, usage=ctx.usage)
+    return str(result.output)
+```
 
-## 9 Content Types (Extensible)
+**Conditional Tool Availability via `prepare`** — Operations agents with external service dependencies hide tools when services aren't configured:
 
-Second Brain ships with 9 built-in content types, each with a default communication mode, structure hint, and word target. You can add custom types via CLI or MCP.
+```python
+async def _calendar_available(ctx: RunContext[BrainDeps], tool_def: ToolDefinition) -> ToolDefinition | None:
+    return tool_def if ctx.deps.calendar_service else None
 
-| Slug | Name | Mode | Words | Structure |
-|------|------|------|-------|-----------|
-| `linkedin` | LinkedIn Post | casual | 300 | Hook -> Body -> CTA |
-| `email` | Professional Email | professional | 500 | Subject -> Opening -> Body -> Closing |
-| `landing-page` | Landing Page | professional | 1000 | Headline -> Problem -> Solution -> Proof -> CTA |
-| `comment` | Comment/Reply | casual | 150 | Acknowledgment -> Insight -> Question |
-| `case-study` | Case Study | professional | 1500 | Context -> Challenge -> Approach -> Results -> Takeaways |
-| `proposal` | Sales Proposal | professional | 2000 | Summary -> Problem -> Solution -> Deliverables -> Investment |
-| `one-pager` | One-Pager | professional | 500 | Headline -> Problem -> Solution -> Benefits -> CTA |
-| `presentation` | Presentation Script | professional | 800 | Hook -> Key Points -> Data -> Messaging -> CTA |
-| `instagram` | Instagram Post | casual | 200 | Hook -> Story -> CTA -> Hashtags |
+@coach_agent.tool(prepare=_calendar_available)
+async def check_calendar(ctx: RunContext[BrainDeps], date: str = "") -> str:
+    # Only visible to the LLM when CalendarService is configured
+    ...
+```
 
-```bash
-# Add a custom content type
-brain types add newsletter "Weekly Newsletter" \
-  --structure "Subject -> Intro -> 3 Sections -> CTA" \
-  --max-words 800
+**Dynamic Instructions** — Agents inject live data into their system prompt at request time:
 
-# List all types
-brain types list
+```python
+@learn_agent.instructions
+async def inject_existing_patterns(ctx: RunContext[BrainDeps]) -> str:
+    patterns = await ctx.deps.storage_service.get_patterns()
+    names = [p["name"] for p in patterns[:ctx.deps.config.pattern_context_limit]]
+    return f"Existing patterns: {', '.join(names)}"
 ```
 
 ---
 
 ## Memory System
 
-Second Brain uses a three-layer memory architecture. Each layer serves a different purpose and they work together to give agents comprehensive context.
+Three-layer memory architecture:
 
 ```mermaid
 graph TD
-    subgraph "Layer 1: Semantic Memory (Mem0)"
+    subgraph "Semantic Memory (Mem0)"
         SM["Auto-extracted facts<br/><i>Searchable by meaning</i>"]
         GR["Graph Relationships<br/><i>Entity connections</i>"]
     end
 
-    subgraph "Layer 2: Structured Storage (Supabase)"
-        PAT["Pattern Registry<br/><i>Confidence tracking</i>"]
+    subgraph "Structured Storage (Supabase)"
+        PAT["Pattern Registry<br/><i>LOW → MEDIUM → HIGH confidence</i>"]
         EXP["Experiences<br/><i>Past work sessions</i>"]
         EX["Examples<br/><i>Reference content</i>"]
         MC["Memory Content<br/><i>Company / audience / voice</i>"]
         CT["Content Types<br/><i>Dynamic registry</i>"]
-        GL["Growth Log<br/><i>Brain evolution</i>"]
-        RH["Review History<br/><i>Quality trends</i>"]
-        CH["Confidence History<br/><i>Pattern progression</i>"]
+        PJ["Projects<br/><i>Lifecycle tracking</i>"]
+        RH["Review History<br/><i>Quality trending</i>"]
     end
 
-    subgraph "Layer 3: Knowledge Graph (Optional)"
+    subgraph "Knowledge Graph (Optional)"
         GI["Graphiti<br/><i>Neo4j or FalkorDB</i>"]
-        ENT["Entities & Relations<br/><i>Deep connections</i>"]
     end
 
-    SM --> PAT
-    GR --> ENT
-    GI --> ENT
-
-    style SM fill:#4a90d9,color:#fff
-    style GR fill:#4a90d9,color:#fff
     style PAT fill:#27ae60,color:#fff
-    style EXP fill:#27ae60,color:#fff
-    style EX fill:#27ae60,color:#fff
-    style MC fill:#27ae60,color:#fff
-    style CT fill:#27ae60,color:#fff
-    style GL fill:#27ae60,color:#fff
-    style RH fill:#27ae60,color:#fff
-    style CH fill:#27ae60,color:#fff
+    style PJ fill:#3498db,color:#fff
     style GI fill:#e67e22,color:#fff
-    style ENT fill:#e67e22,color:#fff
 ```
-
-**Semantic Memory (Mem0)** — Stores facts extracted automatically from conversations and content. Supports cloud (MemoryClient) and local (Memory) backends. Searchable by meaning, not just keywords. Optional graph relationships track entity connections.
-
-**Structured Storage (Supabase)** — PostgreSQL with pgvector for structured data. Patterns have confidence levels and use counts. Experiences record past work sessions with outcomes. Examples store reference content by type. Memory content holds company, audience, and voice guide data.
-
-**Knowledge Graph (Graphiti)** — Optional deep relationship layer using Neo4j or FalkorDB. Agents dual-write to both Mem0 and Graphiti for entity extraction. Provides graph traversal for discovering non-obvious connections between patterns, experiences, and content.
 
 ### Voyage AI Embeddings + Reranking
 
-Second Brain uses [Voyage AI](https://www.voyageai.com/) for two capabilities:
+**Embeddings (`voyage-4-lite`)** — 1024-dimensional vectors for Supabase pgvector search. Falls back to OpenAI `text-embedding-3-small` (1536d) if only `OPENAI_API_KEY` is set.
 
-**Embeddings (`voyage-4-lite`)** — Generates 1024-dimensional vectors for Supabase pgvector search. Used for patterns, examples, knowledge, and memory content. When `VOYAGE_API_KEY` is set, `EmbeddingService` delegates to Voyage automatically. Falls back to OpenAI `text-embedding-3-small` (1536 dims) if only `OPENAI_API_KEY` is available.
-
-**Reranking (`rerank-2-lite`)** — Cross-encoder reranking applied after Mem0 semantic search in RecallAgent, AskAgent, and CreateAgent. Mem0 returns initial results using its own embeddings, then Voyage reranking reorders them by relevance to the query. This produces better result ordering than embedding similarity alone. Reranking degrades gracefully — if the Voyage API is unavailable, agents return the original Mem0 ordering.
+**Reranking (`rerank-2-lite`)** — Cross-encoder applied after Mem0 semantic search in RecallAgent, AskAgent, and CreateAgent. Degrades gracefully when unavailable.
 
 ```
-User Query → Mem0 Search (semantic) → Voyage Rerank (cross-encoder) → Agent receives top-K results
+Query → Mem0 Search (semantic) → Voyage Rerank (cross-encoder) → Agent gets top-K results
 ```
 
 ### Pattern Lifecycle
 
-```mermaid
-graph LR
-    NEW["New Pattern<br/><i>LOW confidence</i><br/><i>use_count: 1</i>"] -->|"reinforced 2x"| MED["Growing Pattern<br/><i>MEDIUM confidence</i><br/><i>use_count: 2-4</i>"]
-    MED -->|"reinforced 5x"| HIGH["Proven Pattern<br/><i>HIGH confidence</i><br/><i>use_count: 5+</i>"]
-    HIGH -->|"no activity 30d"| STALE["Stale Pattern<br/><i>flagged in growth report</i>"]
-
-    style NEW fill:#e74c3c,color:#fff
-    style MED fill:#f39c12,color:#fff
-    style HIGH fill:#27ae60,color:#fff
-    style STALE fill:#95a5a6,color:#fff
+```
+New Pattern [LOW, count: 1] → reinforced 2x → Growing [MEDIUM, 2-4] → reinforced 5x → Proven [HIGH, 5+]
 ```
 
-Patterns are the core learning primitive. They're extracted from work sessions, stored with evidence and anti-patterns, and reinforced automatically when the same pattern appears again. The growth report tracks pattern creation, reinforcement, confidence upgrades, and staleness.
+High-confidence patterns are prioritized in all agent context loading.
 
-### Memory Graduation Pipeline
+### Project Lifecycle Tracking
 
-Accumulated raw memories in Mem0 can be promoted to structured patterns via the consolidation pipeline:
-
-```bash
-brain consolidate --min-cluster 3
+```
+planning → executing → reviewing → learning → complete
 ```
 
-The LearnAgent scans uncategorized memories, clusters recurring themes, and either creates new patterns or reinforces existing ones. Graduated memories are tagged to prevent re-processing.
+Agents can create, search, and update projects. The Learn agent links patterns and experiences to projects. The Review agent tracks quality trends per project.
 
 ---
 
-## Database Schema
+## Abstract Service Interfaces
 
-11 SQL migrations create the Supabase schema:
+Operations agents use abstract service interfaces for external APIs. Build the agent logic now, wire real implementations when the APIs are ready.
 
-```mermaid
-erDiagram
-    patterns {
-        uuid id PK
-        text name UK
-        text topic
-        text confidence
-        text pattern_text
-        text[] evidence
-        text[] anti_patterns
-        text[] applicable_content_types
-        int use_count
-        date date_updated
-        vector embedding
-    }
+```python
+# services/abstract.py
+class EmailServiceBase(ABC):
+    async def send(self, to: list[str], subject: str, body: str) -> dict: ...
+    async def search(self, query: str, limit: int = 10) -> list[dict]: ...
 
-    experiences {
-        uuid id PK
-        text name
-        text category
-        text output_summary
-        text learnings
-        text[] patterns_extracted
-    }
+class CalendarServiceBase(ABC):
+    async def get_events(self, date: str) -> list[dict]: ...
+    async def create_event(self, summary: str, start: str, end: str, ...) -> dict: ...
 
-    examples {
-        uuid id PK
-        text title
-        text content_type
-        text content
-    }
+class AnalyticsServiceBase(ABC):
+    async def query(self, sql: str) -> list[dict]: ...
+    async def get_revenue(self, period_days: int) -> dict: ...
 
-    memory_content {
-        uuid id PK
-        text category
-        text title
-        text content
-        vector embedding
-    }
+class TaskManagementServiceBase(ABC):
+    async def get_tasks(self, limit: int = 20) -> list[dict]: ...
+```
 
-    content_types {
-        uuid id PK
-        text slug UK
-        text name
-        text default_mode
-        text structure_hint
-        int max_words
-        jsonb review_dimensions
-    }
+Stub implementations are included. When agents check `ctx.deps.email_service is None`, tools are hidden from the LLM entirely via `prepare=`.
 
-    growth_log {
-        uuid id PK
-        text event_type
-        date event_date
-        text pattern_name
-        jsonb details
-    }
+---
 
-    review_history {
-        uuid id PK
-        date review_date
-        text content_type
-        float overall_score
-        text verdict
-        jsonb dimension_scores
-    }
+## 9 Built-In Content Types (Extensible)
 
-    confidence_history {
-        uuid id PK
-        date transition_date
-        text pattern_name
-        text from_confidence
-        text to_confidence
-        int use_count
-    }
+| Slug | Name | Mode | Words | Structure |
+|------|------|------|-------|-----------|
+| `linkedin` | LinkedIn Post | casual | 300 | Hook → Body → CTA |
+| `email` | Professional Email | professional | 500 | Subject → Opening → Body → Closing |
+| `landing-page` | Landing Page | professional | 1000 | Headline → Problem → Solution → Proof → CTA |
+| `comment` | Comment/Reply | casual | 150 | Acknowledgment → Insight → Question |
+| `case-study` | Case Study | professional | 1500 | Context → Challenge → Approach → Results → Takeaways |
+| `proposal` | Sales Proposal | professional | 2000 | Summary → Problem → Solution → Deliverables → Investment |
+| `one-pager` | One-Pager | professional | 500 | Headline → Problem → Solution → Benefits → CTA |
+| `presentation` | Presentation Script | professional | 800 | Hook → Key Points → Data → Messaging → CTA |
+| `instagram` | Instagram Post | casual | 200 | Hook → Story → CTA → Hashtags |
 
-    brain_health {
-        uuid id PK
-        date date
-        int total_patterns
-        float avg_review_score
-    }
-
-    patterns ||--o{ growth_log : "tracked by"
-    patterns ||--o{ confidence_history : "transitions"
-    content_types ||--o{ review_history : "reviewed as"
-    content_types ||--o{ examples : "typed as"
+```bash
+brain types add newsletter "Weekly Newsletter" --structure "Subject -> Intro -> 3 Sections -> CTA"
 ```
 
 ---
 
 ## LLM Fallback Chain
 
-Second Brain supports three LLM backends with automatic fallback. It tries them in order until one works:
-
-```mermaid
-graph LR
-    REQ["Agent Request"] --> CHECK{"Anthropic<br/>API key set?"}
-    CHECK -->|"Yes"| CLAUDE["Claude Sonnet 4.5<br/><i>API primary</i>"]
-    CHECK -->|"No"| SUB{"Subscription<br/>enabled?"}
-    CLAUDE -->|"fails"| SUB
-    SUB -->|"Yes + OAuth token"| SDK["Claude SDK<br/><i>Pro/Max subscription</i>"]
-    SUB -->|"No"| OLLAMA["Ollama<br/><i>local fallback</i>"]
-    SDK -->|"fails"| OLLAMA
-
-    style CLAUDE fill:#8e44ad,color:#fff
-    style SDK fill:#6c3483,color:#fff
-    style OLLAMA fill:#e67e22,color:#fff
+```
+Anthropic API (ANTHROPIC_API_KEY) → Claude SDK (Pro/Max subscription) → Ollama (local)
 ```
 
 | Priority | Backend | Auth | Cost |
 |----------|---------|------|------|
-| 1 | **Anthropic API** | `ANTHROPIC_API_KEY` | Pay-per-token |
-| 2 | **Claude SDK** (subscription) | Claude Pro/Max OAuth token | Included in subscription |
-| 3 | **Ollama** (local) | None | Free (local GPU) |
-
-### Using Claude Pro/Max Subscription (No API Key Needed)
-
-If you have a Claude Pro or Max subscription, you can run Second Brain without spending API credits. The Claude SDK routes LLM calls through your subscription via the Claude CLI.
-
-**Prerequisites:**
-1. Active [Claude Pro or Max](https://claude.ai/settings) subscription
-2. [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude` command works)
-3. `claude-agent-sdk` Python package
-
-**Setup:**
+| 1 | Anthropic API | `ANTHROPIC_API_KEY` | Pay-per-token |
+| 2 | Claude SDK | Claude Pro/Max OAuth token | Included in subscription |
+| 3 | Ollama | None | Free (local GPU) |
 
 ```bash
-# 1. Install the Claude Agent SDK
-pip install claude-agent-sdk
-
-# 2. Verify Claude CLI is authenticated
-claude --version
-
-# 3. Enable subscription mode in .env
-```
-
-Add to your `.env`:
-
-```env
-USE_SUBSCRIPTION=true
-# No ANTHROPIC_API_KEY needed!
-```
-
-That's it. Second Brain will automatically detect your OAuth token from the Claude CLI credential store and route all LLM calls through your subscription.
-
-**How it works:** The `ClaudeSDKModel` wraps `claude-agent-sdk` as a Pydantic AI Model. When an agent makes an LLM call, it spawns a Claude CLI subprocess with a service MCP server that gives it access to your memory, patterns, and storage — all authenticated through your existing subscription.
-
-**CLI flag:** You can also enable subscription mode per-command:
-
-```bash
-brain -s recall "content patterns"
-brain -s create "Write a LinkedIn post" --type linkedin
-```
-
-Both models are configurable via `.env`:
-
-```env
-PRIMARY_MODEL=anthropic:claude-sonnet-4-5
-FALLBACK_MODEL=ollama:llama3.1:8b
-OLLAMA_BASE_URL=http://localhost:11434
+# Enable subscription mode (no API key needed)
+USE_SUBSCRIPTION=true  # in .env
+brain -s recall "content patterns"  # --subscription flag
 ```
 
 ---
 
-## Two Interfaces
-
-### CLI (Click)
-
-Full command-line interface for all brain operations:
+## CLI Reference
 
 ```bash
-# Memory search
-brain recall "content writing patterns"
+# Core brain operations
+brain recall "enterprise objection handling"
+brain ask "Help me write a follow-up email"
+brain learn "notes from today's session" --category content
+brain create "announce our product launch" --type linkedin
+brain review "your draft text" --type linkedin
 
-# Contextual Q&A
-brain ask "What's our positioning for enterprise clients?"
+# Content pipeline
+brain essay "Why most productivity advice fails"
+brain clarity "your draft text"
+brain synthesize "Finding 1: ... Finding 2: ..."
+brain templates "your deliverable text"
 
-# Pattern extraction
-brain learn "Paste your work session notes here" --category content
+# Operations
+brain coach "help me plan today" --session-type morning
+brain prioritize "Task 1: write proposal. Task 2: fix bug..."
+brain impact "automate lead follow-up emails"
+brain email "follow up with Sarah at Acme"
+brain analyze "what's driving the Q3 drop?"
+brain specialist "how does agent delegation work in Pydantic AI?"
 
-# Content creation
-brain create "Write about our Q4 results" --type email --mode professional
+# Orchestration
+brain route "route this request to the best agent"
+brain pipeline "content" --steps create,clarity,review
 
-# Quality review
-brain review "Your draft text" --type linkedin
-
-# Brain health
+# Brain management
 brain health
 brain growth --days 30
+brain consolidate --min-cluster 3
+brain migrate
 
 # Content types
 brain types list
-brain types add blog-post "Blog Post" --structure "Title -> Intro -> Body -> Conclusion" --max-words 1500
+brain types add blog-post "Blog Post" --max-words 1500
+
+# Projects
+brain project create "Q4 Content Campaign"
+brain project list
+brain project setup
+
+# Patterns
+brain patterns list
+brain patterns show pattern-name
 
 # Knowledge graph
 brain graph health
 brain graph search "customer objections"
-
-# Memory consolidation
-brain consolidate --min-cluster 3
-
-# Data migration
-brain migrate
 ```
 
-### MCP Server (FastMCP)
+---
 
-Exposes all agents as tools callable from Claude Code or any MCP-compatible client:
-
-| Tool | What It Does |
-|------|-------------|
-| `recall` | Search semantic memory, patterns, experiences |
-| `ask` | Contextual Q&A with brain knowledge |
-| `learn` | Extract patterns from raw text |
-| `create_content` | Draft content in your voice |
-| `review_content` | 6-dimension quality scoring |
-| `search_examples` | Browse reference content |
-| `search_knowledge` | Search frameworks and methodologies |
-| `brain_health` | Brain health metrics |
-| `growth_report` | Growth tracking over time |
-| `graph_search` | Knowledge graph traversal |
-| `graph_health` | Graph backend health check |
-| `consolidate_brain` | Memory-to-pattern graduation |
-| `list_content_types` | Available content types |
-| `manage_content_type` | Add/remove content types |
-| `delete_item` | Remove patterns, experiences, examples |
+## MCP Tools (Claude Code Integration)
 
 ```bash
-# Start the MCP server
 python -m second_brain.mcp_server
 ```
+
+| Tool | Agent | What It Does |
+|------|-------|-------------|
+| `recall` | RecallAgent | Search semantic memory, patterns, experiences |
+| `ask` | AskAgent | Contextual Q&A with brain knowledge |
+| `learn` | LearnAgent | Extract patterns from raw text |
+| `create_content` | CreateAgent | Draft content in your voice |
+| `review_content` | ReviewAgent | 6-dimension quality scoring |
+| `write_essay` | EssayWriter | Write long-form essays (STIRC protocol) |
+| `analyze_clarity` | ClarityAgent | Readability and jargon analysis |
+| `synthesize_feedback` | Synthesizer | Consolidate review findings into themes |
+| `find_template_opportunities` | TemplateBuilder | Identify reusable frameworks |
+| `coaching_session` | Coach | Daily accountability coaching |
+| `prioritize_tasks` | PMO | Multi-factor task priority scoring |
+| `analyze_business_impact` | Impact | ROI quantification |
+| `compose_email` | Email | Draft emails with brand voice |
+| `analyze_data` | Analyst | Business intelligence insights |
+| `ask_claude_specialist` | Specialist | Verified Claude Code answers |
+| `route_request` | Chief of Staff | Auto-route to best agent |
+| `run_brain_pipeline` | Chief of Staff | Execute multi-agent pipeline |
+| `brain_health` | — | Brain health metrics |
+| `growth_report` | — | Growth tracking |
+| `vector_search` | — | pgvector similarity search |
+| `graph_search` | — | Knowledge graph traversal |
+| `consolidate_brain` | — | Memory-to-pattern graduation |
+| `list_content_types` | — | Available content types |
+| `manage_content_type` | — | Add/remove content types |
 
 ---
 
@@ -726,9 +570,9 @@ python -m second_brain.mcp_server
 ### Prerequisites
 
 - Python 3.11+
-- A Supabase project (free tier works)
-- A Voyage AI API key (for `voyage-4-lite` embeddings + `rerank-2-lite` reranking) — **or** an OpenAI API key (fallback, uses `text-embedding-3-small`)
-- **One of**: Anthropic API key, Claude Pro/Max subscription, or Ollama for local inference
+- Supabase project (free tier works)
+- **One of**: Anthropic API key, Claude Pro/Max subscription, or Ollama
+- Voyage AI API key (recommended for embeddings + reranking) **or** OpenAI API key (fallback)
 
 ### Install
 
@@ -740,22 +584,20 @@ pip install -e ".[dev]"
 
 ### Configure
 
-Create a `.env` file:
-
 ```env
 # Required
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
-BRAIN_DATA_PATH=C:\path\to\your\markdown\data
+BRAIN_DATA_PATH=/path/to/your/markdown/data
 
 # LLM (pick one)
-ANTHROPIC_API_KEY=sk-ant-...   # Option A: API key (pay-per-token)
-USE_SUBSCRIPTION=true          # Option B: Claude Pro/Max (no API key needed)
-# Option C: Ollama only (no keys needed, local GPU)
+ANTHROPIC_API_KEY=sk-ant-...    # Option A: API key
+USE_SUBSCRIPTION=true           # Option B: Claude Pro/Max
+# Option C: Ollama only (no keys needed)
 
-# Embeddings + Reranking (pick one)
-VOYAGE_API_KEY=pa-...          # Recommended: Voyage voyage-4-lite + rerank-2-lite
-OPENAI_API_KEY=sk-...          # Fallback: OpenAI text-embedding-3-small (no reranking)
+# Embeddings (pick one)
+VOYAGE_API_KEY=pa-...           # Recommended: Voyage voyage-4-lite + rerank-2-lite
+OPENAI_API_KEY=sk-...           # Fallback: OpenAI text-embedding-3-small
 
 # Optional: Mem0 Cloud
 MEM0_API_KEY=m0-...
@@ -765,55 +607,34 @@ GRAPHITI_ENABLED=true
 NEO4J_URL=neo4j+s://xxx.databases.neo4j.io
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=...
-
-# Optional: FalkorDB (Graphiti fallback)
-FALKORDB_URL=falkor://localhost:6379
 ```
 
 ### Set Up Database
 
-Run the SQL migrations in your Supabase SQL Editor, in order:
+Run migrations in order in your Supabase SQL Editor:
 
-1. `supabase/migrations/001_initial_schema.sql` — Core tables (patterns, experiences, memory_content, brain_health)
-2. `supabase/migrations/002_examples_knowledge.sql` — Examples and knowledge repo
-3. `supabase/migrations/003_pattern_constraints.sql` — Pattern name uniqueness and content type columns
-4. `supabase/migrations/004_content_types.sql` — Dynamic content type registry
-5. `supabase/migrations/005_growth_tracking_tables.sql` — Growth log, review history, confidence history
-6. `supabase/migrations/006_rls_policies.sql` — Row-level security policies
-7. `supabase/migrations/007_foreign_keys_checks.sql` — Foreign key constraints and CHECK constraints
-8. `supabase/migrations/008_atomic_rpcs.sql` — Atomic RPC functions (reinforce_pattern)
-9. `supabase/migrations/009_embedding_columns.sql` — Embedding columns for vector search
-10. `supabase/migrations/010_vector_search_rpc.sql` — Vector search RPC function
-11. `supabase/migrations/011_voyage_dimensions.sql` — Migrate embedding columns from vector(1536) to vector(1024) for Voyage AI
+1. `supabase/migrations/001_initial_schema.sql`
+2. `supabase/migrations/002_examples_knowledge.sql`
+3. `supabase/migrations/003_pattern_constraints.sql`
+4. `supabase/migrations/004_content_types.sql`
+5. `supabase/migrations/005_growth_tracking_tables.sql`
+6. `supabase/migrations/006_rls_policies.sql`
+7. `supabase/migrations/007_foreign_keys_checks.sql`
+8. `supabase/migrations/008_atomic_rpcs.sql`
+9. `supabase/migrations/009_embedding_columns.sql`
+10. `supabase/migrations/010_vector_search_rpc.sql`
+11. `supabase/migrations/011_voyage_dimensions.sql`
+12. `supabase/migrations/012_projects_lifecycle.sql`
+13. `supabase/migrations/013_quality_schemas.sql`
 
 ### Verify
 
 ```bash
-# Check package
 python -c "from second_brain import __version__; print(f'v{__version__}')"
-
-# Check config
-python -c "from second_brain.config import BrainConfig; print('Config OK')"
-
-# Check agents
-python -c "from second_brain.agents import recall_agent, ask_agent; print('Agents OK')"
-
-# Run tests
+python -c "from second_brain.agents import recall_agent, essay_writer_agent, coach_agent; print('Agents OK')"
 python -m pytest tests/ -v
-
-# Check brain health
 brain health
 ```
-
-### Migrate Existing Content
-
-If you have markdown content organized in folders:
-
-```bash
-brain migrate
-```
-
-This reads your `BRAIN_DATA_PATH` directory and ingests content into Mem0 and Supabase.
 
 ---
 
@@ -822,51 +643,60 @@ This reads your `BRAIN_DATA_PATH` directory and ingests content into Mem0 and Su
 ```
 src/second_brain/
 ├── __init__.py              # Package init, __version__
-├── config.py                # BrainConfig (Pydantic Settings, loads .env)
-├── models.py                # get_model() — LLM provider factory (Claude -> SDK -> Ollama)
+├── config.py                # BrainConfig (Pydantic Settings, .env)
+├── models.py                # get_model() — Claude → SDK → Ollama fallback chain
 ├── models_sdk.py            # ClaudeSDKModel — Pydantic AI Model wrapping claude-agent-sdk
-├── auth.py                  # OAuth token reader (env, credentials file, keychain)
+├── auth.py                  # OAuth token reader for subscription auth
 ├── service_mcp.py           # Service MCP server — SDK subprocess data bridge
-├── deps.py                  # BrainDeps dataclass — injected into all agents
-├── schemas.py               # Pydantic output models (RecallResult, CreateResult, etc.)
-├── cli.py                   # Click CLI — 17 commands across 4 groups
-├── mcp_server.py            # FastMCP server — 15 tools for Claude Code
-├── migrate.py               # Markdown -> Mem0 + Supabase migration tool
+├── deps.py                  # BrainDeps — injected into all agents
+├── schemas.py               # 40+ Pydantic output models
+├── cli.py                   # Click CLI — 20+ commands
+├── mcp_server.py            # FastMCP server — 25+ tools
+├── migrate.py               # Markdown → Mem0 + Supabase migration
 ├── agents/
-│   ├── utils.py             # Shared agent helpers — formatting, graph fallback, error handling
+│   ├── utils.py             # format_memories, format_pattern_registry, tool_error, get_agent_registry
+│   ├── chief_of_staff.py    # Chief of Staff — router + pipeline orchestrator
 │   ├── recall.py            # RecallAgent — semantic memory search
-│   ├── ask.py               # AskAgent — contextual Q&A with brain knowledge
+│   ├── ask.py               # AskAgent — contextual Q&A
 │   ├── learn.py             # LearnAgent — pattern extraction + consolidation
-│   ├── create.py            # CreateAgent — content creation in your voice
-│   └── review.py            # ReviewAgent — 6-dimension parallel scoring
+│   ├── create.py            # CreateAgent — content creation with voice
+│   ├── review.py            # ReviewAgent — 6-dimension parallel scoring
+│   ├── essay_writer.py      # Essay Writer — STIRC protocol, Five Laws
+│   ├── clarity.py           # Clarity Maximizer — readability analysis
+│   ├── synthesizer.py       # Feedback Synthesizer — consolidate findings into themes
+│   ├── template_builder.py  # Template Builder — identify reusable frameworks
+│   ├── coach.py             # Daily Coach — planning + coaching (calendar-integrated)
+│   ├── pmo.py               # PMO Advisor — multi-factor priority scoring
+│   ├── impact.py            # Impact Analyzer — ROI quantification
+│   ├── email_agent.py       # Email Agent — composition with voice (email-integrated)
+│   ├── analyst.py           # Data Analyst — business intelligence (analytics-integrated)
+│   └── specialist.py        # Specialist — verified Claude Code answers
 └── services/
-    ├── memory.py            # MemoryService — Mem0 wrapper (cloud + local)
-    ├── storage.py           # StorageService — Supabase CRUD + ContentTypeRegistry
-    ├── health.py            # HealthService — brain health + growth metrics
-    ├── graphiti.py          # GraphitiService — graph memory (Neo4j / FalkorDB)
-    ├── voyage.py            # VoyageService — Voyage AI embeddings + reranking
-    ├── embeddings.py        # EmbeddingService — delegates to Voyage or OpenAI fallback
-    ├── retry.py             # Retry utilities — circuit breaker, tenacity wrappers
-    └── search_result.py     # SearchResult dataclass — typed Mem0 results
+    ├── abstract.py          # Abstract interfaces: EmailServiceBase, CalendarServiceBase, etc.
+    ├── memory.py            # MemoryService — Mem0 wrapper
+    ├── storage.py           # StorageService — Supabase CRUD (30+ methods)
+    ├── health.py            # HealthService — health metrics + project lifecycle
+    ├── graphiti.py          # GraphitiService — Neo4j / FalkorDB
+    ├── voyage.py            # VoyageService — voyage-4-lite embeddings + rerank-2-lite
+    ├── embeddings.py        # EmbeddingService — delegates to Voyage or OpenAI
+    ├── retry.py             # Circuit breaker + tenacity retry wrappers
+    └── search_result.py     # SearchResult dataclass
 
-tests/                       # 540 tests
-├── conftest.py              # Shared fixtures (including subscription auth)
+tests/                       # 789 tests
+├── conftest.py
 ├── test_agents.py           # Agent schema + tool registration
-├── test_auth.py             # OAuth token reading + validation (20 tests)
-├── test_cli.py              # CLI command tests
-├── test_config.py           # Config validation (including subscription)
-├── test_graph.py            # Graphiti integration tests
-├── test_graphiti_service.py # GraphitiService unit tests
-├── test_mcp_server.py       # MCP tool tests
-├── test_migrate.py          # Migration tests
-├── test_models.py           # LLM model resolution
-├── test_models_sdk.py       # ClaudeSDKModel + fallback chain (14 tests)
-├── test_service_mcp.py      # Service MCP bridge tools (11 tests)
+├── test_agentic.py          # Output validators, ModelRetry loops
+├── test_chief_of_staff.py   # Orchestrator + pipeline
+├── test_content_pipeline.py # Essay, Clarity, Synthesizer, TemplateBuilder
+├── test_foundation.py       # Foundation schemas + abstract services
+├── test_operations.py       # Coach, PMO, Impact, Email, Analyst, Specialist
+├── test_projects.py         # Project lifecycle
 ├── test_services.py         # MemoryService + StorageService
-└── test_voyage.py           # VoyageService, reranking, embedding delegation (22 tests)
+├── test_mcp_server.py       # MCP tool tests
+├── test_voyage.py           # VoyageService + reranking (22 tests)
+└── ...
 
-supabase/migrations/         # 11 SQL migration files
-scripts/                     # Utility scripts
+supabase/migrations/         # 13 SQL migration files
 ```
 
 ---
@@ -875,21 +705,22 @@ scripts/                     # Utility scripts
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Agent Framework** | [Pydantic AI](https://ai.pydantic.dev/) | Typed deps, structured output, tool definitions |
-| **Embeddings + Reranking** | [Voyage AI](https://www.voyageai.com/) | `voyage-4-lite` embeddings (1024d) + `rerank-2-lite` cross-encoder reranking |
+| **Agent Framework** | [Pydantic AI](https://ai.pydantic.dev/) | Typed deps, structured output, validators, agent-as-tool |
+| **Embeddings + Reranking** | [Voyage AI](https://www.voyageai.com/) | `voyage-4-lite` (1024d) + `rerank-2-lite` cross-encoder |
 | **Semantic Memory** | [Mem0](https://mem0.ai/) | Auto fact extraction, semantic search, graph relations |
-| **Structured Storage** | [Supabase](https://supabase.com/) | PostgreSQL + pgvector for patterns, experiences, metrics |
+| **Structured Storage** | [Supabase](https://supabase.com/) | PostgreSQL + pgvector for patterns, projects, metrics |
 | **Knowledge Graph** | [Graphiti](https://github.com/getzep/graphiti) | Entity extraction, graph traversal (Neo4j / FalkorDB) |
 | **Primary LLM** | Anthropic Claude | Agent reasoning and content generation |
-| **Subscription LLM** | [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) | Route LLM calls through Claude Pro/Max subscription |
-| **Fallback LLM** | Ollama | Local inference when no API key |
+| **Subscription LLM** | [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) | Route calls through Claude Pro/Max subscription |
+| **Fallback LLM** | Ollama | Local inference |
 | **MCP Server** | [FastMCP](https://github.com/jlowin/fastmcp) | Expose agents as Claude Code tools |
 | **CLI** | [Click](https://click.palletsprojects.com/) | Command-line interface |
-| **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` file loading, validation |
-| **Testing** | pytest + pytest-asyncio | 540 tests, async support |
+| **Config** | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | `.env` loading, validation |
+| **Retry** | [Tenacity](https://tenacity.readthedocs.io/) | Circuit breaker, exponential backoff |
+| **Testing** | pytest + pytest-asyncio | 789 tests, async support |
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT

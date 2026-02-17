@@ -2,7 +2,7 @@
 
 import logging
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     format_memories,
@@ -22,13 +22,32 @@ logger = logging.getLogger(__name__)
 recall_agent = Agent(
     deps_type=BrainDeps,
     output_type=RecallResult,
+    retries=3,
     instructions=(
         "You are a memory recall agent for an AI Second Brain. "
         "Search the user's semantic memory for relevant context, patterns, "
         "and past experiences. Return the most relevant matches ranked by "
-        "relevance. Always include the source of each match."
+        "relevance. Always include the source of each match.\n\n"
+        "IMPORTANT: If your initial search returns no results, try alternative "
+        "search strategies: broaden the query, search different categories, "
+        "or use pattern/experience search instead of semantic search."
     ),
 )
+
+
+@recall_agent.output_validator
+async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> RecallResult:
+    """Retry if recall returned nothing — try alternative search strategies."""
+    if not output.matches and not output.patterns and not output.relations:
+        raise ModelRetry(
+            "No results found. Try alternative search strategies:\n"
+            "1. Broaden the search query (use fewer, more general terms)\n"
+            "2. Search patterns by topic instead of semantic memory\n"
+            "3. Search experiences for related past work\n"
+            "4. Check examples for similar content types\n"
+            "You have multiple search tools — use a different one."
+        )
+    return output
 
 
 @recall_agent.tool

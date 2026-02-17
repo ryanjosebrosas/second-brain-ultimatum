@@ -852,6 +852,218 @@ def route(request: str, execute: bool):
 
 
 @cli.command()
+@click.argument("topic")
+@click.option("--framework", default=None, help="Essay framework: argumentative/explanatory/narrative")
+def essay(topic: str, framework: str | None):
+    """Write a long-form essay on a topic."""
+    topic = _validate_input(topic, label="topic")
+    from second_brain.agents.essay_writer import essay_writer_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+    prompt = f"Write an essay about: {topic}"
+    if framework:
+        prompt += f"\nUse {framework} framework."
+
+    async def run():
+        result = await essay_writer_agent.run(prompt, deps=deps, model=model)
+        click.echo(f"\n# {result.output.title}\n")
+        click.echo(result.output.essay)
+        if result.output.notes:
+            click.echo(f"\n---\nNotes: {result.output.notes}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("content")
+def clarity(content: str):
+    """Analyze content for clarity and readability."""
+    content = _validate_input(content, label="content")
+    from second_brain.agents.clarity import clarity_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await clarity_agent.run(content, deps=deps, model=model)
+        click.echo(f"\nReadability: {result.output.overall_readability}")
+        click.echo(f"Critical issues: {result.output.critical_count}")
+        for f in result.output.findings:
+            click.echo(f"  [{f.severity}] {f.location}: {f.issue}")
+            click.echo(f"    -> {f.suggestion}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("findings")
+def synthesize(findings: str):
+    """Synthesize review findings into actionable themes."""
+    findings = _validate_input(findings, label="findings")
+    from second_brain.agents.synthesizer import synthesizer_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await synthesizer_agent.run(findings, deps=deps, model=model)
+        click.echo(f"\n{result.output.total_themes_output} themes, {result.output.implementation_hours:.1f}h total")
+        for t in result.output.themes:
+            click.echo(f"\n  [{t.priority}] {t.title} ({t.effort_minutes}min)")
+            click.echo(f"    Action: {t.action}")
+
+    asyncio.run(run())
+
+
+@cli.command("templates")
+@click.argument("deliverable")
+def find_templates(deliverable: str):
+    """Analyze a deliverable for template opportunities."""
+    deliverable = _validate_input(deliverable, label="deliverable")
+    from second_brain.agents.template_builder import template_builder_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await template_builder_agent.run(deliverable, deps=deps, model=model)
+        click.echo(f"\n{result.output.templates_created} template opportunities found")
+        for opp in result.output.opportunities:
+            click.echo(f"\n  {opp.name}")
+            click.echo(f"    When: {opp.when_to_use}")
+            click.echo(f"    Saves: {opp.estimated_time_savings}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("request")
+@click.option("--session-type", default="morning", help="morning/evening/check_in/intervention")
+def coach(request: str, session_type: str):
+    """Get daily accountability coaching."""
+    request = _validate_input(request, label="request")
+    from second_brain.agents.coach import coach_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+    prompt = f"Session type: {session_type}\n\n{request}"
+
+    async def run():
+        result = await coach_agent.run(prompt, deps=deps, model=model)
+        out = result.output
+        click.echo(f"\nSession: {out.session_type}")
+        if out.priorities:
+            click.echo("Priorities:")
+            for p in out.priorities:
+                click.echo(f"  - {p}")
+        click.echo(f"\nNext action: {out.next_action}")
+        if out.coaching_notes:
+            click.echo(f"\n{out.coaching_notes}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("tasks")
+def prioritize(tasks: str):
+    """Get PMO priority scoring for tasks."""
+    tasks = _validate_input(tasks, label="tasks")
+    from second_brain.agents.pmo import pmo_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await pmo_agent.run(tasks, deps=deps, model=model)
+        out = result.output
+        click.echo(f"\n{out.coaching_message}")
+        if out.today_focus:
+            click.echo(f"\nToday: {', '.join(out.today_focus)}")
+        if out.this_week:
+            click.echo(f"This week: {', '.join(out.this_week)}")
+
+    asyncio.run(run())
+
+
+@cli.command("impact")
+@click.argument("recommendation")
+def analyze_impact(recommendation: str):
+    """Quantify business impact of a recommendation."""
+    recommendation = _validate_input(recommendation, label="recommendation")
+    from second_brain.agents.impact import impact_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await impact_agent.run(recommendation, deps=deps, model=model)
+        click.echo(f"\n{result.output.executive_summary}")
+        if result.output.total_roi:
+            click.echo(f"\nROI: {result.output.total_roi}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("request")
+def email(request: str):
+    """Compose or manage emails."""
+    request = _validate_input(request, label="request")
+    from second_brain.agents.email_agent import email_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await email_agent.run(request, deps=deps, model=model)
+        out = result.output
+        if out.subject:
+            click.echo(f"\nSubject: {out.subject}")
+        click.echo(f"\n{out.body}")
+        click.echo(f"\nStatus: {out.status}")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.argument("question")
+def analyze(question: str):
+    """Get data analysis and business insights."""
+    question = _validate_input(question, label="question")
+    from second_brain.agents.analyst import analyst_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await analyst_agent.run(question, deps=deps, model=model)
+        click.echo(f"\n{result.output.executive_summary}")
+
+    asyncio.run(run())
+
+
+@cli.command("specialist")
+@click.argument("question")
+def ask_specialist(question: str):
+    """Ask a Claude Code specialist question."""
+    question = _validate_input(question, label="question")
+    from second_brain.agents.specialist import specialist_agent
+
+    deps = create_deps()
+    model = get_model(deps.config)
+
+    async def run():
+        result = await specialist_agent.run(question, deps=deps, model=model)
+        out = result.output
+        click.echo(f"\n[{out.confidence_level}] {out.answer}")
+        if out.sources:
+            click.echo(f"\nSources: {', '.join(out.sources)}")
+
+    asyncio.run(run())
+
+
+@cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""
     from second_brain.migrate import run_migration

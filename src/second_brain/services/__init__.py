@@ -1,5 +1,15 @@
 """Second Brain services — memory and storage backends."""
 
+from second_brain.services.abstract import (
+    AnalyticsServiceBase,
+    CalendarServiceBase,
+    EmailServiceBase,
+    StubAnalyticsService,
+    StubCalendarService,
+    StubEmailService,
+    StubTaskManagementService,
+    TaskManagementServiceBase,
+)
 from second_brain.services.embeddings import EmbeddingService
 from second_brain.services.health import HealthService
 from second_brain.services.memory import MemoryService
@@ -13,11 +23,19 @@ except ImportError:
     GraphitiService = None
 
 __all__ = [
+    "AnalyticsServiceBase",
+    "CalendarServiceBase",
     "ContentTypeRegistry",
+    "EmailServiceBase",
     "EmbeddingService",
     "GraphitiService",
     "HealthService",
     "MemoryService",
     "SearchResult",
     "StorageService",
+    "StubAnalyticsService",
+    "StubCalendarService",
+    "StubEmailService",
+    "StubTaskManagementService",
+    "TaskManagementServiceBase",
 ]

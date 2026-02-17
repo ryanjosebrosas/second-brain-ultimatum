@@ -848,6 +848,158 @@ async def pattern_registry() -> str:
         return f"Error loading pattern registry: {e}"
 
 
+# --- Operations & Advisory Agents ---
+
+@server.tool()
+async def coaching_session(request: str, session_type: str = "morning") -> str:
+    """Get daily accountability coaching for planning and productivity.
+
+    Args:
+        request: Your coaching request (e.g., "Help me plan today", "I'm overwhelmed")
+        session_type: Session type — morning, evening, check_in, or intervention
+    """
+    try:
+        request = _validate_mcp_input(request, label="request")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.coach import coach_agent
+    prompt = f"Session type: {session_type}\n\n{request}"
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await coach_agent.run(prompt, deps=deps, model=model)
+    except TimeoutError:
+        return f"Coaching session timed out after {timeout}s."
+    out = result.output
+    parts = [f"Session: {out.session_type}", f"Next action: {out.next_action}"]
+    if out.coaching_notes:
+        parts.append(out.coaching_notes)
+    return "\n".join(parts)
+
+
+@server.tool()
+async def prioritize_tasks(tasks: str) -> str:
+    """Score and prioritize tasks using PMO methodology.
+
+    Args:
+        tasks: Comma-separated list of tasks to prioritize
+    """
+    try:
+        tasks = _validate_mcp_input(tasks, label="tasks")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.pmo import pmo_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await pmo_agent.run(tasks, deps=deps, model=model)
+    except TimeoutError:
+        return f"Task prioritization timed out after {timeout}s."
+    out = result.output
+    lines = [out.coaching_message]
+    for t in out.scored_tasks[:5]:
+        lines.append(f"  {t.task_name}: {t.total_score:.0f} ({t.category})")
+    return "\n".join(lines)
+
+
+@server.tool()
+async def analyze_business_impact(recommendation: str) -> str:
+    """Quantify business impact and ROI of a recommendation.
+
+    Args:
+        recommendation: The recommendation or initiative to analyze
+    """
+    try:
+        recommendation = _validate_mcp_input(recommendation, label="recommendation")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.impact import impact_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await impact_agent.run(recommendation, deps=deps, model=model)
+    except TimeoutError:
+        return f"Impact analysis timed out after {timeout}s."
+    return result.output.executive_summary or str(result.output)
+
+
+@server.tool()
+async def compose_email(request: str) -> str:
+    """Compose or manage emails with brand voice.
+
+    Args:
+        request: Email request (e.g., "Draft a follow-up to John about the proposal")
+    """
+    try:
+        request = _validate_mcp_input(request, label="request")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.email_agent import email_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await email_agent.run(request, deps=deps, model=model)
+    except TimeoutError:
+        return f"Email composition timed out after {timeout}s."
+    out = result.output
+    return f"Subject: {out.subject}\n\n{out.body}\n\nStatus: {out.status}"
+
+
+@server.tool()
+async def analyze_data(question: str) -> str:
+    """Get data analysis and business insights.
+
+    Args:
+        question: The business or data question to analyze
+    """
+    try:
+        question = _validate_mcp_input(question, label="question")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.analyst import analyst_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await analyst_agent.run(question, deps=deps, model=model)
+    except TimeoutError:
+        return f"Data analysis timed out after {timeout}s."
+    return result.output.executive_summary or str(result.output)
+
+
+@server.tool()
+async def ask_claude_specialist(question: str) -> str:
+    """Ask a verified question about Claude Code, Pydantic AI, or AI development.
+
+    Args:
+        question: Technical question about Claude Code or AI development
+    """
+    try:
+        question = _validate_mcp_input(question, label="question")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.specialist import specialist_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await specialist_agent.run(question, deps=deps, model=model)
+    except TimeoutError:
+        return f"Specialist query timed out after {timeout}s."
+    out = result.output
+    return f"[{out.confidence_level}] {out.answer}"
+
+
 # --- Chief of Staff / Orchestration ---
 
 @server.tool()
@@ -924,6 +1076,97 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
     )
     final = results.get("final")
     return str(final) if final else "Pipeline completed with no output."
+
+
+@server.tool()
+async def write_essay(topic: str, framework: str = "") -> str:
+    """Write a long-form essay on a topic using the Essay Writer agent."""
+    try:
+        topic = _validate_mcp_input(topic, label="topic")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.essay_writer import essay_writer_agent
+    prompt = f"Write an essay about: {topic}"
+    if framework:
+        prompt += f"\nUse {framework} framework."
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await essay_writer_agent.run(prompt, deps=deps, model=model)
+    except TimeoutError:
+        return f"Essay writing timed out after {timeout}s."
+    return f"# {result.output.title}\n\n{result.output.essay}"
+
+
+@server.tool()
+async def analyze_clarity(content: str) -> str:
+    """Analyze content for clarity and readability issues."""
+    try:
+        content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.clarity import clarity_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await clarity_agent.run(content, deps=deps, model=model)
+    except TimeoutError:
+        return f"Clarity analysis timed out after {timeout}s."
+    out = result.output
+    lines = [f"Readability: {out.overall_readability} ({out.critical_count} critical)"]
+    for f in out.findings[:10]:
+        lines.append(f"[{f.severity}] {f.location}: {f.issue} -> {f.suggestion}")
+    return "\n".join(lines)
+
+
+@server.tool()
+async def synthesize_feedback(findings: str) -> str:
+    """Consolidate review findings into actionable improvement themes."""
+    try:
+        findings = _validate_mcp_input(findings, label="findings")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.synthesizer import synthesizer_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await synthesizer_agent.run(findings, deps=deps, model=model)
+    except TimeoutError:
+        return f"Feedback synthesis timed out after {timeout}s."
+    out = result.output
+    lines = [f"{out.total_themes_output} themes, {out.implementation_hours:.1f}h total"]
+    for t in out.themes:
+        lines.append(f"[{t.priority}] {t.title} ({t.effort_minutes}min): {t.action}")
+    return "\n".join(lines)
+
+
+@server.tool()
+async def find_template_opportunities(deliverable: str) -> str:
+    """Analyze a deliverable for reusable template opportunities."""
+    try:
+        deliverable = _validate_mcp_input(deliverable, label="deliverable")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    model = _get_model()
+    from second_brain.agents.template_builder import template_builder_agent
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await template_builder_agent.run(deliverable, deps=deps, model=model)
+    except TimeoutError:
+        return f"Template analysis timed out after {timeout}s."
+    out = result.output
+    lines = [f"{out.templates_created} template opportunities"]
+    for opp in out.opportunities:
+        lines.append(f"- {opp.name}: {opp.when_to_use}")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

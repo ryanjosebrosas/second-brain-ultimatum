@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     format_relations,
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 review_agent = Agent(
     deps_type=BrainDeps,
     output_type=DimensionScore,
+    retries=3,
     instructions=(
         "You are a focused content reviewer evaluating ONE specific dimension of content quality. "
         "You will be told which dimension to evaluate and its specific criteria. "
@@ -36,6 +37,36 @@ review_agent = Agent(
         "Set the status field: 'pass' if score >= 7, 'warning' if score 5-6, 'issue' if score <= 4."
     ),
 )
+
+
+@review_agent.output_validator
+async def validate_review(ctx: RunContext[BrainDeps], output: DimensionScore) -> DimensionScore:
+    """Validate review score consistency."""
+    # Score must be in valid range
+    if output.score < 1 or output.score > 10:
+        raise ModelRetry(
+            f"Score {output.score} is out of range. Scores must be 1-10. "
+            "Re-evaluate and provide a valid score."
+        )
+
+    # Status must match score
+    expected_status = "pass" if output.score >= 7 else ("warning" if output.score >= 5 else "issue")
+    if output.status != expected_status:
+        raise ModelRetry(
+            f"Status '{output.status}' doesn't match score {output.score}. "
+            f"Expected status '{expected_status}' (pass=7+, warning=5-6, issue=1-4). "
+            "Adjust either the score or the status."
+        )
+
+    # Must provide at least one strength or issue
+    if not output.strengths and not output.issues:
+        raise ModelRetry(
+            "You must provide at least one strength or one issue. "
+            "Every review dimension has SOMETHING to note — cite specific "
+            "phrases or sections from the content."
+        )
+
+    return output
 
 
 @review_agent.tool
@@ -167,6 +198,8 @@ async def run_full_review(
         active_configs.append(dc)
 
     # Timeout-protected parallel reviews
+    from pydantic_ai.usage import UsageLimits
+    limits = UsageLimits(request_limit=deps.config.pipeline_request_limit)
     timeout_seconds = (
         deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
         if deps else 60
@@ -174,7 +207,10 @@ async def run_full_review(
     try:
         async with asyncio.timeout(timeout_seconds):
             results = await asyncio.gather(
-                *[review_agent.run(prompt, deps=deps, model=model) for prompt in prompts],
+                *[
+                    review_agent.run(prompt, deps=deps, model=model, usage_limits=limits)
+                    for prompt in prompts
+                ],
                 return_exceptions=True,
             )
     except TimeoutError:
