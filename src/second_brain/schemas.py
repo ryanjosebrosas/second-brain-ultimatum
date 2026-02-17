@@ -245,8 +245,10 @@ class GrowthEvent(BaseModel):
     """A single brain growth event for the growth log."""
 
     event_type: str = Field(
-        description="Event type: pattern_created, pattern_reinforced, "
-        "confidence_upgraded, experience_recorded"
+        description="Type of growth event: pattern_created, pattern_reinforced, "
+        "pattern_graduated, confidence_upgraded, confidence_downgraded, "
+        "experience_added, memory_consolidated, content_reviewed, "
+        "project_created, project_completed, milestone_reached, example_promoted"
     )
     event_date: str = Field(
         default="",
@@ -297,6 +299,184 @@ class ConfidenceTransition(BaseModel):
     reason: str = Field(default="", description="Why the transition happened")
 
 
+# --- Project Lifecycle ---
+
+ProjectStage = Literal["planning", "executing", "reviewing", "learning", "complete", "archived"]
+
+ArtifactType = Literal["plan", "research", "output", "review", "learnings"]
+
+
+class ProjectArtifact(BaseModel):
+    """A single artifact within a project lifecycle."""
+
+    artifact_type: ArtifactType = Field(
+        description="Type of artifact: plan, research, output, review, or learnings"
+    )
+    title: str | None = Field(default=None, description="Artifact title")
+    content: str | None = Field(default=None, description="Artifact content text")
+    metadata: dict = Field(
+        default_factory=dict, description="Additional artifact metadata"
+    )
+
+
+class ProjectResult(BaseModel):
+    """Result of a project lifecycle operation."""
+
+    project_id: str = Field(description="UUID of the project")
+    name: str = Field(description="Project name")
+    lifecycle_stage: ProjectStage = Field(description="Current lifecycle stage")
+    category: str = Field(default="content", description="Project category")
+    artifacts: list[ProjectArtifact] = Field(
+        default_factory=list, description="Project artifacts"
+    )
+    review_score: float | None = Field(
+        default=None, description="Final review score if reviewed"
+    )
+    patterns_extracted: list[str] = Field(
+        default_factory=list, description="Pattern names extracted"
+    )
+    patterns_upgraded: list[str] = Field(
+        default_factory=list, description="Pattern names upgraded"
+    )
+    message: str = Field(default="", description="Status message")
+
+
+# --- Quality Trending ---
+
+
+class DimensionBreakdown(BaseModel):
+    """Score breakdown for a single review dimension over time."""
+
+    dimension: str = Field(description="Dimension name (e.g. 'Messaging')")
+    avg_score: float = Field(description="Average score for this dimension")
+    trend: str = Field(
+        default="stable", description="Score trend: improving/stable/declining"
+    )
+    review_count: int = Field(
+        default=0, description="Number of reviews with this dimension scored"
+    )
+
+
+class QualityTrend(BaseModel):
+    """Quality metrics trending data."""
+
+    period_days: int = Field(description="Trend period in days")
+    total_reviews: int = Field(default=0, description="Total reviews in period")
+    avg_score: float = Field(default=0.0, description="Average overall score")
+    score_trend: str = Field(
+        default="stable",
+        description="Overall trend: improving/stable/declining",
+    )
+    by_dimension: list[DimensionBreakdown] = Field(
+        default_factory=list, description="Per-dimension breakdowns"
+    )
+    by_content_type: dict[str, float] = Field(
+        default_factory=dict, description="Avg score per content type"
+    )
+    recurring_issues: list[str] = Field(
+        default_factory=list,
+        description="Issues appearing in 3+ reviews",
+    )
+    excellence_count: int = Field(
+        default=0, description="Reviews scoring 9+"
+    )
+    needs_work_count: int = Field(
+        default=0, description="Reviews scoring below 6"
+    )
+
+
+# --- Brain Growth Milestones ---
+
+BrainLevel = Literal["EMPTY", "FOUNDATION", "GROWTH", "COMPOUND", "EXPERT"]
+
+
+class BrainMilestone(BaseModel):
+    """A brain growth milestone with completion status."""
+
+    name: str = Field(description="Milestone name")
+    description: str = Field(description="What this milestone requires")
+    completed: bool = Field(
+        default=False, description="Whether milestone is achieved"
+    )
+    completed_date: str | None = Field(
+        default=None, description="ISO date when completed"
+    )
+
+
+class BrainGrowthStatus(BaseModel):
+    """Overall brain growth level and milestone progress."""
+
+    level: BrainLevel = Field(description="Current brain level")
+    level_description: str = Field(description="Human-readable level meaning")
+    milestones: list[BrainMilestone] = Field(
+        default_factory=list, description="All milestones with status"
+    )
+    next_milestone: str | None = Field(
+        default=None, description="Next unachieved milestone"
+    )
+    patterns_total: int = Field(default=0, description="Total pattern count")
+    high_confidence_count: int = Field(
+        default=0, description="HIGH confidence patterns"
+    )
+    experiences_total: int = Field(default=0, description="Total experiences")
+    avg_review_score: float = Field(default=0.0, description="Average review score")
+
+
+# --- Pattern Registry ---
+
+
+class PatternRegistryEntry(BaseModel):
+    """A pattern entry for the registry view."""
+
+    name: str = Field(description="Pattern name")
+    topic: str = Field(description="Pattern topic/category")
+    confidence: ConfidenceLevel = Field(description="Current confidence level")
+    use_count: int = Field(
+        default=0, description="Number of times used/reinforced"
+    )
+    date_added: str = Field(description="ISO date when first created")
+    date_updated: str = Field(description="ISO date of last update")
+    consecutive_failures: int = Field(
+        default=0,
+        description="Consecutive review failures below score 6",
+    )
+    is_stale: bool = Field(
+        default=False, description="Not reinforced in 30+ days"
+    )
+    applicable_content_types: list[str] = Field(
+        default_factory=list,
+        description="Content types this applies to",
+    )
+
+
+# --- Setup/Onboarding ---
+
+
+class SetupStatus(BaseModel):
+    """Brain setup/onboarding completion status."""
+
+    is_complete: bool = Field(
+        default=False, description="Whether all setup steps are done"
+    )
+    steps: list[dict] = Field(
+        default_factory=list,
+        description="Setup steps with completion status",
+    )
+    missing_categories: list[str] = Field(
+        default_factory=list,
+        description="Memory categories not yet populated",
+    )
+    total_memory_entries: int = Field(
+        default=0, description="Total memory_content rows"
+    )
+    has_patterns: bool = Field(
+        default=False, description="Whether any patterns exist"
+    )
+    has_examples: bool = Field(
+        default=False, description="Whether any examples exist"
+    )
+
+
 class GrowthSummary(BaseModel):
     """Aggregated growth metrics for reporting."""
 
@@ -318,6 +498,15 @@ class GrowthSummary(BaseModel):
     top_patterns: list[str] = Field(
         default_factory=list,
         description="Most reinforced patterns in the period",
+    )
+    brain_level: str = Field(
+        default="EMPTY", description="Current brain growth level"
+    )
+    milestones_completed: int = Field(
+        default=0, description="Number of milestones achieved"
+    )
+    quality_trend: dict = Field(
+        default_factory=dict, description="Quality trending summary"
     )
 
 
@@ -445,6 +634,33 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         is_builtin=True,
     ),
 }
+
+
+# --- Brain Growth Milestone Definitions ---
+
+BRAIN_MILESTONES = [
+    {"name": "first_pattern", "description": "Extract your first pattern", "requires": {"min_patterns": 1}},
+    {"name": "five_patterns", "description": "Accumulate 5 patterns", "requires": {"min_patterns": 5}},
+    {"name": "first_medium", "description": "Achieve first MEDIUM confidence pattern", "requires": {"min_medium": 1}},
+    {"name": "first_high", "description": "Achieve first HIGH confidence pattern", "requires": {"min_high": 1}},
+    {"name": "ten_experiences", "description": "Complete 10 experiences", "requires": {"min_experiences": 10}},
+    {"name": "consistent_quality", "description": "Average review score 8+", "requires": {"min_avg_score": 8.0}},
+    {"name": "twenty_patterns", "description": "Accumulate 20 patterns", "requires": {"min_patterns": 20}},
+    {"name": "five_high", "description": "Have 5 HIGH confidence patterns", "requires": {"min_high": 5}},
+    {"name": "compound_returns", "description": "20+ experiences with 9+ avg score", "requires": {"min_experiences": 20, "min_avg_score": 9.0}},
+]
+
+BRAIN_LEVEL_THRESHOLDS = {
+    "EMPTY": {"min_patterns": 0, "min_experiences": 0},
+    "FOUNDATION": {"min_patterns": 1, "min_experiences": 0},
+    "GROWTH": {"min_patterns": 5, "min_medium": 1},
+    "COMPOUND": {"min_patterns": 10, "min_high": 1, "min_experiences": 10},
+    "EXPERT": {"min_patterns": 20, "min_high": 5, "min_experiences": 20, "min_avg_score": 9.0},
+}
+
+QUALITY_GATE_SCORE = 8.0  # Minimum review score for example promotion
+CONFIDENCE_DOWNGRADE_THRESHOLD = 6.0  # Score below which consecutive failures count
+CONFIDENCE_DOWNGRADE_CONSECUTIVE = 2  # Consecutive failures before downgrade
 
 
 def content_type_from_row(row: dict) -> ContentTypeConfig:

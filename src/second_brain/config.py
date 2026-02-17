@@ -159,6 +159,23 @@ class BrainConfig(BaseSettings):
         default=5, description="Default limit for experience retrieval"
     )
 
+    # Project lifecycle
+    project_artifact_max_length: int = Field(
+        default=50000, description="Max chars per artifact content"
+    )
+    quality_gate_score: float = Field(
+        default=8.0, description="Min review score for example promotion"
+    )
+    confidence_downgrade_threshold: float = Field(
+        default=6.0, description="Score below which consecutive failures count"
+    )
+    confidence_downgrade_consecutive: int = Field(
+        default=2, description="Consecutive failures before confidence downgrade"
+    )
+    stale_pattern_days: int = Field(
+        default=30, description="Days without reinforcement before pattern is stale"
+    )
+
     # Graduation settings
     graduation_min_memories: int = Field(
         default=3,
