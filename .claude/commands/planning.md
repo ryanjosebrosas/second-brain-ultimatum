@@ -1,7 +1,7 @@
 ---
 description: "Create comprehensive feature plan with deep codebase analysis and research"
 argument-hint: [feature-description]
-allowed-tools: Read, Glob, Grep, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects, mcp__archon__rag_get_available_sources, mcp__archon__rag_search_knowledge_base, mcp__archon__rag_search_code_examples, mcp__archon__rag_list_pages_for_source, mcp__archon__rag_read_full_page, mcp__archon__find_documents, mcp__archon__manage_document, mcp__archon__get_project_features, mcp__archon__health_check, mcp__archon__session_info
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__rag_get_available_sources, mcp__archon__rag_search_knowledge_base, mcp__archon__rag_search_code_examples, mcp__archon__rag_list_pages_for_source, mcp__archon__rag_read_full_page
 ---
 
 # Planning: Comprehensive Feature Plan
