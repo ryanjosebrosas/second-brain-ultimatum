@@ -9,6 +9,18 @@ from second_brain.config import BrainConfig
 from second_brain.deps import BrainDeps
 from second_brain.services.search_result import SearchResult
 
+# ---------------------------------------------------------------------------
+# FastMCP 2.x compatibility: @server.tool() returns FunctionTool objects that
+# are not directly callable. Patch __call__ to delegate to the wrapped .fn so
+# existing tests that do `await recall(query=...)` keep working.
+# ---------------------------------------------------------------------------
+try:
+    from fastmcp.tools.tool import FunctionTool
+
+    FunctionTool.__call__ = lambda self, *args, **kwargs: self.fn(*args, **kwargs)
+except ImportError:
+    pass
+
 
 @pytest.fixture
 def brain_config(tmp_path):

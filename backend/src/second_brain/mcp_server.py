@@ -1414,4 +1414,14 @@ async def find_template_opportunities(deliverable: str) -> str:
 
 
 if __name__ == "__main__":
-    server.run()
+    import sys as _sys
+
+    logging.basicConfig(
+        stream=_sys.stderr,
+        level=logging.WARNING,
+        format="%(levelname)s: %(message)s",
+    )
+    try:
+        server.run()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass

@@ -408,10 +408,15 @@ def get_service_mcp_config() -> tuple[str, dict]:
 
 if __name__ == "__main__":
     import sys as _sys
+    import asyncio as _asyncio
+
     logging.basicConfig(
         stream=_sys.stderr,
         level=logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
     init_deps()
-    service_server.run()
+    try:
+        service_server.run()
+    except (KeyboardInterrupt, _asyncio.CancelledError):
+        pass
