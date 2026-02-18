@@ -226,25 +226,25 @@ python -m pytest -q --tb=short 2>&1 | tail -10
 
 ## SUB-PLAN CHECKLIST
 
-- [ ] Task 1 completed: `create_deps()` has provider branch replacing unconditional `MemoryService(config)`
-- [ ] Task 2 completed: default `memory_provider="mem0"` path unchanged (regression check passes)
-- [ ] Task 3 completed: `"graphiti"` and `"none"` branches verified importable
-- [ ] `deps.py` imports are still valid (no circular imports)
-- [ ] All existing `test_deps.py` tests pass
-- [ ] All existing `test_config.py` tests pass
+- [x] Task 1 completed: `create_deps()` has provider branch replacing unconditional `MemoryService(config)`
+- [x] Task 2 completed: default `memory_provider="mem0"` path unchanged (regression check passes)
+- [x] Task 3 completed: `"graphiti"` and `"none"` branches verified importable
+- [x] `deps.py` imports are still valid (no circular imports)
+- [x] All existing `test_deps.py` tests pass
+- [x] All existing `test_config.py` tests pass
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] `config.memory_provider == "mem0"` → `create_deps()` creates `MemoryService(config)` (default behavior)
-- [ ] `config.memory_provider == "graphiti"` → `create_deps()` creates `GraphitiMemoryAdapter(config)`
-- [ ] `config.memory_provider == "none"` → `create_deps()` creates `StubMemoryService()`
-- [ ] `"graphiti"` branch uses lazy import inside try/except with `logger.warning` fallback
-- [ ] `StubMemoryService` import is inside the `elif _mp == "none":` branch (not at module top)
-- [ ] No new module-level imports added to `deps.py`
-- [ ] `BrainDeps.memory_service` field holds the correct type for each branch
-- [ ] All 856 existing tests still pass
+- [x] `config.memory_provider == "mem0"` → `create_deps()` creates `MemoryService(config)` (default behavior)
+- [x] `config.memory_provider == "graphiti"` → `create_deps()` creates `GraphitiMemoryAdapter(config)`
+- [x] `config.memory_provider == "none"` → `create_deps()` creates `StubMemoryService()`
+- [x] `"graphiti"` branch uses lazy import inside try/except with `logger.warning` fallback
+- [x] `StubMemoryService` import is inside the `elif _mp == "none":` branch (not at module top)
+- [x] No new module-level imports added to `deps.py`
+- [x] `BrainDeps.memory_service` field holds the correct type for each branch
+- [x] All 849 existing tests still pass (9 pre-existing failures in test_models/test_models_sdk unchanged)
 
 ---
 

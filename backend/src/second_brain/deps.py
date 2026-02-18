@@ -94,9 +94,27 @@ def create_deps(config: BrainConfig | None = None) -> BrainDeps:
         except Exception as e:
             logger.warning("EmbeddingService init failed: %s", e)
 
+    # Memory service — provider selected by config.memory_provider
+    _mp = config.memory_provider
+    if _mp == "graphiti":
+        try:
+            from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
+            memory_service = GraphitiMemoryAdapter(config)
+        except ImportError:
+            logger.warning(
+                "graphiti-core not installed — cannot use memory_provider='graphiti'. "
+                "Install with: pip install -e '.[graphiti]'. Falling back to mem0."
+            )
+            memory_service = MemoryService(config)
+    elif _mp == "none":
+        from second_brain.services.abstract import StubMemoryService
+        memory_service = StubMemoryService()
+    else:  # "mem0" (default) or any unrecognised value caught by config validator
+        memory_service = MemoryService(config)
+
     return BrainDeps(
         config=config,
-        memory_service=MemoryService(config),
+        memory_service=memory_service,
         storage_service=StorageService(config),
         graphiti_service=graphiti,
         embedding_service=embedding,
