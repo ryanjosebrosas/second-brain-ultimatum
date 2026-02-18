@@ -1,8 +1,8 @@
-# My Coding System
+# My Coding System — Second Brain
 
 **Stop guessing. Start engineering.**
 
-A complete development methodology that turns AI from an unpredictable autocomplete into a disciplined engineering partner. Built for [Claude Code](https://claude.com/claude-code), powered by the PIV Loop, and battle-tested across real projects.
+A complete development methodology that turns AI from an unpredictable autocomplete into a disciplined engineering partner — plus a full Python backend that gives your AI a persistent memory and knowledge system. Built for [Claude Code](https://claude.com/claude-code), powered by the PIV Loop, and battle-tested across real projects.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -14,30 +14,43 @@ AI coding tools are powerful, but without structure they produce inconsistent re
 
 Most developers use AI like a magic 8-ball: ask a question, hope for a good answer, and manually clean up when it isn't.
 
-**This system fixes that.** It manages context automatically, enforces a plan-first workflow, and gives you quality gates at every stage.
+**This system fixes that.** It manages context automatically, enforces a plan-first workflow, gives you quality gates at every stage, and backs it all with a persistent memory system so the AI actually remembers what you've built.
 
 ---
 
-## What This Is (and Isn't)
+## What This Is
 
-This is **not** an application. There's no source code, no build system, no runtime.
+This repo is two things in one, deeply connected:
 
-This is a **development methodology** — a structured collection of slash commands, templates, reference guides, and automation that wraps around Claude Code and turns it into a reliable development workflow. You clone this system, then build your applications inside it (or copy it into existing projects).
+**1. A development methodology** — slash commands, templates, reference guides, and subagents that wrap around Claude Code and enforce a plan-first workflow. No source code required to use this layer. Clone it, work inside it, and build your applications on top of it.
+
+**2. A Second Brain MCP backend** — a full Python application in `backend/` with 13 Pydantic AI agents, a FastMCP server, Mem0 semantic memory, Supabase/pgvector database, and Voyage AI embeddings. This is the application the methodology was built to create. The backend powers the memory and knowledge features used during development sessions.
+
+The connection: the methodology enforces good practices for building the backend. The backend powers the memory that makes the methodology smarter over time.
 
 ### Who Is This For?
 
 - **Solo developers using Claude Code** who want consistent, production-grade output instead of trial-and-error prompting
 - **Teams adopting AI workflows** who need a repeatable methodology, not ad-hoc prompting
+- **Developers who want a personal AI memory system** — store patterns, recall past decisions, score and refine content, coach yourself through daily priorities
 - **Anyone tired of AI inconsistency** — the difference between 30% and 88% code acceptance is context clarity, not AI intelligence
 
 ### What You Get
 
+**Methodology layer:**
 - **15 slash commands** that automate every phase of development — from planning to commit
 - **8 templates** for plans, PRDs, and agents — only the ones you will actually use
 - **10 reference guides** loaded on-demand — consolidated, focused, no redundancy
 - **12 pre-built AI subagents** for parallel research, code review, and specialist tasks
 - **1 skill** for systematic planning methodology
 - A token-conscious architecture that keeps <10K tokens of system context, leaving the rest for your actual work
+
+**Second Brain backend:**
+- **13 Pydantic AI agents** — recall, ask, learn, create, review, orchestrate, coach, prioritize, email, and more
+- **Semantic memory** via Mem0 — stores patterns, decisions, and knowledge across all sessions
+- **Vector search** via Supabase + pgvector — structured retrieval with RLS
+- **FastMCP server** — exposes all agents as tools directly in Claude Code
+- **781 tests** — pytest + pytest-asyncio, one file per module
 
 ---
 
@@ -164,6 +177,7 @@ graph TD
     subgraph "External Integrations"
         MEM["memory.md<br/>cross-session context"]
         ARCHON["Archon MCP<br/>(optional)<br/>tasks + RAG"]
+        BRAIN["Second Brain MCP<br/>(backend/)<br/>memory + agents"]
     end
 
     CLAUDE -.->|"on-demand"| R
@@ -173,6 +187,7 @@ graph TD
     SK -.->|"loads"| R
     MEM -.-> CMD
     ARCHON -.-> CMD
+    BRAIN -.-> CMD
     CMD -->|"produces"| REQ["requests/<br/>feature plans"]
     REQ -->|"/execute"| IMPL["Implementation"]
     IMPL -->|"/code-review"| AG
@@ -182,6 +197,7 @@ graph TD
     style CMD fill:#7b68ee,color:#fff
     style AG fill:#e67e22,color:#fff
     style IMPL fill:#27ae60,color:#fff
+    style BRAIN fill:#8e44ad,color:#fff
 ```
 
 ### Token Budget
@@ -262,6 +278,109 @@ The hook is defined in `.claude/settings.json` (project-level, committed). Anyon
 ```
 
 **After a compaction:** you will see the banner, your memory will already be loaded, and running `/prime` restores the rest.
+
+---
+
+## Second Brain Backend
+
+The `backend/` directory contains a full Python application that gives your AI sessions persistent memory and structured knowledge. It runs as an MCP server, exposing all capabilities as tools directly inside Claude Code.
+
+### 13 Pydantic AI Agents
+
+```mermaid
+graph TD
+    COS["chief_of_staff<br/>Orchestrator — routes to the right agent"]
+    COS --> RECALL["recall<br/>Semantic memory search"]
+    COS --> ASK["ask<br/>General Q&A with brain context"]
+    COS --> LEARN["learn<br/>Pattern extraction + memory storage"]
+    COS --> CREATE["create<br/>Content generation (voice-aware)"]
+    COS --> REVIEW["review<br/>Multi-dimension content scoring"]
+    COS --> COACH["coach<br/>Daily accountability coaching"]
+    COS --> PMO["pmo<br/>Task prioritization (PMO-style)"]
+    COS --> EMAIL["email_agent<br/>Email composition"]
+    COS --> SPEC["specialist<br/>Claude Code / Pydantic AI Q&A"]
+    COS --> CLARITY["clarity<br/>Readability analysis"]
+    COS --> SYNTH["synthesizer<br/>Feedback consolidation"]
+    COS --> TB["template_builder<br/>Template opportunity detection"]
+
+    style COS fill:#8e44ad,color:#fff
+    style RECALL fill:#4a90d9,color:#fff
+    style ASK fill:#4a90d9,color:#fff
+    style LEARN fill:#27ae60,color:#fff
+    style CREATE fill:#27ae60,color:#fff
+    style REVIEW fill:#e67e22,color:#fff
+```
+
+| Agent | What It Does |
+|-------|-------------|
+| `chief_of_staff` | Routing orchestrator — analyses your request and delegates to the right agent or pipeline |
+| `recall` | Searches semantic memory to surface relevant past decisions, patterns, and knowledge |
+| `ask` | General Q&A with full brain context — answers questions using stored knowledge |
+| `learn` | Extracts patterns and insights from content, stores them to semantic memory |
+| `create` | Generates content with awareness of your voice, style, and stored examples |
+| `review` | Scores content across multiple dimensions (clarity, structure, impact, etc.) |
+| `coach` | Daily accountability coaching — surfaces priorities and tracks progress |
+| `pmo` | PMO-style task prioritization — helps manage competing projects and deadlines |
+| `email_agent` | Composes emails matched to your voice and the recipient relationship |
+| `specialist` | Deep Q&A on Claude Code, Pydantic AI, and the Second Brain system itself |
+| `clarity` | Readability analysis — identifies complexity, jargon, and structural issues |
+| `synthesizer` | Consolidates feedback from multiple sources into a unified, actionable summary |
+| `template_builder` | Detects template opportunities in repeated content patterns |
+
+### Backend Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Language | Python 3.11+ |
+| Agent framework | Pydantic AI (`pydantic-ai[anthropic]`) |
+| MCP server | FastMCP |
+| Semantic memory | Mem0 (`mem0ai`) |
+| Database | Supabase (PostgreSQL + pgvector) |
+| Embeddings | Voyage AI (primary), OpenAI (fallback) |
+| Knowledge graph | Graphiti (optional, feature-flagged) |
+| CLI | Click (`brain` entrypoint) |
+| Retries | Tenacity |
+| Config | Pydantic Settings |
+| Testing | pytest + pytest-asyncio |
+
+### Data Flow
+
+```
+MCP tool call
+  → mcp_server.py validates input
+  → calls agent with BrainDeps
+  → agent uses service layer
+  → Mem0 / Supabase / Voyage AI
+  → structured output returned
+  → formatted as plain text string
+```
+
+### Backend Setup
+
+```bash
+cd backend
+pip install -e ".[dev]"
+cp .env.example .env
+# Edit .env with your keys:
+# ANTHROPIC_API_KEY, MEM0_API_KEY, SUPABASE_URL, SUPABASE_KEY, VOYAGE_API_KEY
+python -m second_brain.mcp_server   # Start MCP server
+```
+
+Optional extras:
+
+```bash
+pip install -e ".[dev,graphiti]"      # + Graphiti knowledge graph
+pip install -e ".[dev,subscription]"  # + Claude Agent SDK (subscription auth)
+```
+
+Run tests:
+
+```bash
+cd backend
+pytest          # All 781 tests
+pytest -x       # Stop on first failure
+pytest -v       # Verbose output
+```
 
 ---
 
@@ -382,7 +501,7 @@ graph LR
 - [Claude Code CLI](https://claude.com/claude-code) installed
 - Git configured
 
-### Setup
+### Methodology Setup
 
 1. **Clone** this repo:
    ```bash
@@ -417,9 +536,45 @@ graph LR
    > /commit
    ```
 
+### Backend Setup (Optional)
+
+If you want the Second Brain MCP server — persistent semantic memory, 13 agents as MCP tools, content scoring and retrieval:
+
+1. **Set up environment:**
+   ```bash
+   cd backend
+   cp .env.example .env
+   # Edit .env with:
+   # ANTHROPIC_API_KEY=...
+   # MEM0_API_KEY=...
+   # SUPABASE_URL=...
+   # SUPABASE_KEY=...
+   # VOYAGE_API_KEY=...  (optional, falls back to OpenAI)
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -e ".[dev]"
+   ```
+
+3. **Apply database migrations** via the Supabase dashboard or CLI. Migrations are in `backend/supabase/migrations/` (001–014, numbered).
+
+4. **Start the MCP server:**
+   ```bash
+   python -m second_brain.mcp_server
+   ```
+
+   The server exposes all 13 agents as MCP tools that Claude Code can call directly. Once running, use the `brain` CLI:
+
+   ```bash
+   brain --help
+   brain health    # Check system health
+   brain migrate   # Run data migration
+   ```
+
 ### What Happens Next?
 
-Each feature gets its own PIV loop. Small loops, built completely before moving on. Plan, implement, validate, iterate — then start the next feature. The system compounds: lessons from each loop feed into `memory.md`, informing future plans.
+Each feature gets its own PIV loop. Small loops, built completely before moving on. Plan, implement, validate, iterate — then start the next feature. The system compounds: lessons from each loop feed into `memory.md`, informing future plans. When the backend is running, recalled memories come from persistent semantic storage rather than a flat file.
 
 ### First Time?
 Start with `/prime` to load context, then try `/planning` on a small feature. Read `reference/file-structure.md` for a full map of everything included.
@@ -434,8 +589,9 @@ Fork or clone this repo, then build your application inside it. All slash comman
 ### Option B: Copy Into an Existing Project
 ```bash
 cp -r sections/ reference/ templates/ requests/ your-project/
-cp CLAUDE.md AGENTS.md your-project/
+cp CLAUDE.md your-project/
 cp -r .claude/ your-project/
+cp -r agents/ commands/ skills/ your-project/
 cp templates/MEMORY-TEMPLATE.md your-project/memory.md
 ```
 
@@ -615,53 +771,103 @@ See `reference/archon-workflow.md` for setup instructions.
 ## Project Structure
 
 ```
-My-Coding-System/
+root/
 ├── CLAUDE.md                          # Auto-loaded rules (~2K tokens)
-├── AGENTS.md                          # Agent guidance for AI assistants
-├── LICENSE                            # MIT License
-├── .gitignore                         # Protects secrets, memory, plans
+├── README.md
 ├── memory.md                          # Cross-session memory (gitignored)
+├── settings.json                      # Session hooks (compact recovery)
+├── .gitignore
 │
-├── sections/                          # Core methodology (6 files, auto-loaded)
-│   ├── 01_core_principles.md          #   YAGNI, KISS, DRY, ABP
-│   ├── 02_piv_loop.md                 #   Plan-Implement-Validate cycle
-│   ├── 03_context_engineering.md      #   4 pillars of context
-│   ├── 04_git_save_points.md          #   Commit strategy
-│   ├── 05_decision_framework.md       #   Autonomy vs. ask
-│   └── 06_archon_workflow.md          #   Task management integration
+├── backend/                           # Second Brain Python application
+│   ├── src/second_brain/
+│   │   ├── mcp_server.py              # FastMCP server (@server.tool() functions)
+│   │   ├── service_mcp.py             # Service bridge (supplemental routing)
+│   │   ├── deps.py                    # BrainDeps dataclass + create_deps()
+│   │   ├── config.py                  # BrainConfig (Pydantic Settings)
+│   │   ├── schemas.py                 # All Pydantic output models
+│   │   ├── models.py                  # AI model selection logic
+│   │   ├── auth.py                    # Authentication helpers
+│   │   ├── migrate.py                 # Data migration utilities
+│   │   ├── cli.py                     # Click CLI ("brain" command)
+│   │   ├── agents/                    # 13 Pydantic AI agents
+│   │   │   ├── recall.py
+│   │   │   ├── ask.py
+│   │   │   ├── learn.py
+│   │   │   ├── create.py
+│   │   │   ├── review.py
+│   │   │   ├── chief_of_staff.py      # Routing orchestrator
+│   │   │   ├── coach.py
+│   │   │   ├── pmo.py
+│   │   │   ├── email_agent.py
+│   │   │   ├── specialist.py
+│   │   │   ├── clarity.py
+│   │   │   ├── synthesizer.py
+│   │   │   ├── template_builder.py
+│   │   │   └── utils.py               # Shared: tool_error(), run_pipeline()
+│   │   └── services/                  # External service wrappers
+│   │       ├── memory.py              # Mem0 semantic memory
+│   │       ├── storage.py             # Supabase CRUD + ContentTypeRegistry
+│   │       ├── embeddings.py          # Voyage AI / OpenAI embeddings
+│   │       ├── voyage.py              # Voyage AI reranking
+│   │       ├── graphiti.py            # Knowledge graph (optional)
+│   │       ├── health.py              # Brain metrics + growth milestones
+│   │       ├── retry.py               # Tenacity retry helpers
+│   │       ├── search_result.py       # Search result data structures
+│   │       └── abstract.py            # Abstract base classes
+│   ├── supabase/migrations/           # 14 SQL migrations (001–014)
+│   ├── tests/                         # 781 tests (one file per module)
+│   ├── scripts/                       # Utility scripts
+│   ├── .env.example                   # Documented env var template
+│   └── pyproject.toml                 # Dependencies + pytest config
+│
+├── sections/                          # Core methodology (6 files, auto-loaded via CLAUDE.md)
+│   ├── 01_core_principles.md
+│   ├── 02_piv_loop.md
+│   ├── 03_context_engineering.md
+│   ├── 04_git_save_points.md
+│   ├── 05_decision_framework.md
+│   └── 06_tech_stack.md
 │
 ├── reference/                         # Deep guides (10 files, on-demand)
 │   ├── system-foundations.md
 │   ├── piv-loop-practice.md
-│   ├── ...8 more guides...
+│   ├── implementation-discipline.md
+│   ├── validation-discipline.md
+│   ├── global-rules-optimization.md
+│   ├── layer1-guide.md
+│   ├── file-structure.md
+│   ├── subagents-deep-dive.md
+│   ├── command-design-framework.md
+│   └── archon-workflow.md
 │
 ├── templates/                         # Reusable templates (8 files)
 │   ├── STRUCTURED-PLAN-TEMPLATE.md
+│   ├── SUB-PLAN-TEMPLATE.md
+│   ├── PLAN-OVERVIEW-TEMPLATE.md
 │   ├── PRD-TEMPLATE.md
+│   ├── VIBE-PLANNING-GUIDE.md
 │   ├── AGENT-TEMPLATE.md
-│   └── ...5 more templates...
+│   ├── COMMAND-TEMPLATE.md
+│   └── MEMORY-TEMPLATE.md
 │
 ├── requests/                          # Feature plans (gitignored)
 │
-├── .claude/
-│   ├── commands/                      # Slash commands (15 commands)
-│   │   ├── prime.md
-│   │   ├── planning.md
-│   │   ├── execute.md
-│   │   ├── commit.md
-│   │   └── ...11 more commands...
-│   ├── agents/                        # Custom subagents (12 agents)
-│   │   ├── research-codebase.md
-│   │   ├── code-review-security.md
-│   │   ├── specialist-devops.md
-│   │   └── ...9 more agents...
-│   └── skills/                        # Cloud skills (1 skill)
-│       └── planning-methodology/
+├── agents/                            # Subagent definitions (12 agents)
+├── commands/                          # Slash command definitions (15 commands)
+├── skills/                            # Skills (1 skill)
+│
+└── .claude/
+    ├── agents/                        # Same agents (also accessible here)
+    ├── commands/                      # Same commands (also accessible here)
+    ├── skills/                        # Same skills (also accessible here)
+    └── settings.json                  # Session hooks (compact recovery)
 ```
 
 ---
 
 ## By the Numbers
+
+### Methodology Layer
 
 | Component | Count |
 |-----------|-------|
@@ -671,9 +877,18 @@ My-Coding-System/
 | Slash commands | 15 |
 | Subagents | 12 |
 | Cloud skills | 1 |
-| **Total system files** | **~52** |
 | Auto-loaded context cost | ~2K tokens |
 | Typical session context | <10K tokens |
+
+### Second Brain Backend
+
+| Component | Count |
+|-----------|-------|
+| Pydantic AI agents | 13 |
+| Service layer modules | 9 |
+| Database migrations | 14 |
+| Test count | 781 |
+| Python version | 3.11+ |
 
 ---
 
