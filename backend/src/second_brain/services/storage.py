@@ -20,6 +20,7 @@ class StorageService:
 
     def __init__(self, config: BrainConfig):
         self.config = config
+        self.user_id = config.brain_user_id
         self._client: Client = create_client(
             config.supabase_url,
             config.supabase_key,
@@ -32,6 +33,7 @@ class StorageService:
     ) -> list[dict]:
         try:
             query = self._client.table("patterns").select("*")
+            query = query.eq("user_id", self.user_id)
             if topic:
                 query = query.eq("topic", topic)
             if confidence:
@@ -59,7 +61,8 @@ class StorageService:
 
     async def upsert_pattern(self, pattern: dict) -> dict:
         try:
-            query = self._client.table("patterns").upsert(pattern)
+            data = {**pattern, "user_id": self.user_id}
+            query = self._client.table("patterns").upsert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -70,7 +73,8 @@ class StorageService:
     async def insert_pattern(self, pattern: dict) -> dict:
         """Insert a new pattern. Raises on duplicate name (DB UNIQUE constraint)."""
         try:
-            query = self._client.table("patterns").insert(pattern)
+            data = {**pattern, "user_id": self.user_id}
+            query = self._client.table("patterns").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -84,6 +88,7 @@ class StorageService:
             query = (
                 self._client.table("patterns")
                 .select("*")
+                .eq("user_id", self.user_id)
                 .ilike("name", name)
                 .limit(1)
             )
@@ -107,6 +112,7 @@ class StorageService:
             result = await asyncio.to_thread(
                 self._client.table("patterns")
                 .select("*")
+                .eq("user_id", self.user_id)
                 .eq("id", pattern_id)
                 .execute
             )
@@ -146,7 +152,12 @@ class StorageService:
     async def delete_pattern(self, pattern_id: str) -> bool:
         """Delete a pattern by ID."""
         try:
-            query = self._client.table("patterns").delete().eq("id", pattern_id)
+            query = (
+                self._client.table("patterns")
+                .delete()
+                .eq("id", pattern_id)
+                .eq("user_id", self.user_id)
+            )
             result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
@@ -158,7 +169,8 @@ class StorageService:
 
     async def add_experience(self, experience: dict) -> dict:
         try:
-            query = self._client.table("experiences").insert(experience)
+            data = {**experience, "user_id": self.user_id}
+            query = self._client.table("experiences").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -171,6 +183,7 @@ class StorageService:
     ) -> list[dict]:
         try:
             query = self._client.table("experiences").select("*")
+            query = query.eq("user_id", self.user_id)
             if category:
                 query = query.eq("category", category)
             query = query.order("created_at", desc=True).limit(limit)
@@ -184,7 +197,12 @@ class StorageService:
     async def delete_experience(self, experience_id: str) -> bool:
         """Delete an experience by ID."""
         try:
-            query = self._client.table("experiences").delete().eq("id", experience_id)
+            query = (
+                self._client.table("experiences")
+                .delete()
+                .eq("id", experience_id)
+                .eq("user_id", self.user_id)
+            )
             result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
@@ -205,6 +223,7 @@ class StorageService:
             result = await asyncio.to_thread(
                 self._client.table("experiences")
                 .select("*")
+                .eq("user_id", self.user_id)
                 .eq("id", experience_id)
                 .execute
             )
@@ -218,7 +237,8 @@ class StorageService:
 
     async def add_health_snapshot(self, snapshot: dict) -> dict:
         try:
-            query = self._client.table("brain_health").insert(snapshot)
+            data = {**snapshot, "user_id": self.user_id}
+            query = self._client.table("brain_health").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -231,6 +251,7 @@ class StorageService:
             query = (
                 self._client.table("brain_health")
                 .select("*")
+                .eq("user_id", self.user_id)
                 .order("date", desc=True)
                 .limit(limit)
             )
@@ -246,7 +267,8 @@ class StorageService:
     async def add_growth_event(self, event: dict) -> dict:
         """Record a brain growth event."""
         try:
-            query = self._client.table("growth_log").insert(event)
+            data = {**event, "user_id": self.user_id}
+            query = self._client.table("growth_log").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -263,6 +285,7 @@ class StorageService:
         try:
             cutoff = str(date.today() - timedelta(days=days))
             query = self._client.table("growth_log").select("*")
+            query = query.eq("user_id", self.user_id)
             if event_type:
                 query = query.eq("event_type", event_type)
             query = query.gte("event_date", cutoff).order("event_date", desc=True)
@@ -292,7 +315,8 @@ class StorageService:
     async def add_review_history(self, entry: dict) -> dict:
         """Record a review result for quality trending."""
         try:
-            query = self._client.table("review_history").insert(entry)
+            data = {**entry, "user_id": self.user_id}
+            query = self._client.table("review_history").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -308,6 +332,7 @@ class StorageService:
         """Get review history, optionally filtered by content type."""
         try:
             query = self._client.table("review_history").select("*")
+            query = query.eq("user_id", self.user_id)
             if content_type:
                 query = query.eq("content_type", content_type)
             query = query.order("review_date", desc=True).limit(limit)
@@ -323,7 +348,8 @@ class StorageService:
     async def add_confidence_transition(self, transition: dict) -> dict:
         """Record a confidence level change."""
         try:
-            query = self._client.table("confidence_history").insert(transition)
+            data = {**transition, "user_id": self.user_id}
+            query = self._client.table("confidence_history").insert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -339,6 +365,7 @@ class StorageService:
         """Get confidence transitions, optionally for a specific pattern."""
         try:
             query = self._client.table("confidence_history").select("*")
+            query = query.eq("user_id", self.user_id)
             if pattern_name:
                 query = query.eq("pattern_name", pattern_name)
             query = query.order("transition_date", desc=True).limit(limit)
@@ -356,6 +383,7 @@ class StorageService:
     ) -> list[dict]:
         try:
             query = self._client.table("memory_content").select("*")
+            query = query.eq("user_id", self.user_id)
             query = query.eq("category", category)
             if subcategory:
                 query = query.eq("subcategory", subcategory)
@@ -368,7 +396,8 @@ class StorageService:
 
     async def upsert_memory_content(self, content: dict) -> dict:
         try:
-            query = self._client.table("memory_content").upsert(content)
+            data = {**content, "user_id": self.user_id}
+            query = self._client.table("memory_content").upsert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -394,6 +423,7 @@ class StorageService:
                 .delete()
                 .eq("category", category)
                 .eq("subcategory", subcategory)
+                .eq("user_id", self.user_id)
                 .execute
             )
             return len(result.data) > 0
@@ -411,6 +441,7 @@ class StorageService:
     ) -> list[dict]:
         try:
             query = self._client.table("examples").select("*")
+            query = query.eq("user_id", self.user_id)
             if content_type:
                 query = query.eq("content_type", content_type)
             query = query.order("created_at", desc=True)
@@ -423,7 +454,8 @@ class StorageService:
 
     async def upsert_example(self, example: dict) -> dict:
         try:
-            query = self._client.table("examples").upsert(example)
+            data = {**example, "user_id": self.user_id}
+            query = self._client.table("examples").upsert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -434,7 +466,12 @@ class StorageService:
     async def delete_example(self, example_id: str) -> bool:
         """Delete an example by ID."""
         try:
-            query = self._client.table("examples").delete().eq("id", example_id)
+            query = (
+                self._client.table("examples")
+                .delete()
+                .eq("id", example_id)
+                .eq("user_id", self.user_id)
+            )
             result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
@@ -449,6 +486,7 @@ class StorageService:
     ) -> list[dict]:
         try:
             query = self._client.table("knowledge_repo").select("*")
+            query = query.eq("user_id", self.user_id)
             if category:
                 query = query.eq("category", category)
             query = query.order("created_at", desc=True)
@@ -461,7 +499,8 @@ class StorageService:
 
     async def upsert_knowledge(self, knowledge: dict) -> dict:
         try:
-            query = self._client.table("knowledge_repo").upsert(knowledge)
+            data = {**knowledge, "user_id": self.user_id}
+            query = self._client.table("knowledge_repo").upsert(data)
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -472,7 +511,12 @@ class StorageService:
     async def delete_knowledge(self, knowledge_id: str) -> bool:
         """Delete a knowledge entry by ID."""
         try:
-            query = self._client.table("knowledge_repo").delete().eq("id", knowledge_id)
+            query = (
+                self._client.table("knowledge_repo")
+                .delete()
+                .eq("id", knowledge_id)
+                .eq("user_id", self.user_id)
+            )
             result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0
         except Exception as e:
@@ -573,6 +617,7 @@ class StorageService:
                         "match_table": table,
                         "match_count": limit,
                         "match_threshold": similarity_threshold,
+                        "p_user_id": self.user_id,
                     }
                 ).execute
             )
@@ -587,8 +632,9 @@ class StorageService:
     async def create_project(self, project: dict) -> dict:
         """Create a new project with lifecycle tracking."""
         try:
+            data = {**project, "user_id": self.user_id}
             result = await asyncio.to_thread(
-                self._client.table("projects").insert(project).execute
+                self._client.table("projects").insert(data).execute
             )
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -602,6 +648,7 @@ class StorageService:
             result = await asyncio.to_thread(
                 self._client.table("projects")
                 .select("*, project_artifacts(*)")
+                .eq("user_id", self.user_id)
                 .eq("id", project_id)
                 .execute
             )
@@ -617,6 +664,7 @@ class StorageService:
         """List projects with optional filtering."""
         try:
             query = self._client.table("projects").select("*")
+            query = query.eq("user_id", self.user_id)
             if lifecycle_stage:
                 query = query.eq("lifecycle_stage", lifecycle_stage)
             if category:
@@ -644,6 +692,7 @@ class StorageService:
                 self._client.table("projects")
                 .update(update_data)
                 .eq("id", project_id)
+                .eq("user_id", self.user_id)
                 .execute
             )
             return result.data[0] if result.data else {}
@@ -667,6 +716,7 @@ class StorageService:
                 self._client.table("projects")
                 .update(fields)
                 .eq("id", project_id)
+                .eq("user_id", self.user_id)
                 .execute
             )
             return result.data[0] if result.data else None
@@ -689,6 +739,7 @@ class StorageService:
                 self._client.table("projects")
                 .delete()
                 .eq("id", project_id)
+                .eq("user_id", self.user_id)
                 .execute
             )
             return len(result.data) > 0

@@ -209,6 +209,12 @@ graph TD
 
 ---
 
+## Multi-User Support
+
+Each Second Brain instance is scoped to a single user via the `BRAIN_USER_ID` environment variable. All reads and writes in `storage.py` are filtered by this value, so multiple instances can share one Supabase deployment without data leaking between users. Migration `015_user_id_isolation.sql` adds a `user_id` column and performance index to every relevant table, and updates the `vector_search` RPC to enforce the same boundary. Existing single-user setups work unchanged — the default value is `ryan`, so no configuration change is required unless you are adding a second user.
+
+---
+
 ## Data Flow
 
 ### Learn → Store → Recall
@@ -305,6 +311,7 @@ SUPABASE_URL=...            # Required — structured storage + vector search
 SUPABASE_KEY=...            # Required — Supabase service role key
 VOYAGE_API_KEY=...          # Optional — falls back to OpenAI embeddings
 GRAPHITI_ENABLED=false      # Set true to enable knowledge graph (needs FalkorDB)
+BRAIN_USER_ID=ryan          # Optional — isolates data per user (default: ryan)
 ```
 
 ### 2. Install
@@ -324,23 +331,24 @@ pip install -e ".[dev,ollama]"        # + Ollama local model support
 
 ### 3. Database Migrations
 
-Apply migrations in order via the Supabase dashboard or CLI. All 14 migrations are in `backend/supabase/migrations/`, numbered `001` through `014`.
+Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations are in `backend/supabase/migrations/`, numbered `001` through `015`.
 
 ```
-001_initial_schema.sql         — Core tables
-002_examples_knowledge.sql     — Examples and knowledge tables
-003_pattern_constraints.sql    — Pattern uniqueness constraints
-004_content_types.sql          — Content type registry
-005_growth_tracking_tables.sql — Growth and milestone tracking
-006_rls_policies.sql           — Row Level Security policies
-007_foreign_keys_indexes.sql   — Foreign keys and indexes
-008_data_constraints.sql       — Data validation constraints
-009_reinforce_pattern_rpc.sql  — Pattern reinforcement RPC
-010_vector_search_rpc.sql      — pgvector similarity search RPC
-011_voyage_dimensions.sql      — Voyage AI embedding dimensions
-012_projects_lifecycle.sql     — Project lifecycle tables
-013_quality_trending.sql       — Quality score trending
+001_initial_schema.sql            — Core tables
+002_examples_knowledge.sql        — Examples and knowledge tables
+003_pattern_constraints.sql       — Pattern uniqueness constraints
+004_content_types.sql             — Content type registry
+005_growth_tracking_tables.sql    — Growth and milestone tracking
+006_rls_policies.sql              — Row Level Security policies
+007_foreign_keys_indexes.sql      — Foreign keys and indexes
+008_data_constraints.sql          — Data validation constraints
+009_reinforce_pattern_rpc.sql     — Pattern reinforcement RPC
+010_vector_search_rpc.sql         — pgvector similarity search RPC
+011_voyage_dimensions.sql         — Voyage AI embedding dimensions
+012_projects_lifecycle.sql        — Project lifecycle tables
+013_quality_trending.sql          — Quality score trending
 014_content_type_instructions.sql — Content type prompt instructions
+015_user_id_isolation.sql         — Multi-user data isolation (user_id column + indexes)
 ```
 
 ### 4. Start the MCP Server
@@ -456,8 +464,8 @@ backend/
 │       ├── retry.py           # Tenacity retry helpers
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # Abstract base classes
-├── supabase/migrations/       # 14 SQL migrations (001–014)
-├── tests/                     # ~843 tests (one file per module)
+├── supabase/migrations/       # 15 SQL migrations (001–015)
+├── tests/                     # ~856 tests (one file per module)
 ├── scripts/                   # Utility scripts
 ├── .env.example               # Documented env var template
 └── pyproject.toml             # Dependencies + pytest config
@@ -469,7 +477,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~843)
+pytest                              # All tests (~856)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -487,9 +495,9 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Pydantic AI agents | 13 |
 | MCP tools | 38 |
 | Service layer modules | 9 |
-| Database migrations | 14 |
+| Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~843 |
+| Tests | ~856 |
 | Python version | 3.11+ |
 
 ---

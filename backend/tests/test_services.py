@@ -234,6 +234,7 @@ class TestStorageService:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[{"name": "Test Pattern", "confidence": "HIGH"}]
@@ -261,8 +262,8 @@ class TestStorageService:
         service = StorageService(mock_config)
         await service.get_patterns(topic="Messaging", confidence="HIGH")
 
-        # eq() called twice: once for topic, once for confidence
-        assert mock_table.eq.call_count == 2
+        # eq() called three times: once for user_id, once for topic, once for confidence
+        assert mock_table.eq.call_count == 3
 
     @patch("second_brain.services.storage.create_client")
     async def test_upsert_pattern(self, mock_create, mock_config):
@@ -301,6 +302,7 @@ class TestStorageService:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -322,6 +324,7 @@ class TestExamplesStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[{"content_type": "linkedin", "title": "Hooks That Work", "content": "..."}]
@@ -349,7 +352,8 @@ class TestExamplesStorage:
         service = StorageService(mock_config)
         await service.get_examples(content_type="email")
 
-        mock_table.eq.assert_called_once_with("content_type", "email")
+        mock_table.eq.assert_any_call("content_type", "email")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
     @patch("second_brain.services.storage.create_client")
     async def test_upsert_example(self, mock_create, mock_config):
@@ -374,6 +378,7 @@ class TestKnowledgeStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[{"category": "frameworks", "title": "Value Ladder", "content": "..."}]
@@ -401,7 +406,8 @@ class TestKnowledgeStorage:
         service = StorageService(mock_config)
         await service.get_knowledge(category="frameworks")
 
-        mock_table.eq.assert_called_once_with("category", "frameworks")
+        mock_table.eq.assert_any_call("category", "frameworks")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
 
 class TestContentTypeStorage:
@@ -516,6 +522,7 @@ class TestContentTypeStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(data=[
             {"name": "Hook First", "applicable_content_types": ["linkedin", "instagram"]},
@@ -829,6 +836,7 @@ class TestStorageReinforcement:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.ilike.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -849,6 +857,7 @@ class TestStorageReinforcement:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.ilike.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(data=[])
@@ -967,6 +976,7 @@ class TestStorageReinforcement:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.ilike.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -1027,6 +1037,7 @@ class TestGrowthLogStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.gte.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -1059,13 +1070,15 @@ class TestGrowthLogStorage:
         service = StorageService(mock_config)
         await service.get_growth_events(event_type="pattern_created", days=30)
 
-        mock_table.eq.assert_called_once_with("event_type", "pattern_created")
+        mock_table.eq.assert_any_call("event_type", "pattern_created")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
     @patch("second_brain.services.storage.create_client")
     async def test_get_growth_event_counts(self, mock_create, mock_config):
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.gte.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -1111,6 +1124,7 @@ class TestReviewHistoryStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -1142,7 +1156,8 @@ class TestReviewHistoryStorage:
         service = StorageService(mock_config)
         await service.get_review_history(content_type="email")
 
-        mock_table.eq.assert_called_once_with("content_type", "email")
+        mock_table.eq.assert_any_call("content_type", "email")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
 
 class TestConfidenceHistoryStorage:
@@ -1175,6 +1190,7 @@ class TestConfidenceHistoryStorage:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -1206,7 +1222,8 @@ class TestConfidenceHistoryStorage:
         service = StorageService(mock_config)
         await service.get_confidence_history(pattern_name="Test Pattern")
 
-        mock_table.eq.assert_called_once_with("pattern_name", "Test Pattern")
+        mock_table.eq.assert_any_call("pattern_name", "Test Pattern")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
 
 class TestEnhancedHealthService:
@@ -1371,6 +1388,7 @@ class TestStorageServiceErrorHandling:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.side_effect = Exception("DB down")
         mock_client.table.return_value = mock_table
         mock_create.return_value = mock_client
@@ -1405,6 +1423,7 @@ class TestStorageServiceErrorHandling:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.ilike.side_effect = Exception("Query error")
         mock_client.table.return_value = mock_table
         mock_create.return_value = mock_client
@@ -1645,7 +1664,8 @@ class TestStorageServiceNewMethods:
 
         assert result["name"] == "New Name"
         mock_table.update.assert_called_once_with({"name": "New Name"})
-        mock_table.eq.assert_called_once_with("id", "proj-1")
+        mock_table.eq.assert_any_call("id", "proj-1")
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
 
     @patch("second_brain.services.storage.create_client")
     async def test_update_project_not_found(self, mock_create, mock_config):
@@ -1780,7 +1800,7 @@ class TestStorageServiceNewMethods:
         service = StorageService(mock_config)
         deleted = await service.delete_memory_content("voice", "tone")
         assert deleted is True
-        assert mock_table.eq.call_count == 2  # once for category, once for subcategory
+        assert mock_table.eq.call_count == 3  # once for category, once for subcategory, once for user_id
 
 
 class TestMemoryServiceNewMethods:
@@ -1814,3 +1834,95 @@ class TestMemoryServiceNewMethods:
         result = await mock_memory.search_by_category("voice", query="brand")
         assert len(result.memories) == 1
         assert result.memories[0]["memory"] == "voice pattern"
+
+
+class TestStorageServiceUserIsolation:
+    """Verify user_id is always applied to queries and inserts."""
+
+    def test_user_id_set_from_config(self, mock_config):
+        """StorageService.user_id is set from config.brain_user_id at init."""
+        with patch("second_brain.services.storage.create_client"):
+            service = StorageService(mock_config)
+        assert service.user_id == mock_config.brain_user_id
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_patterns_filters_by_user_id(self, mock_create, mock_config):
+        """get_patterns always applies user_id eq filter."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_patterns()
+
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_add_experience_injects_user_id(self, mock_create, mock_config):
+        """add_experience injects user_id into the insert payload."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "exp-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.add_experience({"task": "coding", "outcome": "success"})
+
+        call_data = mock_table.insert.call_args[0][0]
+        assert call_data["user_id"] == mock_config.brain_user_id
+        assert call_data["task"] == "coding"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_pattern_filters_by_user_id(self, mock_create, mock_config):
+        """delete_pattern applies user_id eq filter to prevent cross-user deletes."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "pat-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_pattern("pat-1")
+
+        assert result is True
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_vector_search_passes_user_id_to_rpc(self, mock_create, mock_config):
+        """vector_search passes p_user_id to the RPC function."""
+        mock_client = MagicMock()
+        mock_rpc = MagicMock()
+        mock_rpc.execute.return_value = MagicMock(data=[])
+        mock_client.rpc.return_value = mock_rpc
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.vector_search(embedding=[0.1] * 1024, table="patterns")
+
+        rpc_call_params = mock_client.rpc.call_args[0][1]
+        assert rpc_call_params["p_user_id"] == mock_config.brain_user_id
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_create_project_injects_user_id(self, mock_create, mock_config):
+        """create_project injects user_id into the insert payload."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.insert.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "proj-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.create_project({"name": "Test Project", "category": "content"})
+
+        call_data = mock_table.insert.call_args[0][0]
+        assert call_data["user_id"] == mock_config.brain_user_id

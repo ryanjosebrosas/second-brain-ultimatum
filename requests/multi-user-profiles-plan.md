@@ -1038,17 +1038,17 @@ ORDER BY tablename;
 
 ### Implementation (verify during execution)
 
-- [ ] Migration 015 created with all 10 ALTER TABLE statements and 10 indexes
-- [ ] `vector_search` SQL function updated with `p_user_id` parameter and WHERE filter
-- [ ] `StorageService.__init__` sets `self.user_id = config.brain_user_id`
-- [ ] All 14 SELECT methods on user-scoped tables have unconditional `.eq("user_id", self.user_id)` filter
-- [ ] All 11 INSERT/UPSERT methods inject `user_id` via `{**data, "user_id": self.user_id}`
-- [ ] All 8 DELETE/UPDATE methods have `.eq("user_id", self.user_id)` filter
-- [ ] `vector_search` method passes `"p_user_id": self.user_id` in RPC params
-- [ ] `content_types` table and its methods are unchanged (shared catalog)
-- [ ] `project_artifacts` table and its methods are unchanged (FK-isolated via projects)
-- [ ] All new tests pass: `pytest tests/test_services.py::TestStorageServiceUserIsolation -v`
-- [ ] Full test suite passes with zero regressions: `pytest -q`
+- [x] Migration 015 created with all 10 ALTER TABLE statements and 10 indexes
+- [x] `vector_search` SQL function updated with `p_user_id` parameter and WHERE filter
+- [x] `StorageService.__init__` sets `self.user_id = config.brain_user_id`
+- [x] All 14 SELECT methods on user-scoped tables have unconditional `.eq("user_id", self.user_id)` filter
+- [x] All 11 INSERT/UPSERT methods inject `user_id` via `{**data, "user_id": self.user_id}`
+- [x] All 8 DELETE/UPDATE methods have `.eq("user_id", self.user_id)` filter
+- [x] `vector_search` method passes `"p_user_id": self.user_id` in RPC params
+- [x] `content_types` table and its methods are unchanged (shared catalog)
+- [x] `project_artifacts` table and its methods are unchanged (FK-isolated via projects)
+- [x] All new tests pass: `pytest tests/test_services.py::TestStorageServiceUserIsolation -v`
+- [x] Full test suite passes with zero regressions: `pytest -q`
 
 ### Runtime (verify after testing/deployment)
 
@@ -1062,14 +1062,14 @@ ORDER BY tablename;
 
 ## COMPLETION CHECKLIST
 
-- [ ] All tasks completed in order
+- [x] All tasks completed in order
 - [ ] Migration SQL applied to Supabase before running Python tests
-- [ ] Each task validation passed
-- [ ] All validation commands executed successfully
-- [ ] Full test suite passes (843+ tests, zero regressions)
-- [ ] No linting or import errors
+- [x] Each task validation passed
+- [x] All validation commands executed successfully
+- [x] Full test suite passes (843+ tests, zero regressions)
+- [x] No linting or import errors
 - [ ] Manual testing confirms recall/search returns user-scoped data
-- [ ] Acceptance criteria all met
+- [x] Acceptance criteria all met
 
 ---
 

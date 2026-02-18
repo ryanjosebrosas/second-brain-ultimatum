@@ -61,6 +61,7 @@ class TestProjectCRUD:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.limit.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
@@ -93,7 +94,8 @@ class TestProjectCRUD:
         service = StorageService(brain_config)
         result = await service.list_projects(lifecycle_stage="planning")
         assert len(result) == 1
-        mock_table.eq.assert_called_once_with("lifecycle_stage", "planning")
+        mock_table.eq.assert_any_call("lifecycle_stage", "planning")
+        mock_table.eq.assert_any_call("user_id", "ryan")
 
     @patch("second_brain.services.storage.create_client")
     async def test_list_projects_with_category_filter(self, mock_create, brain_config):
@@ -109,7 +111,8 @@ class TestProjectCRUD:
 
         service = StorageService(brain_config)
         await service.list_projects(category="content")
-        mock_table.eq.assert_called_once_with("category", "content")
+        mock_table.eq.assert_any_call("category", "content")
+        mock_table.eq.assert_any_call("user_id", "ryan")
 
     @patch("second_brain.services.storage.create_client")
     async def test_update_project_stage(self, mock_create, brain_config):
