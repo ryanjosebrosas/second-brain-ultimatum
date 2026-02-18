@@ -291,6 +291,67 @@ class MemoryService:
             logger.warning("Mem0 delete failed: %s", type(e).__name__)
             logger.debug("Mem0 delete error detail: %s", e)
 
+    async def get_by_id(self, memory_id: str) -> dict | None:
+        """Get a single memory by ID. Fetches all and filters locally (Mem0 limitation).
+
+        Args:
+            memory_id: The Mem0 memory UUID
+
+        Returns:
+            Memory dict or None if not found.
+        """
+        try:
+            all_memories = await self.get_all()
+            for mem in all_memories:
+                if mem.get("id") == memory_id:
+                    return mem
+            return None
+        except Exception as e:
+            logger.warning("Mem0 get_by_id failed: %s", type(e).__name__)
+            logger.debug("Mem0 error detail: %s", e)
+            return None
+
+    async def delete_all(self) -> int:
+        """Delete all memories. Use with caution — irreversible.
+
+        Returns:
+            Count of memories deleted.
+        """
+        try:
+            all_memories = await self.get_all()
+            count = 0
+            for mem in all_memories:
+                if mem_id := mem.get("id"):
+                    await self.delete(mem_id)
+                    count += 1
+            return count
+        except Exception as e:
+            logger.warning("Mem0 delete_all failed: %s", type(e).__name__)
+            logger.debug("Mem0 error detail: %s", e)
+            return 0
+
+    async def search_by_category(
+        self,
+        category: str,
+        query: str = "",
+        limit: int = 10,
+    ) -> SearchResult:
+        """Convenience wrapper — search memories filtered by category metadata.
+
+        Args:
+            category: Category to filter by (e.g., voice, content, clients)
+            query: Natural language search query (defaults to category name if empty)
+            limit: Maximum results
+
+        Returns:
+            SearchResult with matches in this category.
+        """
+        return await self.search_with_filters(
+            query=query or category,
+            metadata_filters={"category": category},
+            limit=limit,
+        )
+
     async def close(self) -> None:
         """Release Mem0 client resources."""
         if hasattr(self._client, "close"):

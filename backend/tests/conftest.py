@@ -65,6 +65,10 @@ def mock_memory():
     memory.update_memory = AsyncMock(return_value=None)
     memory.get_all = AsyncMock(return_value=[])
     memory.get_memory_count = AsyncMock(return_value=0)
+    memory.delete = AsyncMock(return_value=None)
+    memory.get_by_id = AsyncMock(return_value=None)
+    memory.delete_all = AsyncMock(return_value=0)
+    memory.search_by_category = AsyncMock(return_value=SearchResult(memories=[], relations=[]))
     return memory
 
 
@@ -164,6 +168,38 @@ def mock_storage():
     })
     storage.delete_content_type = AsyncMock(return_value=True)
     storage.get_patterns_for_content_type = AsyncMock(return_value=[])
+    # Project lifecycle
+    storage.list_projects = AsyncMock(return_value=[])
+    storage.get_project = AsyncMock(return_value=None)
+    storage.create_project = AsyncMock(
+        return_value={"id": "proj-1", "name": "Test Project", "lifecycle_stage": "planning", "category": "content"}
+    )
+    storage.update_project = AsyncMock(
+        return_value={"id": "proj-1", "name": "Updated Project", "lifecycle_stage": "planning"}
+    )
+    storage.delete_project = AsyncMock(return_value=True)
+    storage.update_project_stage = AsyncMock(
+        return_value={"id": "proj-1", "name": "Test Project", "lifecycle_stage": "executing"}
+    )
+    storage.add_project_artifact = AsyncMock(
+        return_value={"id": "art-1", "project_id": "proj-1", "artifact_type": "plan"}
+    )
+    storage.get_project_artifacts = AsyncMock(return_value=[])
+    storage.delete_project_artifact = AsyncMock(return_value=True)
+    # Experiences
+    storage.get_experience_by_id = AsyncMock(return_value=None)
+    # Patterns
+    storage.get_pattern_by_id = AsyncMock(return_value=None)
+    storage.get_pattern_registry = AsyncMock(return_value=[])
+    storage.downgrade_pattern_confidence = AsyncMock(return_value=True)
+    storage.update_pattern_failures = AsyncMock(return_value=True)
+    # Memory content
+    storage.delete_memory_content = AsyncMock(return_value=True)
+    # Quality & setup
+    storage.get_quality_trending = AsyncMock(return_value={})
+    storage.get_setup_status = AsyncMock(return_value={})
+    # Vector search
+    storage.vector_search = AsyncMock(return_value=[])
     return storage
 
 

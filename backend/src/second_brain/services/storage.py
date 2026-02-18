@@ -94,6 +94,28 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return None
 
+    async def get_pattern_by_id(self, pattern_id: str) -> dict | None:
+        """Fetch a single pattern by UUID (distinct from get_pattern_by_name).
+
+        Args:
+            pattern_id: UUID of the pattern
+
+        Returns:
+            Pattern row or None if not found.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("patterns")
+                .select("*")
+                .eq("id", pattern_id)
+                .execute
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_pattern_by_id failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
+
     async def reinforce_pattern(
         self, pattern_id: str, new_evidence: list[str] | None = None
     ) -> dict:
@@ -169,6 +191,28 @@ class StorageService:
             logger.warning("Supabase delete_experience failed: %s", type(e).__name__)
             logger.debug("Supabase error detail: %s", e)
             return False
+
+    async def get_experience_by_id(self, experience_id: str) -> dict | None:
+        """Fetch a single experience by UUID.
+
+        Args:
+            experience_id: UUID of the experience
+
+        Returns:
+            Experience row or None if not found.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("experiences")
+                .select("*")
+                .eq("id", experience_id)
+                .execute
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_experience_by_id failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
 
     # --- Brain Health ---
 
@@ -331,6 +375,34 @@ class StorageService:
             logger.warning("Supabase upsert_memory_content failed: %s", type(e).__name__)
             logger.debug("Supabase error detail: %s", e)
             return {}
+
+    async def delete_memory_content(
+        self, category: str, subcategory: str = "general"
+    ) -> bool:
+        """Delete a memory content row by category and subcategory.
+
+        Args:
+            category: Category name (e.g., voice, audience, product)
+            subcategory: Sub-category (default: "general")
+
+        Returns:
+            True if found and deleted, False otherwise.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("memory_content")
+                .delete()
+                .eq("category", category)
+                .eq("subcategory", subcategory)
+                .execute
+            )
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning(
+                "Supabase delete_memory_content failed: %s", type(e).__name__
+            )
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Examples ---
 
@@ -580,6 +652,51 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return {}
 
+    async def update_project(self, project_id: str, fields: dict) -> dict | None:
+        """Update arbitrary project fields by ID.
+
+        Args:
+            project_id: UUID of the project to update
+            fields: Dict of field names to new values (e.g., {"name": "New Name"})
+
+        Returns:
+            Updated project row or None if not found.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("projects")
+                .update(fields)
+                .eq("id", project_id)
+                .execute
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.warning("Supabase update_project failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
+
+    async def delete_project(self, project_id: str) -> bool:
+        """Delete a project by ID. Associated artifacts are cascade-deleted by the DB.
+
+        Args:
+            project_id: UUID of the project to delete
+
+        Returns:
+            True if project was found and deleted, False otherwise.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("projects")
+                .delete()
+                .eq("id", project_id)
+                .execute
+            )
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_project failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
+
     async def add_project_artifact(self, artifact: dict) -> dict:
         """Add or update an artifact for a project (upsert by project_id + artifact_type)."""
         try:
@@ -609,6 +726,28 @@ class StorageService:
             logger.warning("Supabase get_project_artifacts failed: %s", type(e).__name__)
             logger.debug("Supabase error detail: %s", e)
             return []
+
+    async def delete_project_artifact(self, artifact_id: str) -> bool:
+        """Delete a single project artifact by ID.
+
+        Args:
+            artifact_id: UUID of the artifact to delete
+
+        Returns:
+            True if found and deleted, False otherwise.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("project_artifacts")
+                .delete()
+                .eq("id", artifact_id)
+                .execute
+            )
+            return len(result.data) > 0
+        except Exception as e:
+            logger.warning("Supabase delete_project_artifact failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
 
     # --- Pattern Registry & Downgrade ---
 
