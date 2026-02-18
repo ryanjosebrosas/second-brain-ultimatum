@@ -4,12 +4,13 @@ import asyncio
 import logging
 
 from second_brain.config import BrainConfig
+from second_brain.services.abstract import MemoryServiceBase
 from second_brain.services.search_result import SearchResult
 
 logger = logging.getLogger(__name__)
 
 
-class MemoryService:
+class MemoryService(MemoryServiceBase):
     """Semantic memory via Mem0 (cloud primary, local fallback)."""
 
     def __init__(self, config: BrainConfig):

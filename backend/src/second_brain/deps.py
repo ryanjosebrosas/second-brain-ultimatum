@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         AnalyticsServiceBase,
         CalendarServiceBase,
         EmailServiceBase,
+        MemoryServiceBase,
         TaskManagementServiceBase,
     )
     from second_brain.services.embeddings import EmbeddingService
@@ -25,7 +26,7 @@ class BrainDeps:
     """Dependencies injected into all Second Brain agents."""
 
     config: BrainConfig
-    memory_service: "MemoryService"
+    memory_service: "MemoryServiceBase"
     storage_service: "StorageService"
     graphiti_service: "GraphitiService | None" = None
     embedding_service: "EmbeddingService | None" = None

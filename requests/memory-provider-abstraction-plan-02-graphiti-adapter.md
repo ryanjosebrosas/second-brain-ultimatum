@@ -447,29 +447,29 @@ python -m pytest tests/test_services.py -q --tb=short 2>&1 | tail -5
 
 ## SUB-PLAN CHECKLIST
 
-- [ ] Task 1 completed: `GraphitiService.add_episode` has `group_id: str | None = None` param
-- [ ] Task 2 completed: `GraphitiService.search` has `group_id` param + `hasattr` check for `search_()`
-- [ ] Task 3 completed: `graphiti_memory.py` created with `GraphitiMemoryAdapter(MemoryServiceBase)`
-- [ ] Task 4 completed: verification commands pass
-- [ ] All 13 abstract methods implemented in adapter
-- [ ] All graceful-degradation methods return correct empty types
-- [ ] Existing `test_graphiti_service.py` + `test_graph.py` still pass (no regressions)
+- [x] Task 1 completed: `GraphitiService.add_episode` has `group_id: str | None = None` param
+- [x] Task 2 completed: `GraphitiService.search` has `group_id` param + `hasattr` check for `search_()`
+- [x] Task 3 completed: `graphiti_memory.py` created with `GraphitiMemoryAdapter(MemoryServiceBase)`
+- [x] Task 4 completed: verification commands pass
+- [x] All 13 abstract methods implemented in adapter
+- [x] All graceful-degradation methods return correct empty types
+- [x] Existing `test_graphiti_service.py` + `test_graph.py` still pass (no regressions)
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] `issubclass(GraphitiMemoryAdapter, MemoryServiceBase)` is `True`
-- [ ] `GraphitiMemoryAdapter.user_id` is set from `config.brain_user_id` in `__init__`
-- [ ] `GraphitiService.add_episode(content, group_id="x")` passes `group_id` to client
-- [ ] `GraphitiService.search(query, group_id="x")` uses `search_()` with `group_ids=["x"]` when available
-- [ ] `adapter.get_all()` returns `[]` (no crash, no exception)
-- [ ] `adapter.get_memory_count()` returns `0`
-- [ ] `adapter.get_by_id("x")` returns `None`
-- [ ] `adapter.delete_all()` returns `0`
-- [ ] `adapter.search("test")` returns a `SearchResult` instance
-- [ ] `adapter.search_with_filters("q", {"category": "pattern"})` passes without error
-- [ ] All existing graphiti tests still pass
+- [x] `issubclass(GraphitiMemoryAdapter, MemoryServiceBase)` is `True`
+- [x] `GraphitiMemoryAdapter.user_id` is set from `config.brain_user_id` in `__init__`
+- [x] `GraphitiService.add_episode(content, group_id="x")` passes `group_id` to client
+- [x] `GraphitiService.search(query, group_id="x")` uses `search_()` with `group_ids=["x"]` when available
+- [x] `adapter.get_all()` returns `[]` (no crash, no exception)
+- [x] `adapter.get_memory_count()` returns `0`
+- [x] `adapter.get_by_id("x")` returns `None`
+- [x] `adapter.delete_all()` returns `0`
+- [x] `adapter.search("test")` returns a `SearchResult` instance
+- [x] `adapter.search_with_filters("q", {"category": "pattern"})` passes without error
+- [x] All existing graphiti tests still pass
 
 ---
 

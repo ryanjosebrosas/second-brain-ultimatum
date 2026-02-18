@@ -393,24 +393,24 @@ python -m pytest tests/test_deps.py -q --tb=short 2>&1 | tail -5
 
 ## SUB-PLAN CHECKLIST
 
-- [ ] Task 1 completed: `memory_provider` field + validator in `config.py`
-- [ ] Task 2 completed: `MemoryServiceBase` + `StubMemoryService` in `abstract.py`
-- [ ] Task 3 completed: `MemoryService` inherits `MemoryServiceBase`
-- [ ] Task 4 completed: `BrainDeps.memory_service` typed as `"MemoryServiceBase"`
-- [ ] All validation commands pass
-- [ ] No regressions in `test_services.py`, `test_config.py`, `test_deps.py`
+- [x] Task 1 completed: `memory_provider` field + validator in `config.py`
+- [x] Task 2 completed: `MemoryServiceBase` + `StubMemoryService` in `abstract.py`
+- [x] Task 3 completed: `MemoryService` inherits `MemoryServiceBase`
+- [x] Task 4 completed: `BrainDeps.memory_service` typed as `"MemoryServiceBase"`
+- [x] All validation commands pass
+- [x] No regressions in `test_services.py`, `test_config.py`, `test_deps.py`
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] `BrainConfig().memory_provider == "mem0"` (default)
-- [ ] `BrainConfig(..., memory_provider="graphiti")` raises `ValueError` without Neo4j/FalkorDB creds
-- [ ] `BrainConfig(..., memory_provider="redis")` raises `ValueError` for unknown value
-- [ ] `issubclass(MemoryService, MemoryServiceBase)` is `True`
-- [ ] `StubMemoryService().search("x")` returns a `SearchResult` instance
-- [ ] `BrainDeps.memory_service` annotation is `"MemoryServiceBase"` (not `"MemoryService"`)
-- [ ] All 856 existing tests still pass
+- [x] `BrainConfig().memory_provider == "mem0"` (default)
+- [x] `BrainConfig(..., memory_provider="graphiti")` raises `ValueError` without Neo4j/FalkorDB creds
+- [x] `BrainConfig(..., memory_provider="redis")` raises `ValueError` for unknown value
+- [x] `issubclass(MemoryService, MemoryServiceBase)` is `True`
+- [x] `StubMemoryService().search("x")` returns a `SearchResult` instance
+- [x] `BrainDeps.memory_service` annotation is `"MemoryServiceBase"` (not `"MemoryService"`)
+- [x] All 856 existing tests still pass
 
 ---
 

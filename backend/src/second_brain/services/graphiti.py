@@ -129,7 +129,10 @@ class GraphitiService:
         return llm_client, embedder, cross_encoder
 
     async def add_episode(
-        self, content: str, metadata: dict | None = None
+        self,
+        content: str,
+        metadata: dict | None = None,
+        group_id: str | None = None,
     ) -> None:
         """Add content as a graph episode for entity extraction."""
         await self._ensure_init()
@@ -144,13 +147,17 @@ class GraphitiService:
             if metadata:
                 source_desc = metadata.get("source", metadata.get("category", "second-brain"))
 
-            await self._client.add_episode(
-                name=f"episode_{hash(content) & 0xFFFFFFFF:08x}",
-                episode_body=content,
-                source=EpisodeType.text,
-                source_description=source_desc,
-                reference_time=datetime.now(timezone.utc),
-            )
+            kwargs = {
+                "name": f"episode_{hash(content) & 0xFFFFFFFF:08x}",
+                "episode_body": content,
+                "source": EpisodeType.text,
+                "source_description": source_desc,
+                "reference_time": datetime.now(timezone.utc),
+            }
+            if group_id:
+                kwargs["group_id"] = group_id
+
+            await self._client.add_episode(**kwargs)
         except Exception as e:
             logger.warning("Graphiti add_episode failed: %s", type(e).__name__)
             logger.debug("Graphiti add_episode error detail: %s", e)
@@ -179,16 +186,22 @@ class GraphitiService:
                 logger.debug("Batch episode failed: %s", e)
         return added
 
-    async def search(self, query: str, limit: int = 10) -> list[dict]:
+    async def search(
+        self, query: str, limit: int = 10, group_id: str | None = None
+    ) -> list[dict]:
         """Search graph for entity relationships."""
         await self._ensure_init()
         if not self._initialized:
             return []
 
         try:
-            results = await self._client.search(query)
+            if group_id and hasattr(self._client, "search_"):
+                raw = await self._client.search_(query, group_ids=[group_id])
+                edges = getattr(raw, "edges", [])
+            else:
+                edges = await self._client.search(query)
             relations = []
-            for edge in results[:limit]:
+            for edge in edges[:limit]:
                 relations.append({
                     "source": getattr(edge, "source_node_name", "?"),
                     "relationship": getattr(edge, "fact", "?"),

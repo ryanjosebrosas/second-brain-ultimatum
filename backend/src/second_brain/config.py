@@ -95,6 +95,10 @@ class BrainConfig(BaseSettings):
         default="none",
         description="Graph memory provider: none, mem0, or graphiti",
     )
+    memory_provider: str = Field(
+        default="mem0",
+        description="Primary memory backend: mem0 | graphiti | none",
+    )
     neo4j_url: str | None = Field(
         default=None,
         description="Neo4j connection URL (e.g., neo4j+s://xxx.databases.neo4j.io)",
@@ -267,6 +271,21 @@ class BrainConfig(BaseSettings):
                     "graphiti_enabled=True requires at least one of: "
                     "NEO4J_URL or FALKORDB_URL"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_memory_provider_config(self) -> "BrainConfig":
+        if self.memory_provider == "graphiti":
+            if not self.neo4j_url and not self.falkordb_url:
+                raise ValueError(
+                    "memory_provider='graphiti' requires at least one of: "
+                    "NEO4J_URL, FALKORDB_URL"
+                )
+        elif self.memory_provider not in ("mem0", "none"):
+            raise ValueError(
+                f"memory_provider must be 'mem0', 'graphiti', or 'none' — got: "
+                f"{self.memory_provider!r}"
+            )
         return self
 
     @model_validator(mode="after")
