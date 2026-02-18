@@ -38,7 +38,6 @@ Your CLAUDE.md should cover these sections. Use `/init-c` to generate them autom
 - PRD stored in `reference/PRD.md` (loaded when choosing next feature to build)
 - Task-specific step-by-step guides (e.g., `reference/api_guide.md`)
 - Detailed patterns only relevant for specific task types
-- Use `templates/CREATE-REFERENCE-GUIDE-PROMPT.md` to generate these
 
 **How to load on-demand guides:**
 

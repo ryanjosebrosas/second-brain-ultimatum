@@ -22,7 +22,7 @@ Based on the purpose description, classify the agent:
 | **Analysis** | Synthesizing findings, comparing options, deep reasoning | sonnet | `["Read", "Glob", "Grep", "Bash"]` |
 | **Custom** | Doesn't fit above — ask user for clarification | sonnet | Ask user |
 
-**Model guidance** (from `reference/multi-model-strategy.md`):
+**Model guidance**:
 - **Haiku** — read-only, pattern-matching, high-volume tasks (cost-optimized)
 - **Sonnet** — analysis, synthesis, balanced reasoning (default)
 - **Opus** — complex multi-step reasoning (premium, rarely needed for agents)

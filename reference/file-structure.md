@@ -1,152 +1,153 @@
 ```
-CLAUDE.md                              # Layer 1: Global rules (slim, @references)
+CLAUDE.md                              # Layer 1: Global rules (slim, @references sections 01-11)
 README.md                              # Public-facing project README with PIV Loop diagrams
-AGENTS.md                              # Agent guidance for AI assistants
-LICENSE                                # MIT License
-.gitignore                             # Protects secrets, personal config, plans
-.coderabbit.yaml                       # CodeRabbit config template (copy to project root)
 memory.md                              # Cross-session memory (optional, from MEMORY-TEMPLATE.md)
-opencode.json                          # OpenCode CLI configuration (MCP servers, model settings)
 sections/                              # Auto-loaded rule sections (every session)
   01_core_principles.md                #   YAGNI, KISS, DRY, Limit AI Assumptions, ABP
   02_piv_loop.md                       #   Plan, Implement, Validate methodology (slim)
   03_context_engineering.md            #   4 Pillars: Memory, RAG, Prompts, Tasks
   04_git_save_points.md                #   Commit plans before implementing
   05_decision_framework.md             #   When to proceed vs ask
-  06_archon_workflow.md                #   Archon integration pointer (slim — loads reference/archon-workflow.md)
+  06_tech_stack.md                     #   Backend: Python, Pydantic AI, FastMCP, Supabase, Mem0
+  07_architecture.md                   #   Backend: MCP → Agent → Service → Storage layers
+  08_code_style.md                     #   Naming, agent pattern, MCP tool pattern, error handling
+  09_testing.md                        #   pytest, asyncio, test structure, run commands
+  10_common_patterns.md                #   New agent, schema, service method, lazy-import patterns
+  11_dev_commands.md                   #   Install, run MCP, CLI, tests, DB migrations
 reference/                             # On-demand guides (loaded when needed)
-  archon-workflow.md                   #   Archon task management & RAG workflow (moved from sections/)
+  archon-workflow.md                   #   Archon task management & RAG workflow
   layer1-guide.md                      #   How to build CLAUDE.md for real projects
-  validation-strategy.md               #   5-level validation pyramid, linting, tests
   file-structure.md                    #   This file — project directory layout
-  command-design-overview.md           #   Slash commands & INPUT→PROCESS→OUTPUT
-  cross-cli-orchestration.md           #   Cross-CLI orchestration via tmux (Claude + OpenCode + Codex)
-  github-integration.md                #   GitHub Actions, remote agents, orchestration
-  remote-system-overview.md            #   Remote Agentic Coding System, orchestrator
-  mcp-skills-overview.md               #   MCP protocol, cloud skills, progressive loading
-  subagents-overview.md                #   Subagents, parallel execution, context isolation
-  agent-teams-overview.md              #   Agent Teams: architecture, contract-first spawning, configuration
-  git-worktrees-overview.md            #   Git worktrees, parallel implementation
   system-foundations.md                #   System gap, mental models, self-assessment
-  piv-loop-practice.md                #   PIV Loop in practice, 4 Pillars, validation
-  global-rules-optimization.md        #   Modular CLAUDE.md, Two-Question Framework
-  command-design-framework.md          #   Slash commands, INPUT→PROCESS→OUTPUT (deep dive)
-  planning-methodology-guide.md        #   6-phase planning, PRD, Vertical Slice
+  piv-loop-practice.md                 #   PIV Loop in practice, 4 Pillars, validation
+  global-rules-optimization.md         #   Modular CLAUDE.md, Two-Question Framework
+  command-design-framework.md          #   Slash commands, INPUT→PROCESS→OUTPUT
   implementation-discipline.md         #   Execute command, meta-reasoning, save states
   validation-discipline.md             #   5-level pyramid, code review, system review
-  github-orchestration.md              #   GitHub Actions, 3 approaches, review-fix loop
-  remote-agentic-system.md             #   Remote system, orchestrator, cloud deployment
-  mcp-skills-archon.md                 #   MCP servers, Cloud Skills, Archon integration
   subagents-deep-dive.md               #   Subagents, context handoff, agent design framework
-  git-worktrees-parallel.md            #   Git worktrees, parallel implementation, vertical slices
-  remote-system-guide.md               #   Setup & deployment guide for remote coding agent
-  subagents-guide.md                   #   Subagent creation, frontmatter, output patterns
-  tmux-recommended-config.md           #   Recommended .tmux.conf for AI CLI workflows
-  multi-model-strategy.md              #   When to use Haiku/Sonnet/Opus for cost optimization
-  github-workflows/                    #   Example GitHub Action YAML files
-    claude-fix.yml                     #     Claude Code issue fix/create workflow
-    claude-fix-coderabbit.yml          #     Claude Code auto-fix from CodeRabbit reviews
-    README.md                          #     Workflow setup instructions
-.github/workflows/                     # GitHub Action workflows & prompt templates
-  claude-fix-coderabbit.yml            #   Review-fix loop workflow (copy to project)
-  prompts/                             #   GitHub-adapted prompt templates
-    prime-github.md                    #     Prime for GitHub Actions context
-    end-to-end-feature-github.md       #     Full PIV Loop for enhancement issues
-    bug-fix-github.md                  #     RCA + fix for bug issues
 templates/
   PRD-TEMPLATE.md                      # Template for Layer 1 PRD (what to build)
   STRUCTURED-PLAN-TEMPLATE.md          # Template for Layer 2 plans (per feature)
   SUB-PLAN-TEMPLATE.md                 # Individual sub-plan template (500-700 lines, self-contained)
-  VIBE-PLANNING-GUIDE.md              # Example prompts for vibe planning
-  IMPLEMENTATION-PROMPT.md             # Reusable prompt for implementation phase
-  VALIDATION-PROMPT.md                 # Reusable prompt for validation phase
-  NEW-PROJECT-CHECKLIST.md             # Step-by-step guide for new projects
   PLAN-OVERVIEW-TEMPLATE.md            # Master file for decomposed plan series (overview + index)
-  CREATE-REFERENCE-GUIDE-PROMPT.md     # Prompt to generate on-demand reference guides
   MEMORY-TEMPLATE.md                   # Template for project memory (cross-session context)
-  COMMAND-TEMPLATE.md                  # How to design new slash commands
   AGENT-TEMPLATE.md                    # How to design new subagents
-  BASELINE-ASSESSMENT-TEMPLATE.md      # Self-assessment for measuring PIV Loop improvement
-  GITHUB-SETUP-CHECKLIST.md            # Step-by-step GitHub Actions setup
-  META-REASONING-CHECKLIST.md          # 5-step meta-reasoning + WHERE-to-fix framework
-  TOOL-DOCSTRING-TEMPLATE.md           # 7-element template for agent tool documentation
-  SKILL-TEMPLATE.md                    # How to create new cloud skills (.claude/skills/)
-  TEAM-SPAWN-PROMPTS.md                # Spawn prompt templates for Agent Teams (4 agent types)
-  VALIDATION-REPORT-TEMPLATE.md        # Standard format for validation output
 requests/
   .gitkeep                             # Preserves directory in git (plans are gitignored)
   {feature}-plan.md                    # Layer 2: Feature plans go here
-scripts/                               # Utility scripts
-  cross-cli-setup.sh                   #   tmux session setup for multi-CLI workspace
-  tmux-health-check.sh                 #   tmux workspace health check (session, panes, CLIs)
+  system-reviews/                      # System review output directory
+.claude/settings.json                  # Hooks configuration (auto-compact memory recovery)
 .claude/commands/                      # Slash commands (reusable prompts)
   agents.md                            #   /agents — generate subagent definition files
-  init-c.md                            # /init-c — generate CLAUDE.md for a new project
-  prime.md                             # /prime — load codebase context
-  planning.md                          # /planning — create implementation plan
-  execute.md                           # /execute — implement from plan
-  commit.md                            # /commit — conventional git commit
-  rca.md                               # /rca — root cause analysis (GitHub issues)
-  implement-fix.md                     # /implement-fix — fix from RCA document
-  end-to-end-feature.md                # /end-to-end-feature — autonomous workflow
-  create-prd.md                        # /create-prd — generate PRD from conversation
-  delegate.md                          #   /delegate — delegate task to OpenCode/Codex via tmux
-  code-review.md                       # /code-review — technical code review
-  code-review-fix.md                   # /code-review-fix — fix issues from code review
-  execution-report.md                  # /execution-report — implementation report
-  system-review.md                     # /system-review — divergence analysis
-  new-worktree.md                      # /new-worktree — create git worktrees with optional parallel setup
-  merge-worktrees.md                   # /merge-worktrees — safely merge feature branches from worktrees
-  parallel-e2e.md                      # /parallel-e2e — parallel end-to-end with worktrees
-  team.md                              # /team — Agent Teams: contract-first multi-agent implementation
+  init-c.md                            #   /init-c — generate CLAUDE.md for a new project
+  prime.md                             #   /prime — load codebase context
+  planning.md                          #   /planning — create implementation plan
+  execute.md                           #   /execute — implement from plan
+  commit.md                            #   /commit — conventional git commit
+  rca.md                               #   /rca — root cause analysis (GitHub issues)
+  implement-fix.md                     #   /implement-fix — fix from RCA document
+  end-to-end-feature.md                #   /end-to-end-feature — autonomous workflow
+  create-prd.md                        #   /create-prd — generate PRD from conversation
+  code-review.md                       #   /code-review — technical code review
+  code-review-fix.md                   #   /code-review-fix — fix issues from code review
+  execution-report.md                  #   /execution-report — implementation report
+  system-review.md                     #   /system-review — divergence analysis
+  create-pr.md                         #   /create-pr — create GitHub PR
 .claude/skills/                        # Cloud Skills (progressive loading)
-  planning-methodology/                #   6-phase planning methodology (example skill)
+  planning-methodology/                #   6-phase planning methodology
     SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
     references/                        #   Detailed docs (Tier 3, on-demand)
-      6-phase-process.md               #     Phase-by-phase methodology
-      template-guide.md                #     Template section-filling guide
-  worktree-management/                 #   Git worktree parallel workflow
-    SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
-    references/                        #   Detailed docs (Tier 3, on-demand)
-      worktree-workflow.md             #     Setup + merge workflow
-      conflict-prevention.md           #     Conflict prevention strategies
-  parallel-implementation/             #   Parallel end-to-end pipeline
-    SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
-    references/                        #   Detailed docs (Tier 3, on-demand)
-      parallel-workflow.md             #     Full 8-stage pipeline
-      troubleshooting.md              #     Common issues and fixes
-  agent-teams/                         #   Agent Teams coordinated multi-agent implementation
-    SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
-    references/                        #   Detailed docs (Tier 3, on-demand)
-      contract-first-spawning.md       #     Contract-first spawning deep dive
-      tmux-wsl-setup.md               #     WSL + tmux installation guide
-  cross-cli-orchestration/             #   Cross-CLI tmux orchestration skill
-    SKILL.md                           #     Skill entry point (when to use, quick reference)
-    references/
-      tmux-patterns.md                 #     tmux send-keys, capture-pane, wait-for patterns
-      cli-capabilities.md              #     OpenCode & Codex CLI reference (flags, modes)
-  github-automation/                   #   GitHub Actions setup methodology
-    SKILL.md                           #   Entry point + frontmatter (Tier 1+2)
-    references/                        #   Detailed docs (Tier 3, on-demand)
-      setup-workflow.md                #     Step-by-step setup
-      workflow-templates.md            #     Template customization
-  {skill-name}/                        #   Additional skills follow same structure
-    SKILL.md                           #   Entry point + frontmatter (required)
-    references/                        #   Detailed docs (loaded on-demand)
-    examples/                          #   Example outputs
-    scripts/                           #   Executable scripts
 .claude/agents/                        # Custom subagents (active, automatically loaded)
-  research-codebase.md               #   Haiku codebase exploration agent
-  research-external.md               #   Sonnet documentation research agent
-  code-review-type-safety.md         #   Type safety reviewer (parallel review)
-  code-review-security.md            #   Security vulnerability reviewer
-  code-review-architecture.md        #   Architecture & patterns reviewer
-  code-review-performance.md         #   Performance & optimization reviewer
-  plan-validator.md                  #   Plan structure validation agent
-  test-generator.md                  #   Test case suggestion agent
-  specialist-devops.md               #   DevOps & infrastructure specialist
-  specialist-data.md                 #   Database & data pipeline specialist
-  specialist-copywriter.md           #   UI copy & UX writing specialist
-  specialist-tech-writer.md          #   Technical documentation specialist
-  README.md                          #   Agent overview and usage guide
+  research-codebase.md                 #   Sonnet codebase exploration agent
+  research-external.md                 #   Sonnet documentation research agent
+  code-review-type-safety.md           #   Type safety reviewer (parallel review)
+  code-review-security.md              #   Security vulnerability reviewer
+  code-review-architecture.md          #   Architecture & patterns reviewer
+  code-review-performance.md           #   Performance & optimization reviewer
+  plan-validator.md                    #   Plan structure validation agent
+  test-generator.md                    #   Test case suggestion agent
+  specialist-devops.md                 #   DevOps & infrastructure specialist
+  specialist-data.md                   #   Database & data pipeline specialist
+  specialist-copywriter.md             #   UI copy & UX writing specialist
+  specialist-tech-writer.md            #   Technical documentation specialist
+  README.md                            #   Agent overview and usage guide
+
+# ── Backend Application ──────────────────────────────────────────────────────
+
+backend/
+  pyproject.toml                       # Dependencies + pytest config + build system
+  .env                                 # Secrets — gitignored (ANTHROPIC_API_KEY, etc.)
+  .env.example                         # Documented env var template
+  src/second_brain/
+    mcp_server.py                      # Public surface: @server.tool() FastMCP endpoints
+    service_mcp.py                     # Service bridge / supplemental routing
+    cli.py                             # Click CLI ("brain" command)
+    deps.py                            # BrainDeps dataclass + create_deps() factory
+    config.py                          # BrainConfig (Pydantic Settings, loads .env)
+    schemas.py                         # All Pydantic output models (dependency-free)
+    models.py                          # AI model selection logic
+    models_sdk.py                      # Claude Agent SDK model support
+    auth.py                            # Authentication helpers
+    migrate.py                         # Data migration utilities
+    __init__.py
+    agents/
+      recall.py                        # Semantic memory search agent
+      ask.py                           # General Q&A with brain context
+      learn.py                         # Pattern extraction + memory storage
+      create.py                        # Content generation (voice-aware, factory pattern)
+      review.py                        # Multi-dimension content scoring
+      chief_of_staff.py                # Request routing orchestrator
+      coach.py                         # Daily accountability coaching
+      pmo.py                           # PMO-style task prioritization
+      email_agent.py                   # Email composition
+      specialist.py                    # Claude Code / Pydantic AI Q&A
+      clarity.py                       # Readability & clarity analysis
+      synthesizer.py                   # Feedback consolidation into themes
+      template_builder.py              # Template opportunity detection
+      utils.py                         # Shared: tool_error(), run_pipeline(), format_*()
+      __init__.py
+    services/
+      memory.py                        # Mem0 semantic memory wrapper
+      storage.py                       # Supabase CRUD + ContentTypeRegistry
+      embeddings.py                    # Voyage AI / OpenAI embedding generation
+      voyage.py                        # Voyage AI reranking service
+      graphiti.py                      # Knowledge graph (optional, GRAPHITI_ENABLED)
+      health.py                        # Brain metrics, growth milestones, setup status
+      retry.py                         # Tenacity retry decorator helpers
+      search_result.py                 # Search result data structures
+      abstract.py                      # Abstract base classes for pluggable services
+      __init__.py
+  supabase/migrations/
+    001_initial_schema.sql             # Base tables: memory_content, patterns, experiences
+    002_examples_knowledge.sql         # examples + knowledge_repo tables
+    003_pattern_constraints.sql        # Pattern uniqueness constraints
+    004_content_types.sql              # content_types table (builtin + custom types)
+    005_growth_tracking_tables.sql     # growth_log, confidence_transitions tables
+    006_rls_policies.sql               # Row-level security policies
+    007_foreign_keys_indexes.sql       # FK constraints + performance indexes
+    008_data_constraints.sql           # Additional data integrity constraints
+    009_reinforce_pattern_rpc.sql      # reinforce_pattern() RPC function
+    010_vector_search_rpc.sql          # vector_search() RPC function (pgvector)
+    011_voyage_dimensions.sql          # Voyage AI embedding dimension config
+    012_projects_lifecycle.sql         # projects table + lifecycle stages
+    013_quality_trending.sql           # review_history table for quality trending
+    014_content_type_instructions.sql  # writing_instructions, validation_rules, ui_config cols
+  tests/
+    conftest.py                        # Shared fixtures (deps, mocked services, config)
+    test_agents.py                     # Agent behavior tests
+    test_mcp_server.py                 # MCP tool endpoint tests
+    test_schemas.py                    # Pydantic model validation
+    test_services.py                   # Service layer tests
+    test_service_mcp.py                # Service-MCP bridge tests
+    test_models.py / test_models_sdk.py
+    test_config.py / test_auth.py / test_deps.py
+    test_migrate.py / test_cli.py
+    test_graph.py / test_graphiti_service.py / test_voyage.py
+    test_projects.py / test_operations.py
+    test_agentic.py / test_chief_of_staff.py
+    test_content_pipeline.py / test_foundation.py
+    __init__.py
+  scripts/
+    reingest_graph.py                  # Re-sync Graphiti graph from Mem0
+    start_mcp.sh                       # Shell script to start MCP server
 ```

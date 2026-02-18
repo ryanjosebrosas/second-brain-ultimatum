@@ -1,6 +1,6 @@
 # Command Design Framework: INPUT-PROCESS-OUTPUT
 
-This guide explains **how to design, build, and evolve** slash commands — reusable prompts that automate workflows — using the INPUT→PROCESS→OUTPUT framework, going deeper than the guide at `reference/command-design-overview.md`.
+This guide explains **how to design, build, and evolve** slash commands — reusable prompts that automate workflows — using the INPUT→PROCESS→OUTPUT framework — the comprehensive guide to command design.
 
 ---
 
@@ -35,7 +35,7 @@ Commands also implement the Global Rules Optimization guide's recommended Method
 
 ## 2. The INPUT→PROCESS→OUTPUT Framework
 
-As covered in `reference/command-design-overview.md`, every command answers three questions. This section goes deeper with examples and practical guidance.
+Every command answers three questions. This section explores each with examples and practical guidance.
 
 ### The Three Questions (From the Agent's Perspective)
 
@@ -98,7 +98,7 @@ Without the framework, a prompt like "Review this code" produces vague, generic,
 
 ## 3. Three Output Patterns
 
-The command design overview (`reference/command-design-overview.md`) introduces these patterns in a table. Here's the deeper understanding of when and how to use each.
+The following table shows the three output patterns. Here's the deeper understanding of when and how to use each.
 
 ### Pattern 1: Context Loading
 
@@ -649,11 +649,11 @@ Both exercises use the same INPUT→PROCESS→OUTPUT framework. Exercise 1 optim
 
 **Long answer**: Chaining amplifies both good and bad patterns. If planning occasionally produces vague tasks, chaining means vague implementations. Fix individual commands first — the trust progression catches these issues before they compound.
 
-### "What's the difference between the overview and this guide?"
+### "What's the difference between an overview and this guide?"
 
-**Short answer**: The overview (`reference/command-design-overview.md`) covers what. This guide covers how.
+**Short answer**: An overview covers what. This guide covers how.
 
-**Long answer**: The overview is a concise on-demand reference (command list, framework summary, patterns table). This guide is the deep dive (command anatomy, Core 4 internals, consumer optimization, exercises). Overview = "what are commands?" This guide = "how do I design effective commands?"
+**Long answer**: An overview would be a concise on-demand reference (command list, framework summary, patterns table). This guide is the deep dive (command anatomy, Core 4 internals, consumer optimization, exercises). Overview = "what are commands?" This guide = "how do I design effective commands?"
 
 ### "Can I use these commands with other AI tools?"
 
@@ -670,18 +670,17 @@ Both exercises use the same INPUT→PROCESS→OUTPUT framework. Exercise 1 optim
 3. **Use `/commit`** for your next commit — easy to verify the result
 4. **Run `/planning` and `/execute`** together for your next feature
 5. **Build Exercise 1** (priming command) to practice the framework hands-on
-6. **Move to the Planning Methodology guide** — learn the 6-phase planning methodology that enhances `/planning`
+6. **Move to the planning methodology skill** — learn the 6-phase planning methodology that enhances `/planning`
 
 ---
 
 ## Related Resources
 
-- **Command design overview**: `reference/command-design-overview.md` — on-demand command reference
 - **Command template**: `templates/COMMAND-TEMPLATE.md` — design guide for creating new commands
 - **Structured plan template**: `templates/STRUCTURED-PLAN-TEMPLATE.md` — the output format `/planning` produces
 - **Existing commands**: `.claude/commands/` — see how the Core 4 and other commands are implemented
 - **Global Rules Optimization guide** (prerequisite): `reference/global-rules-optimization.md` — global rules, Two-Question Framework, on-demand loading
-- **Planning Methodology guide** (next): `reference/planning-methodology-guide.md` — 6-phase planning methodology
+- **Planning Methodology skill**: `.claude/skills/planning-methodology/` — 6-phase planning methodology
 
 ---
 

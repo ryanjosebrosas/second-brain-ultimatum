@@ -1,6 +1,6 @@
 # Implementation Discipline: Execute, Meta-Reasoning & Save States
 
-This guide explains **how to implement from plans reliably, evolve your system through meta-reasoning, and build trust for faster iteration** — covering the `/execute` command design, the Navigate→Implement→Verify pattern, research validation, save states, and speed progression — going deeper than the always-loaded overview in `sections/02_piv_loop.md` and the guide at `reference/command-design-overview.md`.
+This guide explains **how to implement from plans reliably, evolve your system through meta-reasoning, and build trust for faster iteration** — covering the `/execute` command design, the Navigate→Implement→Verify pattern, research validation, save states, and speed progression — going deeper than the always-loaded overview in `sections/02_piv_loop.md`.
 
 ---
 
@@ -256,7 +256,7 @@ During the second PIV loop, streaming issues (missing first token, missing newli
 | Skipping research validation | Gaps discovered during implementation are expensive |
 | Jumping to fix before analyzing | Miss the root cause; fix symptoms not disease |
 
-When implementation fails repeatedly, use `templates/META-REASONING-CHECKLIST.md` to identify whether the root cause is in the plan, the system rules, or the execution approach.
+When implementation fails repeatedly, use meta-reasoning to identify whether the root cause is in the plan, the system rules, or the execution approach. Ask: "Do some meta reasoning. Don't make any changes yet. Help me understand WHY this happened and how I can adjust the system to avoid this in the future."
 
 ---
 
@@ -473,7 +473,7 @@ rules, and templates.
 2. Read `.claude/commands/execute.md` to see the current execute command implementation
 3. Try Exercise 1 — run a complete PIV loop on a small feature
 4. Apply meta-reasoning to one issue you encounter (Exercise 2)
-5. Read `reference/planning-methodology-guide.md` for the planning phase that feeds into execution
+5. Review the planning-methodology skill for the planning phase that feeds into execution
 6. Move to the Validation Discipline guide — validation strategies, the 5-level validation pyramid, `/code-review` and `/execution-report` commands, divergence analysis with `/system-review`, and how validation feeds back into system evolution
 
 ---
@@ -481,10 +481,10 @@ rules, and templates.
 ## Related Resources
 
 - **PIV Loop overview**: `sections/02_piv_loop.md` — always-loaded overview of Plan → Implement → Validate
-- **Command design**: `reference/command-design-overview.md` — on-demand command design with meta-reasoning overview
+- **Command design**: `reference/command-design-framework.md` — on-demand command design with meta-reasoning overview
 - **Execute command**: `.claude/commands/execute.md` — the actual execute command implementation
 - **Structured Plan Template**: `templates/STRUCTURED-PLAN-TEMPLATE.md` — the plan format that `/execute` consumes
-- **Planning Methodology guide** (prerequisite): `reference/planning-methodology-guide.md` — planning phase that feeds into execution
+- **Planning Methodology skill** (prerequisite): `.claude/skills/planning-methodology/` — planning phase that feeds into execution
 - **Validation Discipline guide** (next): `reference/validation-discipline.md` — validation phase that follows execution
 
 ---

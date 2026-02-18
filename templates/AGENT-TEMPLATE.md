@@ -55,7 +55,7 @@ Every effective subagent answers five questions:
 | `skills` | No | list | Skills to preload |
 | `mcpServers` | No | list | MCP servers available |
 
-See `reference/subagents-guide.md` for complete field documentation with all options.
+See `reference/subagents-deep-dive.md` for complete field documentation with all options.
 
 ---
 

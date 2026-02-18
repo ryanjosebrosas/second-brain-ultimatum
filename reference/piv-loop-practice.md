@@ -269,6 +269,33 @@ Don't rush this transition. Vibe planning builds essential context. Structured p
 - Obvious typo corrections
 - Simple refactorings with clear scope
 
+### Planning Pattern: Exact Before/After Blocks
+
+For **text-centric changes** — templates, commands, configs, documentation — include exact content blocks in each task instead of prose descriptions:
+
+```
+**Current** (lines X-Y):
+{exact content being replaced}
+
+**Replace with**:
+{exact replacement content}
+```
+
+**Why this works**: The executor copies the replacement verbatim instead of interpreting prose. This eliminates ambiguity — the most common source of plan-to-implementation divergence.
+
+**When to use**:
+- Modifying markdown templates or command files
+- Updating configuration files (YAML, JSON, TOML)
+- Changing documentation sections with specific formatting
+- Any change where the exact output matters more than the logic
+
+**When NOT to use**:
+- Writing new code with complex logic (prose + pattern references are better)
+- Creating new files from scratch (no "current" to show)
+- Changes that depend on runtime values or dynamic context
+
+**Evidence**: The prime-codebase-redesign plan (`requests/prime-codebase-redesign-plan.md`) used this format for all 4 tasks and achieved 100% plan-to-implementation fidelity — zero divergences. See `requests/system-reviews/prime-codebase-redesign-review.md` for the full analysis.
+
 ---
 
 ## 4. The 4 Pillars of Context Engineering
@@ -550,7 +577,7 @@ Status: VALIDATION FAILED
 - Alignment with intent (right solution?)
 - Edge cases not covered by tests
 
-See `reference/validation-strategy.md` for the complete 5-level pyramid explanation.
+See `reference/validation-discipline.md` for the complete 5-level pyramid explanation.
 
 ---
 
@@ -756,7 +783,7 @@ The upfront investment pays dividends throughout the feature lifecycle.
 - **PIV Loop Overview**: See `sections/02_piv_loop.md` for the core Plan -> Implement -> Validate methodology and granularity principle
 - **4 Pillars of Context Engineering**: See `sections/03_context_engineering.md` for Memory, RAG, Prompt Engineering, and Task Management definitions
 - **Layer 1 Guide**: See `reference/layer1-guide.md` for the complete guide to creating CLAUDE.md for real projects
-- **Validation Strategy**: See `reference/validation-strategy.md` for the complete 5-level validation pyramid
+- **Validation Discipline**: See `reference/validation-discipline.md` for the complete 5-level validation pyramid
 - **Structured Plan Template**: `templates/STRUCTURED-PLAN-TEMPLATE.md` — the template used by `/planning` command for Layer 2 plans
 - **Vibe Planning Examples**: `templates/VIBE-PLANNING-GUIDE.md` — example prompts showing the exploratory planning phase
 

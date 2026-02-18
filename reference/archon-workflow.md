@@ -36,7 +36,7 @@
 ### Searching Specific Documentation
 
 1. **Get sources** → `rag_get_available_sources()` - Returns list with id, title, url
-2. **Find source ID** → Match to documentation (e.g., "Supabase docs" → "src_abc123")
+2. **Find source ID** → Match to documentation (e.g., "Framework docs" → "src_abc123")
 3. **Search** → `rag_search_knowledge_base(query="vector functions", source_id="src_abc123")`
 
 **CRITICAL**: Keep queries SHORT (2-5 keywords only). Vector search works best with concise queries.

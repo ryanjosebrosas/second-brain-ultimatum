@@ -446,7 +446,7 @@ Two copy-paste prompts for building Layer 1 using AI assistance.
 - No generic advice — specific to this task type and codebase
 - Actionable — developer can follow step-by-step
 
-**In this template**: Use `templates/CREATE-REFERENCE-GUIDE-PROMPT.md` as the prompt template.
+**In this template**: Use the reference guide prompt structure from layer1-guide.md.
 
 ### When to Use Each Prompt
 
@@ -586,7 +586,7 @@ When truly uncertain, err toward auto-loading small sections and on-demand for l
 
 **Long answer**: The `/init-c` command (built from the "Create Global Rules" prompt) generates a solid starting point by analyzing your codebase or asking clarifying questions. But AI-generated rules are a first draft, not a final product.
 
-After running `/init-c`, review the output for: accuracy (does it match your actual conventions?), completeness (is anything important missing?), specificity (are examples from YOUR code, not generic?), and length (100-500 lines target). Customize as needed, then commit. Your CLAUDE.md will evolve over time as you discover what matters — see the System Evolution principle in `reference/command-design-overview.md`.
+After running `/init-c`, review the output for: accuracy (does it match your actual conventions?), completeness (is anything important missing?), specificity (are examples from YOUR code, not generic?), and length (100-500 lines target). Customize as needed, then commit. Your CLAUDE.md will evolve over time as you discover what matters — see the System Evolution principle in `reference/command-design-framework.md`.
 
 ### "How do I know if my global rules are too long?"
 
@@ -622,7 +622,7 @@ Don't update for every small issue. The system evolution principle applies: fix 
 2. **Review your current CLAUDE.md** — Is it Version 1 or Version 2? Is anything bloated? Apply the Two-Question Framework to each section
 3. **Apply the Two-Question Framework** — Categorize each section as auto-load, on-demand, or redundant
 4. **Use `/init-c` if starting a new project** — Generates CLAUDE.md automatically by analyzing your codebase or asking clarifying questions
-5. **Create reference guides for on-demand content** — Use `templates/CREATE-REFERENCE-GUIDE-PROMPT.md` to generate task-specific guides
+5. **Create reference guides for on-demand content** — Use the two-question framework to identify what belongs in reference/
 6. **Continue to the Command Design Framework guide** — Learn slash commands, the recommended Method 2 for loading on-demand guides, and the INPUT → PROCESS → OUTPUT framework
 
 ---
@@ -632,9 +632,9 @@ Don't update for every small issue. The system evolution principle applies: fix 
 - **Layer 1 Guide**: See `reference/layer1-guide.md` for the on-demand guide to Layer 1 components, creation order, and the Two-Question Framework summary
 - **PIV Loop**: See `sections/02_piv_loop.md` for the core Plan → Implement → Validate methodology and how Layer 1 fits into the bigger picture
 - **Context Engineering**: See `sections/03_context_engineering.md` for the 4 Pillars (Memory, RAG, Prompt Engineering, Task Management)
-- **Generate Global Rules**: Use the `/init-c` command or `templates/CREATE-REFERENCE-GUIDE-PROMPT.md` to build Layer 1 with AI assistance
+- **Generate Global Rules**: Use the `/init-c` command to build Layer 1 with AI assistance
 - **Structured Plan Template**: `templates/STRUCTURED-PLAN-TEMPLATE.md` — For Layer 2 task-specific plans (what does NOT go in CLAUDE.md)
-- **Slash Commands**: See `reference/command-design-overview.md` for Method 2 on-demand loading via commands and the trust progression
+- **Slash Commands**: See `reference/command-design-framework.md` for Method 2 on-demand loading via commands and the trust progression
 
 ---
 
@@ -648,4 +648,4 @@ Don't update for every small issue. The system evolution principle applies: fix 
 - Building Layer 1 with AI (two prompts, `/init-c`)
 - Practical exercise for auditing and optimizing global rules
 
-**Ready for the next step?** Learn slash commands — reusable prompts that automate workflows and provide the recommended Method 2 for loading reference guides on-demand. See `reference/command-design-overview.md` for an overview, or `reference/command-design-framework.md` for the deep dive.
+**Ready for the next step?** Learn slash commands — reusable prompts that automate workflows and provide the recommended Method 2 for loading reference guides on-demand. See `reference/command-design-framework.md` for the deep dive.

@@ -1,6 +1,6 @@
 # Subagents: Parallel AI Execution & Context Isolation
 
-This guide explains **how to extend the PIV Loop with specialized worker agents** — covering subagent fundamentals, the context handoff mental model, built-in vs custom agents, the 5-component design framework, output format as the primary control lever, parallel execution patterns, and integration with existing commands — going deeper than the guide at `reference/subagents-overview.md`.
+This guide explains **how to extend the PIV Loop with specialized worker agents** — covering subagent fundamentals, the context handoff mental model, built-in vs custom agents, the 5-component design framework, output format as the primary control lever, parallel execution patterns, and integration with existing commands.
 
 ---
 
@@ -192,7 +192,7 @@ Each component constrains the next. A vague role leads to an unfocused mission, 
 
 **Common mistake**: Skipping straight to the Output Format. The output format is critical, but it's only effective when the preceding four components properly constrain what the agent is doing. Start from Role and work your way down.
 
-**References**: `templates/AGENT-TEMPLATE.md` for the complete starter template. `reference/subagents-guide.md` for step-by-step creation walkthrough and advanced patterns.
+**References**: `templates/AGENT-TEMPLATE.md` for the complete starter template.
 
 ---
 
@@ -389,7 +389,7 @@ If you answered "no" to all three, subagents add overhead without benefit. Stick
 - **The markdown body IS the system prompt** — everything after the YAML frontmatter becomes the agent's instructions
 - **Test before parallelizing** — verify a single agent works correctly before running multiple in parallel
 
-For the full step-by-step creation walkthrough, see `reference/subagents-guide.md`.
+For the full step-by-step creation walkthrough, see the sections below and `templates/AGENT-TEMPLATE.md`.
 
 ---
 
@@ -409,7 +409,7 @@ For the full step-by-step creation walkthrough, see `reference/subagents-guide.m
 ### Trust Progression
 
 ```
-Manual → Commands → Chained → Subagents → Worktrees → Remote
+Manual → Commands → Chained → Subagents
   ↑ trust & verify ↑  ↑ trust & verify ↑  ↑ trust & verify ↑
 ```
 
@@ -521,24 +521,18 @@ These mistakes appear frequently when creating your first agents:
 
 ## Next Steps
 
-1. Read `reference/subagents-overview.md` for the subagents overview
-2. Read `reference/subagents-guide.md` for creation mechanics, frontmatter reference, and advanced patterns
-3. Read `templates/AGENT-TEMPLATE.md` for the starter template you can copy to your project
-4. Try Exercise 1 — create your first custom agent (system reviewer)
-5. Try Exercise 2 — parallelize to experience the speed improvement firsthand
-6. Read `reference/implementation-discipline.md` for execution discipline that feeds agent workflows
-7. Move to the Git Worktrees guide (see `reference/git-worktrees-parallel.md`) to learn code-level isolation — complementing subagents' context-level isolation
+1. Read `templates/AGENT-TEMPLATE.md` for the starter template you can copy to your project
+2. Try Exercise 1 — create your first custom agent (system reviewer)
+3. Try Exercise 2 — parallelize to experience the speed improvement firsthand
+4. Read `reference/implementation-discipline.md` for execution discipline that feeds agent workflows
 
 ---
 
 ## Related Resources
 
-- **Subagent overview**: `reference/subagents-overview.md` — on-demand subagents guide
-- **Creation guide**: `reference/subagents-guide.md` — step-by-step creation, frontmatter reference, advanced patterns
 - **Agent template**: `templates/AGENT-TEMPLATE.md` — starter template for new agents
 - **Pre-installed agents**: `.claude/agents/` — 12 agents across 4 categories (research, code review, utility, specialist)
 - **Execution discipline**: `reference/implementation-discipline.md` — prerequisite concepts for agent workflows
-- **GitHub integration**: `reference/github-orchestration.md` — remote agent workflows via GitHub Actions
 
 ---
 
@@ -550,6 +544,4 @@ These mistakes appear frequently when creating your first agents:
 - Three parallel execution patterns and the 10-agent concurrency limit
 - The decision framework for when subagents justify their overhead
 - How to create custom agents with frontmatter and structured output
-- Integration patterns with commands and the extended trust progression
-
-**Next**: Learn how Git Worktrees provide code-level isolation for parallel implementation — complementing subagents' context-level isolation for a complete parallel development toolkit. See `reference/git-worktrees-parallel.md`.
+- Integration patterns with commands and the trust progression

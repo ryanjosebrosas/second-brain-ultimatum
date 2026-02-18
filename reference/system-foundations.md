@@ -37,7 +37,7 @@ The gap is NOT about AI capability. The difference between average performance a
 Both gaps are **learnable through systematic practice**. This template teaches:
 - **Foundational guides** (PIV Loop Practice, Global Rules Optimization, Command Design, Planning, Implementation, Validation): Systematic setup
 - **Exercises**: Skill development (doing the same task multiple ways to internalize the system)
-- **Advanced guides** (GitHub Orchestration, Remote Agentic System, MCP/Skills/Archon, Subagents, Git Worktrees): Advanced setup for parallelization, remote execution, and specialized tools
+- **Advanced guides** (Subagents): Advanced setup for parallel research and specialized tasks
 
 The implication: If you're averaging 30% code acceptance, you're not experiencing an AI limitation—you're experiencing a system opportunity. Your performance can improve systematically.
 
@@ -92,16 +92,8 @@ The actual system for reliable AI coding.
 
 #### **Block 3: Parallel & Remote** (MCP/Skills/Archon, Subagents, GitHub Orchestration)
 Scaling beyond single-agent, single-terminal workflows.
-- MCP, Skills & Archon: External system integration via MCP Servers & Cloud Skills
 - Subagents Deep Dive: Context isolation, parallel research
-- GitHub Orchestration: Remote agents, GitHub Actions
-- Outcome: Parallel execution, 24/7 automation, external systems integration
-
-#### **Block 4: Advanced** (Remote Agentic System, Git Worktrees)
-Team-scale and distributed systems.
-- Remote Agentic System: Real-time conversation, multi-platform
-- Git Worktrees: Parallel implementation with code isolation
-- Outcome: Team-scale AI coding, distributed execution
+- Outcome: Parallel execution, specialized task handling
 
 ### Trust Progression: When Each Tier Unlocks
 
@@ -113,10 +105,6 @@ Commands (Command Design Framework guide)
 Chained Commands (Planning, Implementation, Validation guides)
     | (after proving chaining works reliably)
 Subagents (Subagents Deep Dive guide)
-    | (after individual agents work reliably)
-Worktrees + Parallel (Git Worktrees guide)
-    | (after parallel agents proven)
-Remote Automation (GitHub Orchestration + Remote Agentic System guides)
 ```
 
 **Key rule**: Don't skip stages. Each tier amplifies the previous one—both good patterns and bad ones. Only move to the next tier after the current one is proven reliable.
@@ -127,11 +115,7 @@ Remote Automation (GitHub Orchestration + Remote Agentic System guides)
 |-------|-----------|------------|
 | System Foundations, PIV Loop Practice, Global Rules Optimization | Yes | Never—foundation |
 | Command Design, Planning, Implementation, Validation | Yes | Never—core system |
-| MCP, Skills & Archon | No | If you don't use external APIs/databases |
 | Subagents Deep Dive | No | If you work solo (though subagents help research) |
-| GitHub Orchestration | No | If you don't use GitHub or remote execution |
-| Remote Agentic System | No | If you don't need 24/7 automation |
-| Git Worktrees | No | If you don't do parallel implementation |
 
 **Recommendation**: Learn all foundational and core system guides. Advanced guides are optional but compound your capabilities.
 
@@ -184,7 +168,7 @@ Before you start learning the system, establish your baseline on a real feature.
 - Feature works end-to-end in browser?: Yes / No
 - Code would pass basic code review?: Yes / No
 
-To measure your current PIV Loop maturity, use `templates/BASELINE-ASSESSMENT-TEMPLATE.md`.
+To measure your current PIV Loop maturity, review your workflow against the PIV Loop methodology and identify areas for improvement.
 Run the assessment before adopting the system and again after 2-4 weeks to track improvement.
 
 ### How to Establish Your Baseline
@@ -400,11 +384,7 @@ All three are learnable. This template teaches systematic approaches to each.
 **Short answer**: Learn the foundational and core system guides thoroughly. Advanced guides are optional.
 
 **Long answer**: The foundational guides (System Foundations, PIV Loop Practice, Global Rules Optimization) and core system guides (Command Design, Planning Methodology, Implementation Discipline, Validation Discipline) cover the complete PIV Loop system. They directly improve your code quality, confidence, and speed. The advanced guides are force multipliers for advanced scenarios:
-- MCP, Skills & Archon: Useful if you integrate with external databases/APIs
 - Subagents Deep Dive: Useful if you parallelize research
-- GitHub Orchestration: Useful if you want 24/7 remote automation
-- Remote Agentic System: Useful for team collaboration
-- Git Worktrees: Useful for parallel implementation
 
 If you're solo and working locally, the foundational and core system guides are sufficient. The advanced guides compound your capabilities, but they're not required.
 
@@ -501,8 +481,8 @@ The template is a starting point. Every project evolves its own version.
 
 - **Template Structure**: See CLAUDE.md intro for the full template overview
 - **Decision Framework**: Section 05 of CLAUDE.md explains when to proceed vs ask
-- **Planning Deep Dive**: `reference/planning-methodology-guide.md` explains slash commands and trust progression
-- **Validation Strategy**: `reference/validation-strategy.md` explains the 5-level validation pyramid
+- **Planning Deep Dive**: `.claude/skills/planning-methodology/` — 6-phase planning methodology
+- **Validation Discipline**: `reference/validation-discipline.md` explains the 5-level validation pyramid
 - **Your Baseline**: Section 3 (Baseline Self-Assessment) — use this now
 - **PIV Loop Practice**: `reference/piv-loop-practice.md` — PIV Loop methodology in depth
 - **Global Rules**: `reference/global-rules-optimization.md` — CLAUDE.md organization and optimization

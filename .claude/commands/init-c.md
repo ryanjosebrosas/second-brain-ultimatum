@@ -4,7 +4,7 @@ Help me create the global rules for my project. Analyze the project first to see
 
 You will generate a **modular** structure — NOT a flat CLAUDE.md file. The output is:
 
-1. **A slim `CLAUDE.md`** (~30-60 lines) containing ONLY `@sections/` references
+1. **A slim `CLAUDE.md`** (30-60 lines) containing ONLY `@sections/` references
 2. **Individual `sections/*.md` files** (one per topic, 15-50 lines each)
 3. **A `reference/` directory suggestion** for task-specific guides
 
@@ -43,43 +43,31 @@ The generated CLAUDE.md must look like this:
 
 ---
 
-## Logging
-@sections/05_logging.md
-
----
-
 ## Testing
-@sections/06_testing.md
-
----
-
-## API Contracts
-@sections/07_api_contracts.md
-
-*Include this section only for services that provide a public or internal API*
+@sections/05_testing.md
 
 ---
 
 ## Common Patterns
-@sections/08_common_patterns.md
+@sections/06_common_patterns.md
 
 ---
 
 ## Development Commands
-@sections/09_dev_commands.md
-
----
-
-## AI Coding Assistant Instructions
-@sections/10_ai_instructions.md
+@sections/07_dev_commands.md
 ```
 
 **CRITICAL**: CLAUDE.md contains ONLY `@sections/` references, NEVER inline content. Each `---` separator is required between sections.
 
+**Line Count Constraints**:
+- CLAUDE.md: 30-60 lines (only @references)
+- Each section: 15-50 lines
+- Total: 100-400 lines combined
+
 ## Section Definitions (What Goes in Each File)
 
 ### `sections/01_core_principles.md`
-Non-negotiable development principles: naming conventions, logging requirements, type safety, documentation standards. Keep these clear and actionable. 5-15 bullet points.
+Non-negotiable development principles: naming conventions, type safety, documentation standards, and AI coding assistant instructions. Keep these clear and actionable. 5-15 bullet points. Include any project-specific AI gotchas at the end.
 
 ### `sections/02_tech_stack.md`
 Technologies with version numbers: language, framework, package manager, testing tools, linting/formatting, database, deployment.
@@ -88,25 +76,16 @@ Technologies with version numbers: language, framework, package manager, testing
 Folder organization, layer patterns, design patterns used. Include ASCII directory tree of the key directories.
 
 ### `sections/04_code_style.md`
-Naming conventions (functions, classes, variables, model fields). Include 1-2 code examples showing the expected style. Docstring/comment format.
+Naming conventions (functions, classes, variables, model fields). Include 1-2 code examples showing the expected style. Docstring/comment format. Logging conventions (what to log, structured format examples).
 
-### `sections/05_logging.md`
-Structured logging format and examples. What to log (operations, errors, key events). How to log (code examples with contextual fields).
-
-### `sections/06_testing.md`
+### `sections/05_testing.md`
 Testing framework and tools. Test file structure and naming conventions. Test patterns and 1-2 examples. Commands to run tests.
 
-### `sections/07_api_contracts.md` (if applicable)
-How models and types must match across boundaries. Error handling patterns. Include examples showing the contract. **Skip this section for non-API projects** — renumber remaining sections.
-
-### `sections/08_common_patterns.md`
+### `sections/06_common_patterns.md`
 2-3 code examples of common patterns used throughout the codebase. These should be general templates, not task-specific.
 
-### `sections/09_dev_commands.md`
+### `sections/07_dev_commands.md`
 Install, dev server, test, lint/format commands. Any other essential workflow commands. Use code blocks.
-
-### `sections/10_ai_instructions.md`
-10 concise bullet points telling AI assistants how to work with this codebase. Include project-specific gotchas.
 
 ## Process
 
@@ -134,13 +113,12 @@ Install, dev server, test, lint/format commands. Any other essential workflow co
 
 ## Critical Requirements
 
-- **Total length**: 100-500 lines across ALL generated files combined
+- **Total length**: 100-400 lines across ALL generated files combined
 - **Each section file**: 15-50 lines (focused and actionable)
 - **CLAUDE.md**: 30-60 lines (only @references)
 - **Be specific, not generic** — use actual code examples, not placeholders
 - **Focus on what matters** — include conventions that truly guide development
 - **Keep it actionable** — every rule should be immediately followable
-- **Number sections sequentially** based on what was generated (skip api_contracts for non-API projects, renumber accordingly)
 - **For existing projects**: Every section must cite actual code from the codebase
 - **For new projects**: Research first, then generate — don't output placeholder sections
 
@@ -159,7 +137,7 @@ After generating, include this note at the bottom of CLAUDE.md:
 ---
 
 > **Template System**: This project uses the modular @sections architecture.
-> For deeper context on this system, see the reference guides in `reference/` (e.g., `system-foundations.md`, `piv-loop-practice.md`, `global-rules-optimization.md`).
+> For deeper context on this system, see the reference guides in `reference/` (e.g., `system-foundations.md`, `piv-loop-practice.md`).
 ```
 
 Start by analyzing the project structure now. If this is a new project and you need more information, ask your clarifying questions first.

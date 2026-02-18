@@ -27,5 +27,5 @@ Complex features (15+ tasks, 4+ phases): `/planning` auto-decomposes into sub-pl
 
 ### Validation
 - AI: tests + linting. Human: code review + manual testing.
-- 5-level pyramid: Syntax → Types → Unit → Integration → Human. See `reference/validation-strategy.md`.
+- 5-level pyramid: Syntax → Types → Unit → Integration → Human. See `reference/validation-discipline.md`.
 - Small issues → fix prompts. Major issues → revert to save point, tweak plan, retry.

@@ -1,7 +1,7 @@
 ---
 name: planning-methodology
-description: "Guide for systematic 6-phase feature planning. Use when creating implementation plans, planning features, or structuring development work. Provides the PIV Loop Layer 2 planning methodology with parallel research, template-driven output, and confidence scoring."
-allowed-tools: ["Read", "Glob", "Grep", "Bash", "WebSearch", "WebFetch", "Task"]
+description: "Guide for systematic 6-phase feature planning. Use when creating implementation plans, planning features, or structuring development work. Provides the PIV Loop Layer 2 planning methodology with template-driven output and confidence scoring."
+allowed-tools: ["Read", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"]
 ---
 
 # Planning Methodology — 6-Phase Feature Planning
@@ -22,17 +22,15 @@ This skill provides the methodology for transforming feature requests into compr
 - Fill: Feature Description, User Story, Problem Statement, Solution Statement, Feature Metadata
 - Check memory.md (if it exists) for past decisions about this feature area
 
-### Phase 2: Codebase Intelligence (Parallel — Research Agents)
+### Phase 2: Codebase Intelligence (Direct Exploration)
 **Goal**: Understand the existing codebase patterns.
-- If custom research agents exist: Launch 3-5 parallel research-codebase agents (Haiku) with focused queries
-- If no custom agents: Launch single Explore agent (Haiku) for file discovery and pattern extraction
+- Use Glob and Grep tools directly to explore the codebase
 - Find similar implementations, map integration points, extract project patterns
 - Fill: Relevant Codebase Files (with line numbers), New Files to Create, Patterns to Follow
 
-### Phase 3: External Research (Parallel — Research Agents)
+### Phase 3: External Research (Direct Lookup)
 **Goal**: Gather external documentation and best practices.
-- If custom research agents exist: Launch 3-5 parallel research-external agents (Sonnet) with focused queries
-- If no custom agents: Launch single general-purpose agent (Sonnet)
+- Use WebSearch and WebFetch to find documentation directly
 - Find library docs, best practices, version compatibility, gotchas
 - If Archon RAG available: search curated knowledge base FIRST (2-5 keyword queries)
 - Fill: Relevant Documentation, Related Memories
@@ -75,7 +73,7 @@ This skill provides the methodology for transforming feature requests into compr
 
 1. **Template is the control mechanism**: All research fills specific sections of `templates/STRUCTURED-PLAN-TEMPLATE.md`. Nothing is missed because the template specifies exactly what's needed.
 2. **700-1000 lines**: The completed plan must be 700-1000 lines. Comprehensive with feature-specific content in every section. Sub-plans in decomposed mode must be 500-700 lines.
-3. **Parallel research**: Phases 2 and 3 run simultaneously (40-50% faster). Launch two Task agents.
+3. **Sequential research**: Explore codebase and external docs directly using Glob, Grep, WebSearch. No parallel agent spawning.
 4. **No code in planning**: We do NOT write code in this phase. Goal is a context-rich plan for one-pass implementation.
 5. **Agent-to-agent optimization**: The plan is consumed by `/execute` in a fresh conversation. It must contain ALL information needed — patterns, file paths with line numbers, exact commands.
 6. **Research validation**: Validate vibe planning research before building the structured plan on it.

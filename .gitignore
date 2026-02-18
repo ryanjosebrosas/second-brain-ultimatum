@@ -1,5 +1,10 @@
 # Local settings and secrets
 .claude/settings.local.json
+settings.local.json
+
+# Python build artifacts
+__pycache__/
+*.egg-info/
 
 # Personal memory (users create their own from MEMORY-TEMPLATE.md)
 memory.md
@@ -15,12 +20,3 @@ worktrees/
 # Environment files
 .env
 .env.local
-
-# Python artifacts
-__pycache__/
-*.egg-info/
-*.pyc
-
-# Tool configs
-.codex/
-.opencode/

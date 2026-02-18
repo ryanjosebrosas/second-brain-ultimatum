@@ -662,4 +662,3 @@ A: Varies by feature size. For a well-planned feature: 0-2 critical, 2-5 major, 
 - `reference/implementation-discipline.md` — The execute phase that validation follows
 - `reference/command-design-framework.md` — How the validation commands are designed (INPUT→PROCESS→OUTPUT)
 - `reference/subagents-deep-dive.md` — How parallel review agents work under the hood
-- `reference/validation-strategy.md` — On-demand validation overview (this guide expands on it)

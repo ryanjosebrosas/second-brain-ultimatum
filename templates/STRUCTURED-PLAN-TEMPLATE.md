@@ -147,6 +147,10 @@ As a {user type}, I want to {action}, so that {benefit}.
 >
 > **Action keywords**: CREATE (new files), UPDATE (modify existing), ADD (insert new functionality),
 > REMOVE (delete deprecated code), REFACTOR (restructure without changing behavior), MIRROR (copy pattern from elsewhere)
+>
+> **Tip**: For text-centric changes (templates, commands, configs), include exact **Current** / **Replace with**
+> content blocks in IMPLEMENT. This eliminates ambiguity and achieves higher plan-to-implementation fidelity
+> than prose descriptions. See `reference/piv-loop-practice.md` Section 3 for guidance.
 
 ### {ACTION} {target_file_path}
 
@@ -217,15 +221,25 @@ As a {user type}, I want to {action}, so that {benefit}.
 
 ## ACCEPTANCE CRITERIA
 
+> Split into **Implementation** (verifiable during `/execute`) and **Runtime** (verifiable
+> only after running the code). Check off Implementation items during execution.
+> Leave Runtime items for manual testing or post-deployment verification.
+
+### Implementation (verify during execution)
+
 - [ ] Feature implements all specified functionality
+- [ ] Code follows project conventions and patterns
 - [ ] All validation commands pass with zero errors
 - [ ] Unit test coverage meets project requirements
-- [ ] Integration tests verify end-to-end workflows
-- [ ] Code follows project conventions and patterns
-- [ ] No regressions in existing functionality
 - [ ] Documentation updated (if applicable)
-- [ ] Performance meets requirements (if applicable)
 - [ ] Security considerations addressed (if applicable)
+
+### Runtime (verify after testing/deployment)
+
+- [ ] Integration tests verify end-to-end workflows
+- [ ] Feature works correctly in manual testing
+- [ ] Performance meets requirements (if applicable)
+- [ ] No regressions in existing functionality
 
 ---
 

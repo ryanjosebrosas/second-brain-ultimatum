@@ -1,6 +1,6 @@
-# My Coding System
+# My Coding System — Second Brain
 
-A comprehensive AI-assisted development methodology combining systematic planning, implementation discipline, and validation strategies.
+A comprehensive AI-assisted development methodology + the Second Brain MCP backend (Pydantic AI agents, Mem0, Supabase).
 
 ---
 
@@ -29,38 +29,33 @@ A comprehensive AI-assisted development methodology combining systematic plannin
 
 ---
 
-## Archon Workflow
-@sections/06_archon_workflow.md
-
----
-
 ## Tech Stack
-@sections/07_tech_stack.md
+@sections/06_tech_stack.md
 
 ---
 
 ## Architecture
-@sections/08_architecture.md
+@sections/07_architecture.md
 
 ---
 
 ## Code Style
-@sections/09_code_style.md
+@sections/08_code_style.md
 
 ---
 
 ## Testing
-@sections/10_testing.md
+@sections/09_testing.md
 
 ---
 
 ## Common Patterns
-@sections/11_common_patterns.md
+@sections/10_common_patterns.md
 
 ---
 
-## Dev Commands
-@sections/12_dev_commands.md
+## Development Commands
+@sections/11_dev_commands.md
 
 ---
 
@@ -73,16 +68,13 @@ A comprehensive AI-assisted development methodology combining systematic plannin
 | `layer1-guide` | New project CLAUDE.md setup |
 | `system-foundations` | Learning system mental models |
 | `piv-loop-practice` | PIV Loop practical application |
-| `planning-methodology-guide` | 6-phase planning methodology |
-| `validation-strategy` | Validation planning |
 | `validation-discipline` | 5-level validation pyramid |
 | `file-structure` | File location lookup |
-| `command-design-overview` | Slash command design |
-| `cross-cli-orchestration` | Cross-CLI delegation via tmux |
-| `github-integration` | GitHub Actions / CodeRabbit |
-| `remote-system-overview` | Remote coding agent |
-| `mcp-skills-overview` | MCP servers / skills |
-| `subagents-overview` | Subagent creation |
+| `command-design-framework` | Slash command design |
+| `subagents-deep-dive` | Subagent creation |
 | `archon-workflow` | Archon tasks / RAG |
-| `git-worktrees-overview` | Parallel worktree implementation |
-| `agent-teams-overview` | Agent Teams / `/team` |
+
+---
+
+> **Template System**: This project uses the modular @sections architecture.
+> For deeper context on this system, see the reference guides in `reference/` (e.g., `system-foundations.md`, `piv-loop-practice.md`).

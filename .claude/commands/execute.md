@@ -1,7 +1,7 @@
 ---
 description: Execute an implementation plan
 argument-hint: [path-to-plan]
-allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects, mcp__archon__rag_get_available_sources, mcp__archon__rag_search_knowledge_base, mcp__archon__rag_search_code_examples, mcp__archon__rag_list_pages_for_source
+allowed-tools: Read, Write, Edit, Bash(npm:*), Bash(bun:*), Bash(npx:*), Bash(uv:*), Bash(pip:*), Bash(python:*), Bash(node:*), mcp__archon__manage_project, mcp__archon__manage_task, mcp__archon__find_tasks, mcp__archon__find_projects
 ---
 
 # Execute: Implement from Plan
@@ -24,6 +24,9 @@ Read the plan file.
 
 - Read the ENTIRE plan carefully — all tasks, dependencies, validation commands, testing strategy
 - Check `memory.md` for gotchas related to this feature area
+- **Derive feature name** from the plan path: strip directory prefix and `-plan.md` suffix.
+  Example: `requests/user-auth-plan.md` → `user-auth`. For plan series: `requests/big-feature-plan-overview.md` → `big-feature`.
+  Store this — you'll use it when saving the execution report.
 
 ### 1.25. Plan Validation (optional)
 
@@ -33,15 +36,7 @@ Read the plan file.
 
 ### 1.5. Archon Setup (if available)
 
-**a. Check availability**: `health_check()` — if fails, skip all Archon steps.
-
-**b. Create project and tasks**: `manage_project("create", ...)`, then `manage_task("create", ...)` for each plan task with dependency-based task_order.
-
-**c. RAG Research**: If the plan references external libraries or APIs, search for relevant docs:
-1. `rag_get_available_sources()` — list indexed documentation
-2. For each relevant source, `rag_search_knowledge_base(query="...", source_id="...")` with SHORT 2-5 keyword queries
-3. `rag_search_code_examples(query="...")` for implementation patterns
-4. Use findings to inform implementation — prefer RAG results over assumptions
+Create project and tasks: `manage_project("create", ...)`, then `manage_task("create", ...)` for each plan task with dependency-based task_order. Skip if Archon unavailable.
 
 ### 2. Execute Tasks in Order
 
@@ -92,24 +87,55 @@ Check off met items in ACCEPTANCE CRITERIA (`- [ ]` → `- [x]`) and COMPLETION 
 
 ## Output Report
 
-### Completed Tasks
-- List all tasks completed, files created, files modified
+Save this report to: `requests/execution-reports/{feature}-report.md`
 
-### Tests Added
-- Test files, test cases, results
+Use the feature name derived in Step 1. Create the `requests/execution-reports/` directory if it doesn't exist.
+
+**IMPORTANT**: Save the report to the file FIRST, then also display it inline for the user. The saved file is consumed by `/system-review`.
+
+---
+
+### Meta Information
+
+- **Plan file**: {path to the plan that guided this implementation}
+- **Files added**: {list with full paths, or "None"}
+- **Files modified**: {list with full paths}
+
+### Completed Tasks
+
+For each task in the plan:
+- Task N: {brief description} — {completed / skipped with reason}
+
+### Divergences from Plan
+
+For each divergence (if any):
+- **What**: {what changed from the plan}
+- **Planned**: {what the plan specified}
+- **Actual**: {what was implemented instead}
+- **Reason**: {why the divergence occurred}
+
+If no divergences: "None — implementation matched plan exactly."
 
 ### Validation Results
+
 ```bash
-# Output from each validation command
+# Output from each validation command run in Step 4
 ```
 
+### Tests Added
+
+- {test files created, number of test cases, pass/fail status}
+- If no tests: "No tests specified in plan."
+
+### Issues & Notes
+
+- {any issues not addressed in the plan}
+- {challenges encountered during implementation}
+- {recommendations for plan or process improvements}
+- If none: "No issues encountered."
+
 ### Ready for Commit
-- Confirm all changes complete and validations pass
-- Ready for `/commit`
 
-## Notes
-
-- Document issues not addressed in the plan
-- Explain any deviations from the plan
-- Fix failing tests before completing
-- Don't skip validation steps
+- All changes complete: {yes/no}
+- All validations pass: {yes/no}
+- Ready for `/commit`: {yes/no — if no, explain what's blocking}
