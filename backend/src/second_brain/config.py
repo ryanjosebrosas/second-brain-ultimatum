@@ -205,6 +205,22 @@ class BrainConfig(BaseSettings):
         description="Multiplier for review tool timeout (runs 6 parallel reviews). Range: 1-5.",
     )
 
+    # --- MCP transport / Docker ---
+    mcp_transport: str = Field(
+        default="stdio",
+        description="MCP transport mode: stdio (local, default) | sse (legacy) | http (Docker/network)",
+    )
+    mcp_host: str = Field(
+        default="0.0.0.0",
+        description="Host to bind when using HTTP/SSE transport (ignored for stdio)",
+    )
+    mcp_port: int = Field(
+        default=8000,
+        ge=1024,
+        le=65535,
+        description="Port for MCP HTTP/SSE transport. Range: 1024-65535.",
+    )
+
     # Input validation
     max_input_length: int = Field(
         default=10000,
@@ -297,6 +313,16 @@ class BrainConfig(BaseSettings):
                     "Both API key and subscription auth configured. "
                     "Subscription auth takes priority when USE_SUBSCRIPTION=true."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_mcp_transport(self) -> "BrainConfig":
+        valid = ("stdio", "sse", "http")
+        if self.mcp_transport not in valid:
+            raise ValueError(
+                f"mcp_transport must be one of {valid} — got: "
+                f"{self.mcp_transport!r}"
+            )
         return self
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

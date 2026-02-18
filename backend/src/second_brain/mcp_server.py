@@ -9,6 +9,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 if TYPE_CHECKING:
     from pydantic_ai.models import Model
@@ -39,6 +41,13 @@ def _validate_mcp_input(text: str, label: str = "input") -> str:
 
 # Initialize server
 server = FastMCP("Second Brain")
+
+
+@server.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """Health check endpoint for Docker HEALTHCHECK and monitoring."""
+    return JSONResponse({"status": "healthy", "service": "second-brain"})
+
 
 # Lazy-init deps (created on first tool call) with circuit breaker
 _deps: BrainDeps | None = None
@@ -1414,6 +1423,7 @@ async def find_template_opportunities(deliverable: str) -> str:
 
 
 if __name__ == "__main__":
+    import os as _os
     import sys as _sys
 
     logging.basicConfig(
@@ -1421,7 +1431,23 @@ if __name__ == "__main__":
         level=logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
+
+    _transport = _os.environ.get("MCP_TRANSPORT", "stdio").lower()
+
     try:
-        server.run()
+        if _transport in ("http", "sse"):
+            _host = _os.environ.get("MCP_HOST", "0.0.0.0")
+            _port = int(_os.environ.get("MCP_PORT", "8000"))
+            logger.warning(
+                "Starting MCP server: transport=%s host=%s port=%s",
+                _transport, _host, _port,
+            )
+            server.run(
+                transport=_transport,
+                host=_host,
+                port=_port,
+            )
+        else:
+            server.run()
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass

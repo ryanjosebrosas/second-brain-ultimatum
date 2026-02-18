@@ -369,16 +369,69 @@ Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations a
 
 ### 4. Start the MCP Server
 
+**Local (stdio — default):**
+
 ```bash
 cd backend
 python -m second_brain.mcp_server
 ```
 
+**Docker (HTTP transport):**
+
+```bash
+cd backend
+docker compose up -d
+```
+
+The container starts with `MCP_TRANSPORT=http` on port 8000, includes a `/health` endpoint, and restarts automatically on failure.
+
 All 13 agents are now available as MCP tools inside Claude Code.
 
 ---
 
+## Docker
+
+### Build & Run
+
+```bash
+cd backend
+docker build -t second-brain-mcp .
+docker compose up -d
+```
+
+The multi-stage Dockerfile uses `python:3.11-slim`, runs as a non-root user, and includes a health check that probes `/health` every 30 seconds.
+
+### Transport Configuration
+
+The server supports three transport modes, configured via the `MCP_TRANSPORT` environment variable:
+
+| Transport | `MCP_TRANSPORT=` | Use Case |
+|-----------|-----------------|----------|
+| **stdio** | `stdio` (default) | Local development — Claude Code spawns as subprocess |
+| **HTTP** | `http` | Docker / network — single `/mcp` endpoint, stateless |
+| **SSE** | `sse` | Legacy — Server-Sent Events (deprecated by MCP spec) |
+
+Additional env vars for HTTP/SSE mode:
+
+```bash
+MCP_HOST=0.0.0.0   # Bind address (default: 0.0.0.0)
+MCP_PORT=8000       # Port (default: 8000, range: 1024-65535)
+```
+
+### Health Check
+
+When running in HTTP/SSE mode, a health endpoint is available:
+
+```bash
+curl http://localhost:8000/health
+# {"status": "healthy", "service": "second-brain"}
+```
+
+---
+
 ## MCP Integration
+
+### Local (stdio)
 
 Add to your Claude Code MCP config (`.mcp.json` or `claude_desktop_config.json`):
 
@@ -389,6 +442,40 @@ Add to your Claude Code MCP config (`.mcp.json` or `claude_desktop_config.json`)
       "command": "python",
       "args": ["-m", "second_brain.mcp_server"],
       "cwd": "/path/to/repo/backend"
+    }
+  }
+}
+```
+
+### Docker (HTTP) — Claude Code
+
+```bash
+claude mcp add --transport http second-brain http://localhost:8000/mcp
+```
+
+Or add to `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "second-brain": {
+      "type": "http",
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+### Docker (HTTP) — Claude Desktop
+
+Claude Desktop requires the `mcp-remote` proxy to connect to HTTP MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "second-brain": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:8000/mcp"]
     }
   }
 }
@@ -482,8 +569,11 @@ backend/
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~895 tests (one file per module)
+├── tests/                     # ~905 tests (one file per module)
 ├── scripts/                   # Utility scripts
+├── Dockerfile                 # Multi-stage production image
+├── docker-compose.yml         # Local dev compose (HTTP transport)
+├── .dockerignore              # Docker build context exclusions
 ├── .env.example               # Documented env var template
 └── pyproject.toml             # Dependencies + pytest config
 ```
@@ -494,7 +584,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~895)
+pytest                              # All tests (~905)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -514,7 +604,7 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Service layer modules | 9 |
 | Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~895 |
+| Tests | ~905 |
 | Python version | 3.11+ |
 
 ---

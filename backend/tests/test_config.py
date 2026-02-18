@@ -21,6 +21,7 @@ _ENV_VARS = [
     "GRAPHITI_ENABLED", "FALKORDB_URL", "FALKORDB_PASSWORD",
     "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
     "MEMORY_PROVIDER",
+    "MCP_TRANSPORT", "MCP_HOST", "MCP_PORT",
 ]
 
 
@@ -59,6 +60,9 @@ class TestBrainConfigDefaults:
         assert config.graduation_lookback_days == 30
         assert config.content_preview_limit == 1000
         assert config.pattern_preview_limit == 200
+        assert config.mcp_transport == "stdio"
+        assert config.mcp_host == "0.0.0.0"
+        assert config.mcp_port == 8000
 
     def test_custom_values(self, tmp_path):
         """All fields accept and store custom values."""
@@ -87,6 +91,9 @@ class TestBrainConfigDefaults:
             graduation_lookback_days=60,
             content_preview_limit=2000,
             pattern_preview_limit=500,
+            mcp_transport="http",
+            mcp_host="127.0.0.1",
+            mcp_port=9000,
             _env_file=None,
         )
         assert config.anthropic_api_key == "sk-test"
@@ -100,6 +107,9 @@ class TestBrainConfigDefaults:
         assert config.memory_search_limit == 20
         assert config.graduation_min_memories == 5
         assert config.content_preview_limit == 2000
+        assert config.mcp_transport == "http"
+        assert config.mcp_host == "127.0.0.1"
+        assert config.mcp_port == 9000
 
     def test_brain_data_path_is_pathlib_path(self, tmp_path):
         """Pydantic coerces string brain_data_path to Path."""
@@ -625,5 +635,102 @@ class TestMemoryProviderConfig:
                 supabase_key="test-key",
                 brain_data_path=tmp_path,
                 memory_provider="graphiti",
+                _env_file=None,
+            )
+
+
+class TestMcpTransportConfig:
+    """Tests for MCP transport config fields and validator."""
+
+    def test_mcp_transport_default_stdio(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.mcp_transport == "stdio"
+
+    def test_mcp_transport_http(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            mcp_transport="http",
+            _env_file=None,
+        )
+        assert config.mcp_transport == "http"
+
+    def test_mcp_transport_sse(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            mcp_transport="sse",
+            _env_file=None,
+        )
+        assert config.mcp_transport == "sse"
+
+    def test_mcp_transport_invalid_raises(self, tmp_path):
+        with pytest.raises(ValidationError, match="mcp_transport must be"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                mcp_transport="websocket",
+                _env_file=None,
+            )
+
+    def test_mcp_transport_from_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("MCP_TRANSPORT", "http")
+        config = BrainConfig(_env_file=None)
+        assert config.mcp_transport == "http"
+
+    def test_mcp_host_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.mcp_host == "0.0.0.0"
+
+    def test_mcp_port_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.mcp_port == 8000
+
+    def test_mcp_port_from_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("MCP_PORT", "9090")
+        config = BrainConfig(_env_file=None)
+        assert config.mcp_port == 9090
+
+    def test_mcp_port_below_range_raises(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                mcp_port=80,
+                _env_file=None,
+            )
+
+    def test_mcp_port_above_range_raises(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                mcp_port=70000,
                 _env_file=None,
             )
