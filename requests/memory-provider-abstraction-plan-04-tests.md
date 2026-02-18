@@ -485,28 +485,28 @@ python -m pytest --co -q 2>&1 | tail -3
 
 ## SUB-PLAN CHECKLIST
 
-- [ ] Task 1 completed: `TestMemoryProviderConfig` added to `test_config.py` (4 tests)
-- [ ] Task 2 completed: `TestMemoryServiceAbstraction` added to `test_services.py` (7 tests)
-- [ ] Task 3 completed: `test_graphiti_memory.py` created with `TestGraphitiMemoryAdapter` (~17 tests)
-- [ ] Task 4 completed: `TestCreateDepsMemoryProvider` added to `test_deps.py` (3 tests)
-- [ ] All new tests pass
-- [ ] All existing tests still pass (no regressions)
-- [ ] Total test count ≥ 880
+- [x] Task 1 completed: `TestMemoryProviderConfig` added to `test_config.py` (4 tests)
+- [x] Task 2 completed: `TestMemoryServiceAbstraction` added to `test_services.py` (7 tests)
+- [x] Task 3 completed: `test_graphiti_memory.py` created with `TestGraphitiMemoryAdapter` (19 tests)
+- [x] Task 4 completed: `TestCreateDepsMemoryProvider` added to `test_deps.py` (3 tests)
+- [x] All new tests pass
+- [x] All existing tests still pass (no regressions)
+- [x] Total test count ≥ 880 (891 collected)
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] `test_config.py::TestMemoryProviderConfig` — all 4 tests pass
-- [ ] `test_services.py::TestMemoryServiceAbstraction` — all 7 tests pass
-- [ ] `test_graphiti_memory.py::TestGraphitiMemoryAdapter` — all ~17 tests pass
-- [ ] `test_deps.py::TestCreateDepsMemoryProvider` — all 3 tests pass
-- [ ] `StubMemoryService.search("x")` test verifies `isinstance(result, SearchResult)` — not list
-- [ ] `GraphitiMemoryAdapter.add()` test verifies `add_episode` called with `group_id=user_id`
-- [ ] `GraphitiMemoryAdapter.get_all()` returns `[]` (graceful degradation)
-- [ ] `create_deps()` `"none"` branch test verifies `isinstance(deps.memory_service, StubMemoryService)`
-- [ ] `create_deps()` `"graphiti"` branch test verifies `isinstance(deps.memory_service, GraphitiMemoryAdapter)`
-- [ ] All 856 pre-existing tests still pass
+- [x] `test_config.py::TestMemoryProviderConfig` — all 4 tests pass
+- [x] `test_services.py::TestMemoryServiceAbstraction` — all 7 tests pass
+- [x] `test_graphiti_memory.py::TestGraphitiMemoryAdapter` — all 19 tests pass
+- [x] `test_deps.py::TestCreateDepsMemoryProvider` — all 3 tests pass
+- [x] `StubMemoryService.search("x")` test verifies `isinstance(result, SearchResult)` — not list
+- [x] `GraphitiMemoryAdapter.add()` test verifies `add_episode` called with `group_id=user_id`
+- [x] `GraphitiMemoryAdapter.get_all()` returns `[]` (graceful degradation)
+- [x] `create_deps()` `"none"` branch test verifies `isinstance(deps.memory_service, StubMemoryService)`
+- [x] `create_deps()` `"graphiti"` branch test verifies `isinstance(deps.memory_service, GraphitiMemoryAdapter)`
+- [x] All 856 pre-existing tests still pass
 
 ---
 

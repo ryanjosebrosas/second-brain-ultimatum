@@ -228,3 +228,40 @@ class TestBrainDepsExpanded:
         assert deps.email_service is None
         assert deps.calendar_service is None
         assert deps.task_service is None
+
+
+class TestCreateDepsMemoryProvider:
+    """Tests for create_deps() memory_provider branching."""
+
+    def test_mem0_provider_creates_memory_service(self, tmp_path):
+        """Default memory_provider='mem0' creates MemoryService."""
+        from second_brain.services.memory import MemoryService
+        config = _config(tmp_path, memory_provider="mem0")
+        with patch(_MEMORY_SVC) as mock_mem, patch(_STORAGE_SVC):
+            deps = create_deps(config)
+            mock_mem.assert_called_once_with(config)
+            assert deps.memory_service is mock_mem.return_value
+
+    def test_none_provider_creates_stub_memory_service(self, tmp_path):
+        """memory_provider='none' creates StubMemoryService."""
+        from second_brain.services.abstract import StubMemoryService
+        config = _config(tmp_path, memory_provider="none")
+        with patch(_MEMORY_SVC), patch(_STORAGE_SVC):
+            deps = create_deps(config)
+            assert isinstance(deps.memory_service, StubMemoryService)
+
+    def test_graphiti_provider_creates_graphiti_memory_adapter(self, tmp_path):
+        """memory_provider='graphiti' creates GraphitiMemoryAdapter."""
+        from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
+        config = _config(
+            tmp_path,
+            memory_provider="graphiti",
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+        )
+        with patch(_MEMORY_SVC), patch(_STORAGE_SVC), \
+             patch(_GRAPHITI_SVC) as mock_gs:
+            mock_gs.return_value = MagicMock()
+            deps = create_deps(config)
+            assert isinstance(deps.memory_service, GraphitiMemoryAdapter)

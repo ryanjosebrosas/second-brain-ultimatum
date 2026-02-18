@@ -20,6 +20,7 @@ _ENV_VARS = [
     "CONTENT_PREVIEW_LIMIT", "PATTERN_PREVIEW_LIMIT",
     "GRAPHITI_ENABLED", "FALKORDB_URL", "FALKORDB_PASSWORD",
     "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
+    "MEMORY_PROVIDER",
 ]
 
 
@@ -579,3 +580,50 @@ class TestSubscriptionConfig:
             _env_file=None,
         )
         assert "sk-ant-oat01-secret" not in repr(config)
+
+
+class TestMemoryProviderConfig:
+    """Tests for memory_provider config field and validator."""
+
+    def test_memory_provider_default_is_mem0(self, tmp_path):
+        """Default memory_provider is 'mem0'."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.memory_provider == "mem0"
+
+    def test_memory_provider_none_is_valid(self, tmp_path):
+        """memory_provider='none' is accepted without any credential requirements."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            memory_provider="none",
+            _env_file=None,
+        )
+        assert config.memory_provider == "none"
+
+    def test_memory_provider_invalid_raises(self, tmp_path):
+        """Unknown memory_provider value raises ValidationError."""
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                memory_provider="redis",
+                _env_file=None,
+            )
+
+    def test_memory_provider_graphiti_without_creds_raises(self, tmp_path):
+        """memory_provider='graphiti' without Neo4j or FalkorDB URL raises ValidationError."""
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                memory_provider="graphiti",
+                _env_file=None,
+            )

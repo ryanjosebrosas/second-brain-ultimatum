@@ -1926,3 +1926,56 @@ class TestStorageServiceUserIsolation:
 
         call_data = mock_table.insert.call_args[0][0]
         assert call_data["user_id"] == mock_config.brain_user_id
+
+
+class TestMemoryServiceAbstraction:
+    """Tests for MemoryServiceBase ABC and StubMemoryService."""
+
+    def test_memory_service_base_cannot_be_instantiated(self):
+        """MemoryServiceBase is abstract — direct instantiation raises TypeError."""
+        from second_brain.services.abstract import MemoryServiceBase
+        with pytest.raises(TypeError):
+            MemoryServiceBase()
+
+    def test_memory_service_is_subclass(self):
+        """MemoryService inherits from MemoryServiceBase."""
+        from second_brain.services.abstract import MemoryServiceBase
+        assert issubclass(MemoryService, MemoryServiceBase)
+
+    async def test_stub_search_returns_search_result(self):
+        """StubMemoryService.search returns SearchResult, not list."""
+        from second_brain.services.abstract import StubMemoryService
+        from second_brain.services.search_result import SearchResult
+        stub = StubMemoryService()
+        result = await stub.search("test query")
+        assert isinstance(result, SearchResult)
+        assert result.memories == []
+
+    async def test_stub_search_with_filters_returns_search_result(self):
+        """StubMemoryService.search_with_filters returns SearchResult."""
+        from second_brain.services.abstract import StubMemoryService
+        from second_brain.services.search_result import SearchResult
+        stub = StubMemoryService()
+        result = await stub.search_with_filters("test", {"category": "x"})
+        assert isinstance(result, SearchResult)
+
+    async def test_stub_add_returns_empty_dict(self):
+        """StubMemoryService.add returns {} (not None, not a list)."""
+        from second_brain.services.abstract import StubMemoryService
+        stub = StubMemoryService()
+        result = await stub.add("some content")
+        assert result == {}
+
+    async def test_stub_get_all_returns_empty_list(self):
+        """StubMemoryService.get_all returns []."""
+        from second_brain.services.abstract import StubMemoryService
+        stub = StubMemoryService()
+        result = await stub.get_all()
+        assert result == []
+
+    async def test_stub_get_memory_count_returns_zero(self):
+        """StubMemoryService.get_memory_count returns 0."""
+        from second_brain.services.abstract import StubMemoryService
+        stub = StubMemoryService()
+        result = await stub.get_memory_count()
+        assert result == 0
