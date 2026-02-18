@@ -809,6 +809,348 @@ async def advance_project(project_id: str, target_stage: str | None = None) -> s
 
 
 @server.tool()
+async def list_projects(
+    lifecycle_stage: str | None = None,
+    category: str | None = None,
+    limit: int = 20,
+) -> str:
+    """List Second Brain projects with optional filters.
+
+    Args:
+        lifecycle_stage: Filter by stage: planning, executing, reviewing, learning, done
+        category: Filter by category: content, prospects, clients, products, general
+        limit: Maximum number of projects to return (default 20)
+    """
+    deps = _get_deps()
+    try:
+        projects = await deps.storage_service.list_projects(
+            lifecycle_stage=lifecycle_stage,
+            category=category,
+            limit=limit,
+        )
+        if not projects:
+            return "No projects found. Create one with create_project."
+        parts = [f"# Projects ({len(projects)})\n"]
+        for p in projects:
+            stage = p.get("lifecycle_stage", "unknown")
+            parts.append(f"## {p['name']} [{stage}]")
+            parts.append(f"ID: {p['id']}")
+            if p.get("category"):
+                parts.append(f"Category: {p['category']}")
+            if p.get("description"):
+                parts.append(p["description"][:120])
+            parts.append("")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error listing projects: {e}"
+
+
+@server.tool()
+async def update_project(
+    project_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    category: str | None = None,
+) -> str:
+    """Update a project's metadata (name, description, or category).
+
+    Args:
+        project_id: The project UUID (from list_projects or create_project)
+        name: New project name (optional)
+        description: New project description (optional)
+        category: New category: content, prospects, clients, products, general (optional)
+    """
+    try:
+        project_id = _validate_mcp_input(project_id, label="project_id")
+    except ValueError as e:
+        return str(e)
+    fields = {
+        k: v for k, v in
+        {"name": name, "description": description, "category": category}.items()
+        if v is not None
+    }
+    if not fields:
+        return "No fields to update. Provide at least one of: name, description, category."
+    deps = _get_deps()
+    try:
+        result = await deps.storage_service.update_project(project_id, fields)
+        if not result:
+            return f"Project not found: {project_id}"
+        changed = ", ".join(fields.keys())
+        return f"Project updated: {result.get('name', project_id)}\nChanged: {changed}"
+    except Exception as e:
+        return f"Error updating project: {e}"
+
+
+@server.tool()
+async def delete_project(project_id: str) -> str:
+    """Permanently delete a project and all its artifacts.
+
+    WARNING: This is irreversible. All artifacts (plan, draft, review, output)
+    attached to the project will also be deleted.
+
+    Args:
+        project_id: The project UUID to delete (from list_projects)
+    """
+    try:
+        project_id = _validate_mcp_input(project_id, label="project_id")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        # Fetch project first to get the name for confirmation message
+        proj = await deps.storage_service.get_project(project_id)
+        if not proj:
+            return f"Project not found: {project_id}"
+        project_name = proj.get("name", project_id)
+        deleted = await deps.storage_service.delete_project(project_id)
+        if deleted:
+            return f"Deleted project: {project_name}"
+        return f"Failed to delete project: {project_id}"
+    except Exception as e:
+        return f"Error deleting project: {e}"
+
+
+@server.tool()
+async def add_artifact(
+    project_id: str,
+    artifact_type: str,
+    title: str | None = None,
+    content: str | None = None,
+) -> str:
+    """Add an artifact to a project (plan, draft, review, output, note).
+
+    Args:
+        project_id: The project UUID
+        artifact_type: Type of artifact: plan, draft, review, output, note
+        title: Optional artifact title or label
+        content: Optional artifact content text (e.g., the actual plan or draft)
+    """
+    valid_types = {"plan", "draft", "review", "output", "note"}
+    try:
+        project_id = _validate_mcp_input(project_id, label="project_id")
+    except ValueError as e:
+        return str(e)
+    if artifact_type not in valid_types:
+        return f"Invalid artifact_type '{artifact_type}'. Use: {', '.join(sorted(valid_types))}"
+    deps = _get_deps()
+    try:
+        artifact_data: dict = {"project_id": project_id, "artifact_type": artifact_type}
+        if title:
+            artifact_data["title"] = title
+        if content:
+            artifact_data["content"] = content
+        result = await deps.storage_service.add_project_artifact(artifact_data)
+        if result:
+            return (
+                f"Artifact added: {artifact_type}"
+                + (f" — {title}" if title else "")
+                + f"\nArtifact ID: {result.get('id', 'unknown')}"
+            )
+        return "Failed to add artifact."
+    except Exception as e:
+        return f"Error adding artifact: {e}"
+
+
+@server.tool()
+async def delete_artifact(artifact_id: str) -> str:
+    """Delete a project artifact by its ID.
+
+    Args:
+        artifact_id: The artifact UUID (from project_status output)
+    """
+    try:
+        artifact_id = _validate_mcp_input(artifact_id, label="artifact_id")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        deleted = await deps.storage_service.delete_project_artifact(artifact_id)
+        if deleted:
+            return f"Deleted artifact: {artifact_id}"
+        return f"Artifact not found: {artifact_id}"
+    except Exception as e:
+        return f"Error deleting artifact: {e}"
+
+
+@server.tool()
+async def search_experiences(
+    category: str | None = None,
+    limit: int = 20,
+) -> str:
+    """List work experiences from your Second Brain.
+
+    Experiences are individual work events (client calls, launches, wins/losses)
+    that inform future decisions. Use category to filter.
+
+    Args:
+        category: Filter by category (e.g., client-work, product-launch) or None for all
+        limit: Maximum experiences to return (default 20)
+    """
+    deps = _get_deps()
+    try:
+        experiences = await deps.storage_service.get_experiences(
+            category=category, limit=limit
+        )
+        if not experiences:
+            cat_note = f" in category '{category}'" if category else ""
+            return f"No experiences found{cat_note}. Record some with `learn`."
+        parts = [f"# Experiences ({len(experiences)})\n"]
+        for exp in experiences:
+            parts.append(f"## {exp.get('title', 'Untitled')}")
+            if exp.get("category"):
+                parts.append(f"Category: {exp['category']}")
+            if exp.get("date"):
+                parts.append(f"Date: {exp['date']}")
+            parts.append(exp.get("description", "")[:300])
+            if exp.get("id"):
+                parts.append(f"ID: {exp['id']}")
+            parts.append("")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error searching experiences: {e}"
+
+
+@server.tool()
+async def search_patterns(
+    topic: str | None = None,
+    confidence: str | None = None,
+    keyword: str | None = None,
+    limit: int = 30,
+) -> str:
+    """Search your Second Brain patterns with optional filters.
+
+    More granular than pattern_registry — supports keyword search
+    and confidence filtering. Use pattern_registry for the full overview.
+
+    Args:
+        topic: Filter by topic (e.g., messaging, brand-voice, content, strategy)
+        confidence: Filter by level: HIGH, MEDIUM, or LOW
+        keyword: Text to match in pattern name or pattern_text (optional, case-insensitive)
+        limit: Maximum results (default 30)
+    """
+    deps = _get_deps()
+    try:
+        patterns = await deps.storage_service.get_patterns(
+            topic=topic, confidence=confidence
+        )
+        # Client-side keyword filter
+        if keyword:
+            kw = keyword.lower()
+            patterns = [
+                p for p in patterns
+                if kw in p.get("name", "").lower() or kw in p.get("pattern_text", "").lower()
+            ]
+        patterns = patterns[:limit]
+        if not patterns:
+            return "No patterns found matching your filters."
+        parts = [f"# Patterns ({len(patterns)})\n"]
+        for p in patterns:
+            parts.append(
+                f"## [{p.get('confidence', '?')}] {p.get('name', 'Unnamed')}"
+            )
+            if p.get("topic"):
+                parts.append(f"Topic: {p['topic']}")
+            parts.append(p.get("pattern_text", "")[:300])
+            if p.get("id"):
+                parts.append(f"ID: {p['id']}")
+            parts.append("")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error searching patterns: {e}"
+
+
+@server.tool()
+async def ingest_example(
+    content_type: str,
+    title: str,
+    content: str,
+    notes: str | None = None,
+) -> str:
+    """Add a content example directly to your Second Brain's example library.
+
+    Previously this required running a migration script. Now you can add
+    examples inline from Claude Code.
+
+    Args:
+        content_type: Content type slug (e.g., linkedin, email, case-study, newsletter)
+        title: Short title describing what makes this a good example
+        content: The example content text (the actual email, post, etc.)
+        notes: Optional notes about why this is a good example or what to learn from it
+    """
+    try:
+        content_type = _validate_mcp_input(content_type, label="content_type")
+        title = _validate_mcp_input(title, label="title")
+        content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        example_data: dict = {
+            "content_type": content_type,
+            "title": title,
+            "content": content,
+        }
+        if notes:
+            example_data["notes"] = notes
+        result = await deps.storage_service.upsert_example(example_data)
+        if result:
+            return (
+                f"Example added: {title}\n"
+                f"Type: {content_type}\n"
+                f"ID: {result.get('id', 'unknown')}"
+            )
+        return "Failed to ingest example."
+    except Exception as e:
+        return f"Error ingesting example: {e}"
+
+
+@server.tool()
+async def ingest_knowledge(
+    category: str,
+    title: str,
+    content: str,
+    tags: str | None = None,
+) -> str:
+    """Add a knowledge entry directly to your Second Brain's knowledge repository.
+
+    Knowledge entries capture audience insights, product info, competitive data,
+    and other reference material. Previously required a migration script.
+
+    Args:
+        category: Knowledge category (e.g., audience, product, competitors, positioning)
+        title: Short title for this knowledge entry
+        content: The knowledge content text
+        tags: Optional comma-separated tags (e.g., "enterprise,saas,2026")
+    """
+    try:
+        category = _validate_mcp_input(category, label="category")
+        title = _validate_mcp_input(title, label="title")
+        content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        knowledge_data: dict = {
+            "category": category,
+            "title": title,
+            "content": content,
+        }
+        if tags:
+            knowledge_data["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+        result = await deps.storage_service.upsert_knowledge(knowledge_data)
+        if result:
+            return (
+                f"Knowledge added: {title}\n"
+                f"Category: {category}\n"
+                f"ID: {result.get('id', 'unknown')}"
+            )
+        return "Failed to ingest knowledge."
+    except Exception as e:
+        return f"Error ingesting knowledge: {e}"
+
+
+@server.tool()
 async def brain_setup() -> str:
     """Check brain setup/onboarding status. Shows which memory categories are populated
     and what steps remain to fully configure the brain."""
