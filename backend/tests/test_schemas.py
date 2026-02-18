@@ -459,7 +459,7 @@ class TestProjectSchemas:
         gs = GrowthSummary(period_days=30)
         assert gs.brain_level == "EMPTY"
         assert gs.milestones_completed == 0
-        assert gs.quality_trend == {}
+        assert gs.quality_trend is None
 
     def test_brain_milestones_constant(self):
         assert isinstance(BRAIN_MILESTONES, list)

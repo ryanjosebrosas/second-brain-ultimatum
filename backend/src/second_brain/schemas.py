@@ -1,6 +1,6 @@
 """Pydantic output models for Second Brain agent responses."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -176,12 +176,12 @@ class ContentTypeConfig(BaseModel):
         description="Type-specific writing rules and protocols injected into agent instructions "
         "at runtime. Example: STIRC scoring protocol for essays, hook/CTA rules for LinkedIn.",
     )
-    validation_rules: dict = Field(
+    validation_rules: dict[str, Any] = Field(
         default_factory=dict,
         description="Type-specific validation rules applied by validate_draft tool. "
         "Keys: min_words (int), required_sections (list[str]), custom_checks (list[str]).",
     )
-    ui_config: dict = Field(
+    ui_config: dict[str, Any] = Field(
         default_factory=dict,
         description="Frontend UI metadata. Keys: icon (str), color (str), category (str), "
         "input_placeholder (str), show_framework_selector (bool).",
@@ -277,6 +277,16 @@ class GrowthEvent(BaseModel):
     )
 
 
+class ReviewDimensionEntry(BaseModel):
+    """A single dimension score stored in review history."""
+
+    dimension: str = Field(description="Review dimension name (e.g., Messaging, Brand Voice)")
+    score: int = Field(description="Score 1-10 for this dimension")
+    status: str = Field(default="pass", description="pass, warning, or issue")
+    strengths: list[str] = Field(default_factory=list, description="Strengths noted")
+    issues: list[str] = Field(default_factory=list, description="Issues found")
+
+
 class ReviewHistoryEntry(BaseModel):
     """A stored review result for quality trending."""
 
@@ -287,7 +297,7 @@ class ReviewHistoryEntry(BaseModel):
     content_type: str = Field(default="", description="Content type reviewed")
     overall_score: float = Field(description="Overall review score 1-10")
     verdict: str = Field(description="READY TO SEND, NEEDS REVISION, or MAJOR REWORK")
-    dimension_scores: list[dict] = Field(
+    dimension_scores: list[ReviewDimensionEntry] = Field(
         default_factory=list,
         description="Per-dimension scores as dicts",
     )
@@ -443,6 +453,7 @@ class BrainGrowthStatus(BaseModel):
 class PatternRegistryEntry(BaseModel):
     """A pattern entry for the registry view."""
 
+    id: str | None = Field(default=None, description="Pattern UUID from database")
     name: str = Field(description="Pattern name")
     topic: str = Field(description="Pattern topic/category")
     confidence: ConfidenceLevel = Field(description="Current confidence level")
@@ -464,7 +475,36 @@ class PatternRegistryEntry(BaseModel):
     )
 
 
+class MemoryContentRow(BaseModel):
+    """A memory content entry from the memory_content table.
+
+    Used for structured storage of categorized memory content
+    (e.g., brand voice rules, audience profiles, product positioning).
+    """
+
+    category: str = Field(description="Category name (e.g., voice, audience, product)")
+    subcategory: str = Field(
+        default="general",
+        description="Sub-category for further grouping within a category",
+    )
+    content: str = Field(description="The memory content text")
+    source: str = Field(default="", description="Source file or origin of this content")
+    last_updated: str = Field(
+        default="",
+        description="ISO date string of last update (YYYY-MM-DD)",
+    )
+
+
 # --- Setup/Onboarding ---
+
+
+class SetupStep(BaseModel):
+    """A single setup step in the brain setup checklist."""
+
+    category: str = Field(description="Memory category name (e.g., voice, audience)")
+    label: str = Field(description="Human-readable label for this setup step")
+    complete: bool = Field(default=False, description="Whether this step is complete")
+    memory_count: int = Field(default=0, description="Number of memories in this category")
 
 
 class SetupStatus(BaseModel):
@@ -473,7 +513,7 @@ class SetupStatus(BaseModel):
     is_complete: bool = Field(
         default=False, description="Whether all setup steps are done"
     )
-    steps: list[dict] = Field(
+    steps: list[SetupStep] = Field(
         default_factory=list,
         description="Setup steps with completion status",
     )
@@ -520,8 +560,9 @@ class GrowthSummary(BaseModel):
     milestones_completed: int = Field(
         default=0, description="Number of milestones achieved"
     )
-    quality_trend: dict = Field(
-        default_factory=dict, description="Quality trending summary"
+    quality_trend: QualityTrend | None = Field(
+        default=None,
+        description="Quality trend for the period — None if no reviews in period",
     )
 
 
@@ -896,17 +937,35 @@ class TemplateBuilderResult(BaseModel):
 # --- Operations & Advisory Agents ---
 
 
+class CoachPriority(BaseModel):
+    """A single priority item in a coaching session."""
+
+    title: str = Field(description="Priority title or goal for this session")
+    urgency: str = Field(default="medium", description="Urgency level: high/medium/low")
+    status: str = Field(default="pending", description="pending/in-progress/done")
+    notes: str = Field(default="", description="Additional context or blockers")
+
+
+class TimeBlock(BaseModel):
+    """A scheduled time block in a coaching session plan."""
+
+    time: str = Field(description="Time range (e.g., '9:00-10:00 AM')")
+    activity: str = Field(description="Planned activity for this block")
+    priority: str = Field(default="", description="Associated priority title if any")
+    energy_level: str = Field(default="medium", description="Required energy: high/medium/low")
+
+
 class CoachSession(BaseModel):
     """Output from the Daily Accountability Coach."""
 
     session_type: Literal["morning", "evening", "check_in", "intervention"] = Field(
         description="Type of coaching session"
     )
-    priorities: list[dict] = Field(
+    priorities: list[CoachPriority] = Field(
         default_factory=list,
         description="Prioritized tasks with scores and rationale",
     )
-    time_blocks: list[dict] = Field(
+    time_blocks: list[TimeBlock] = Field(
         default_factory=list,
         description="Suggested time blocks with start/end and task assignment",
     )
