@@ -1039,3 +1039,212 @@ class TestProjectMCPTools:
         result = await pattern_registry()
         assert "Hook" in result
         assert "Total: 1" in result
+
+
+class TestNewMCPTools:
+    """Tests for gap-remediation MCP tools (service-direct Pattern A)."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_list_projects_returns_projects(self, mock_deps_fn):
+        from second_brain.mcp_server import list_projects
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.list_projects = AsyncMock(return_value=[
+            {"id": "proj-1", "name": "Q1 Campaign", "lifecycle_stage": "executing",
+             "category": "content", "description": "Our Q1 push"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        result = await list_projects()
+        assert "Q1 Campaign" in result
+        assert "executing" in result
+        assert "proj-1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_list_projects_empty(self, mock_deps_fn):
+        from second_brain.mcp_server import list_projects
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.list_projects = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+        result = await list_projects()
+        assert "No projects found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_success(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.update_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "New Name"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await update_project(project_id="proj-1", name="New Name")
+        assert "New Name" in result
+        assert "Changed" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_no_fields(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        mock_deps_fn.return_value = _mock_deps()
+        result = await update_project(project_id="proj-1")
+        assert "No fields" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.update_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+        result = await update_project(project_id="proj-1", name="X")
+        assert "not found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_project_success(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_project
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "Old Campaign"}
+        )
+        mock_deps.storage_service.delete_project = AsyncMock(return_value=True)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_project(project_id="proj-1")
+        assert "Deleted" in result
+        assert "Old Campaign" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_project_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_project
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_project(project_id="proj-nonexistent")
+        assert "not found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_add_artifact_success(self, mock_deps_fn):
+        from second_brain.mcp_server import add_artifact
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.add_project_artifact = AsyncMock(
+            return_value={"id": "art-1", "artifact_type": "plan"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await add_artifact(
+            project_id="proj-1", artifact_type="plan", title="Feature Plan"
+        )
+        assert "plan" in result
+        assert "art-1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_add_artifact_invalid_type(self, mock_deps_fn):
+        from second_brain.mcp_server import add_artifact
+        mock_deps_fn.return_value = _mock_deps()
+        result = await add_artifact(project_id="proj-1", artifact_type="invalid")
+        assert "Invalid artifact_type" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_artifact_success(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_artifact
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.delete_project_artifact = AsyncMock(return_value=True)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_artifact(artifact_id="art-1")
+        assert "Deleted" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_artifact_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_artifact
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.delete_project_artifact = AsyncMock(return_value=False)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_artifact(artifact_id="art-nonexistent")
+        assert "not found" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_experiences_returns_results(self, mock_deps_fn):
+        from second_brain.mcp_server import search_experiences
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[
+            {"id": "exp-1", "title": "Client Win", "category": "client-work",
+             "date": "2026-02-01", "description": "Closed enterprise deal"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        result = await search_experiences()
+        assert "Client Win" in result
+        assert "exp-1" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_experiences_empty(self, mock_deps_fn):
+        from second_brain.mcp_server import search_experiences
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+        result = await search_experiences(category="nonexistent")
+        assert "No experiences found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_patterns_with_keyword(self, mock_deps_fn):
+        from second_brain.mcp_server import search_patterns
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"id": "pat-1", "name": "Direct CTA Pattern", "confidence": "HIGH",
+             "topic": "messaging", "pattern_text": "Use one clear call to action"},
+            {"id": "pat-2", "name": "Story Arc", "confidence": "MEDIUM",
+             "topic": "content", "pattern_text": "Open with conflict"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        result = await search_patterns(keyword="cta")
+        assert "Direct CTA Pattern" in result
+        assert "Story Arc" not in result  # filtered out by keyword
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_patterns_empty(self, mock_deps_fn):
+        from second_brain.mcp_server import search_patterns
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+        result = await search_patterns(topic="nonexistent")
+        assert "No patterns found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ingest_example_success(self, mock_deps_fn):
+        from second_brain.mcp_server import ingest_example
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.upsert_example = AsyncMock(
+            return_value={"id": "ex-new", "title": "Great LinkedIn Post"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await ingest_example(
+            content_type="linkedin",
+            title="Great LinkedIn Post",
+            content="We just hit 100 customers...",
+        )
+        assert "Great LinkedIn Post" in result
+        assert "ex-new" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ingest_example_empty_content(self, mock_deps_fn):
+        from second_brain.mcp_server import ingest_example
+        mock_deps_fn.return_value = _mock_deps()
+        result = await ingest_example(
+            content_type="linkedin",
+            title="Valid Title",
+            content="   ",  # whitespace only — validation should catch
+        )
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ingest_knowledge_with_tags(self, mock_deps_fn):
+        from second_brain.mcp_server import ingest_knowledge
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.upsert_knowledge = AsyncMock(
+            return_value={"id": "kn-new", "title": "Enterprise Buyer Profile"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await ingest_knowledge(
+            category="audience",
+            title="Enterprise Buyer Profile",
+            content="Our ICP is VP of Engineering...",
+            tags="enterprise, b2b, technical",
+        )
+        assert "Enterprise Buyer Profile" in result
+        # Verify tags were split (check the service call args)
+        call_args = mock_deps.storage_service.upsert_knowledge.call_args[0][0]
+        assert isinstance(call_args.get("tags"), list)
+        assert "enterprise" in call_args["tags"]

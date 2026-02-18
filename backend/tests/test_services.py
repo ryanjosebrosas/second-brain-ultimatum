@@ -1623,3 +1623,194 @@ class TestHealthMilestones:
         assert result["avg_score"] == 8.2
         assert result["period_days"] == 30
         assert len(result["by_dimension"]) == 1
+
+
+class TestStorageServiceNewMethods:
+    """Tests for gap-remediation service methods added in system-gap-remediation sub-plan 02."""
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_update_project(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.update.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "proj-1", "name": "New Name", "lifecycle_stage": "planning"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.update_project("proj-1", {"name": "New Name"})
+
+        assert result["name"] == "New Name"
+        mock_table.update.assert_called_once_with({"name": "New Name"})
+        mock_table.eq.assert_called_once_with("id", "proj-1")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_update_project_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.update.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.update_project("nonexistent", {"name": "X"})
+        assert result is None
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "proj-1", "name": "Deleted"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        deleted = await service.delete_project("proj-1")
+        assert deleted is True
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        deleted = await service.delete_project("nonexistent")
+        assert deleted is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project_artifact(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "art-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        deleted = await service.delete_project_artifact("art-1")
+        assert deleted is True
+        mock_client.table.assert_called_with("project_artifacts")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project_artifact_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        deleted = await service.delete_project_artifact("nonexistent")
+        assert deleted is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_experience_by_id(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "exp-1", "title": "Client Win", "category": "client-work"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        exp = await service.get_experience_by_id("exp-1")
+        assert exp["title"] == "Client Win"
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_experience_by_id_not_found(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        exp = await service.get_experience_by_id("nonexistent")
+        assert exp is None
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_by_id(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(
+            data=[{"id": "pat-1", "name": "Direct CTA", "confidence": "HIGH"}]
+        )
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        pattern = await service.get_pattern_by_id("pat-1")
+        assert pattern["name"] == "Direct CTA"
+        mock_client.table.assert_called_with("patterns")
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_memory_content(self, mock_create, mock_config):
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.delete.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[{"id": "mc-1"}])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        deleted = await service.delete_memory_content("voice", "tone")
+        assert deleted is True
+        assert mock_table.eq.call_count == 2  # once for category, once for subcategory
+
+
+class TestMemoryServiceNewMethods:
+    """Tests for get_by_id, delete_all, and search_by_category."""
+
+    async def test_get_by_id_found(self, mock_memory):
+        mock_memory.get_by_id = AsyncMock(return_value={
+            "id": "mem-1", "memory": "Brand voice is direct"
+        })
+        result = await mock_memory.get_by_id("mem-1")
+        assert result["memory"] == "Brand voice is direct"
+
+    async def test_get_by_id_not_found(self, mock_memory):
+        mock_memory.get_by_id = AsyncMock(return_value=None)
+        result = await mock_memory.get_by_id("nonexistent")
+        assert result is None
+
+    async def test_delete_all_returns_count(self, mock_memory):
+        mock_memory.delete_all = AsyncMock(return_value=3)
+        count = await mock_memory.delete_all()
+        assert count == 3
+
+    async def test_search_by_category(self, mock_memory):
+        from second_brain.services.search_result import SearchResult
+        mock_memory.search_by_category = AsyncMock(
+            return_value=SearchResult(
+                memories=[{"memory": "voice pattern", "score": 0.9}],
+                relations=[],
+            )
+        )
+        result = await mock_memory.search_by_category("voice", query="brand")
+        assert len(result.memories) == 1
+        assert result.memories[0]["memory"] == "voice pattern"

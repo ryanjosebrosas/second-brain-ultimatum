@@ -316,3 +316,55 @@ def credentials_file(tmp_path):
     creds_file = creds_dir / ".credentials.json"
     creds_file.write_text(json.dumps(creds))
     return creds_dir
+
+
+@pytest.fixture
+def mock_health_service():
+    """Create a mocked HealthService for tools that use it directly."""
+    from second_brain.services.health import HealthMetrics
+    service = MagicMock()
+    service.compute = AsyncMock(return_value=HealthMetrics(
+        memory_count=42,
+        total_patterns=10,
+        high_confidence=3,
+        medium_confidence=5,
+        low_confidence=2,
+        experience_count=8,
+        graph_provider="none",
+        latest_update="2026-02-18",
+        topics={"messaging": 4, "content": 6},
+        status="healthy",
+        graphiti_status="disabled",
+        graphiti_backend="none",
+    ))
+    service.compute_growth = AsyncMock(return_value={})
+    service.compute_setup_status = AsyncMock(return_value={})
+    return service
+
+
+@pytest.fixture
+def mock_embedding_service_error():
+    """Embedding service that raises RuntimeError — for error path tests."""
+    service = MagicMock()
+    service.embed_query = AsyncMock(side_effect=RuntimeError("Embedding API unavailable"))
+    service.embed_documents = AsyncMock(side_effect=RuntimeError("Embedding API unavailable"))
+    return service
+
+
+@pytest.fixture
+def mock_deps_with_graphiti_full(
+    brain_config, mock_memory, mock_storage, mock_embedding_service,
+    mock_voyage_service, mock_graphiti,
+):
+    """BrainDeps with Graphiti enabled AND embedding + voyage services.
+
+    Fixes the gap in mock_deps_with_graphiti which omits embedding and voyage.
+    """
+    return BrainDeps(
+        config=brain_config,
+        memory_service=mock_memory,
+        storage_service=mock_storage,
+        embedding_service=mock_embedding_service,
+        voyage_service=mock_voyage_service,
+        graphiti_service=mock_graphiti,
+    )

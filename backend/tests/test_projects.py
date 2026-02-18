@@ -325,3 +325,142 @@ class TestPatternRegistry:
         service = StorageService(brain_config)
         result = await service.get_pattern_registry()
         assert result == []
+
+
+class TestProjectLifecycleMCP:
+    """Tests for project/artifact MCP tools added in system-gap-remediation sub-plan 03."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_name(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.update_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "Renamed Project"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await update_project(project_id="proj-1", name="Renamed Project")
+        assert "Renamed Project" in result
+        assert "name" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.update_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+        result = await update_project(project_id="proj-999", description="X")
+        assert "not found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_update_project_empty_fields(self, mock_deps_fn):
+        from second_brain.mcp_server import update_project
+        from unittest.mock import MagicMock
+        mock_deps_fn.return_value = MagicMock()
+        result = await update_project(project_id="proj-1")
+        assert "No fields" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_project_success(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_project
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "Completed Campaign"}
+        )
+        mock_deps.storage_service.delete_project = AsyncMock(return_value=True)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_project(project_id="proj-1")
+        assert "Deleted" in result
+        assert "Completed Campaign" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_project_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_project
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_project(project_id="proj-none")
+        assert "not found" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_add_artifact_plan_type(self, mock_deps_fn):
+        from second_brain.mcp_server import add_artifact
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.add_project_artifact = AsyncMock(
+            return_value={"id": "art-plan-1", "artifact_type": "plan"}
+        )
+        mock_deps_fn.return_value = mock_deps
+        result = await add_artifact(
+            project_id="proj-1", artifact_type="plan", title="Q1 Strategy"
+        )
+        assert "art-plan-1" in result
+        assert "plan" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_add_artifact_invalid_type(self, mock_deps_fn):
+        from second_brain.mcp_server import add_artifact
+        from unittest.mock import MagicMock
+        mock_deps_fn.return_value = MagicMock()
+        result = await add_artifact(project_id="proj-1", artifact_type="invalid_type")
+        assert "Invalid artifact_type" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_artifact_success(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_artifact
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.delete_project_artifact = AsyncMock(return_value=True)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_artifact(artifact_id="art-1")
+        assert "Deleted" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_delete_artifact_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import delete_artifact
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.delete_project_artifact = AsyncMock(return_value=False)
+        mock_deps_fn.return_value = mock_deps
+        result = await delete_artifact(artifact_id="art-missing")
+        assert "not found" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_list_projects_with_stage_filter_mcp(self, mock_deps_fn):
+        from second_brain.mcp_server import list_projects
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.list_projects = AsyncMock(return_value=[
+            {"id": "p1", "name": "Active", "lifecycle_stage": "executing"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        result = await list_projects(lifecycle_stage="executing")
+        assert "Active" in result
+        assert "executing" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_list_projects_with_category_filter_mcp(self, mock_deps_fn):
+        from second_brain.mcp_server import list_projects
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.list_projects = AsyncMock(return_value=[
+            {"id": "p2", "name": "Newsletter", "lifecycle_stage": "planning",
+             "category": "content"},
+        ])
+        mock_deps_fn.return_value = mock_deps
+        result = await list_projects(category="content")
+        assert "Newsletter" in result
+        assert "content" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_list_projects_empty_with_filter(self, mock_deps_fn):
+        from second_brain.mcp_server import list_projects
+        from unittest.mock import AsyncMock, MagicMock
+        mock_deps = MagicMock()
+        mock_deps.storage_service.list_projects = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+        result = await list_projects(lifecycle_stage="done")
+        assert "No projects found" in result

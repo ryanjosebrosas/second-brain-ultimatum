@@ -160,3 +160,71 @@ class TestCreateDeps:
              patch(_EMBEDDING_SVC, side_effect=RuntimeError("init failed")):
             deps = create_deps(config)
             assert deps.embedding_service is None
+
+
+class TestBrainDepsExpanded:
+    """Additional BrainDeps structural and accessor tests."""
+
+    def test_brain_deps_with_all_five_services(
+        self, brain_config, mock_memory, mock_storage,
+        mock_embedding_service, mock_voyage_service, mock_graphiti,
+    ):
+        """BrainDeps can hold all 5 optional services simultaneously."""
+        deps = BrainDeps(
+            config=brain_config,
+            memory_service=mock_memory,
+            storage_service=mock_storage,
+            embedding_service=mock_embedding_service,
+            voyage_service=mock_voyage_service,
+            graphiti_service=mock_graphiti,
+        )
+        assert deps.memory_service is mock_memory
+        assert deps.storage_service is mock_storage
+        assert deps.embedding_service is mock_embedding_service
+        assert deps.voyage_service is mock_voyage_service
+        assert deps.graphiti_service is mock_graphiti
+
+    def test_brain_deps_memory_service_accessible(self, mock_deps):
+        """mock_deps.memory_service is set and accessible."""
+        assert mock_deps.memory_service is not None
+
+    def test_brain_deps_storage_service_accessible(self, mock_deps):
+        """mock_deps.storage_service is set and accessible."""
+        assert mock_deps.storage_service is not None
+
+    def test_brain_deps_config_accessible(self, mock_deps):
+        """mock_deps.config is set with test values."""
+        assert mock_deps.config is not None
+        assert mock_deps.config.supabase_url == "https://test.supabase.co"
+
+    def test_brain_deps_is_dataclass(self):
+        """BrainDeps is a dataclass (not a plain class)."""
+        import dataclasses
+        assert dataclasses.is_dataclass(BrainDeps)
+
+    def test_brain_deps_voyage_service_defaults_none(self, brain_config, mock_memory, mock_storage):
+        """voyage_service defaults to None when not provided."""
+        deps = BrainDeps(
+            config=brain_config,
+            memory_service=mock_memory,
+            storage_service=mock_storage,
+        )
+        assert deps.voyage_service is None
+
+    def test_create_deps_returns_brain_deps_instance(self, tmp_path):
+        """create_deps() always returns a BrainDeps instance."""
+        config = _config(tmp_path)
+        with patch(_MEMORY_SVC), patch(_STORAGE_SVC):
+            deps = create_deps(config)
+            assert isinstance(deps, BrainDeps)
+
+    def test_brain_deps_email_service_defaults_none(self, brain_config, mock_memory, mock_storage):
+        """Optional services (email, calendar, etc.) default to None."""
+        deps = BrainDeps(
+            config=brain_config,
+            memory_service=mock_memory,
+            storage_service=mock_storage,
+        )
+        assert deps.email_service is None
+        assert deps.calendar_service is None
+        assert deps.task_service is None

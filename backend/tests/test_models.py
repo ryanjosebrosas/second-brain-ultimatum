@@ -175,3 +175,160 @@ class TestGetModelNoProvider:
 
         with pytest.raises(RuntimeError):
             get_model(brain_config)
+
+
+class TestGetModelAnthropicVariants:
+    """Additional Anthropic model path tests for expanded coverage."""
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_anthropic_model_with_opus(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """get_model() uses opus model when primary_model is set to opus."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            primary_model="anthropic:claude-opus-4-5",
+        )
+        mock_model = MagicMock()
+        mock_model_cls.return_value = mock_model
+
+        result = get_model(config)
+
+        assert mock_model_cls.call_args[0][0] == "claude-opus-4-5"
+        assert result is mock_model
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_anthropic_model_with_haiku(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """get_model() uses haiku model when primary_model is set to haiku."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            primary_model="anthropic:claude-haiku-4-5-20251001",
+        )
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(config)
+
+        assert mock_model_cls.call_args[0][0] == "claude-haiku-4-5-20251001"
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_anthropic_model_with_sonnet_4_6(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """get_model() correctly uses sonnet-4-6 model."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            primary_model="anthropic:claude-sonnet-4-6",
+        )
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(config)
+
+        assert mock_model_cls.call_args[0][0] == "claude-sonnet-4-6"
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_model_name_without_prefix_passed_through(
+        self, mock_model_cls, mock_provider_cls, tmp_path
+    ):
+        """Model name without 'anthropic:' prefix is passed unchanged."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            primary_model="claude-sonnet-4-5",
+        )
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(config)
+
+        # No prefix to strip — should be passed as-is
+        assert mock_model_cls.call_args[0][0] == "claude-sonnet-4-5"
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_api_key_passed_to_provider(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """API key from config is passed to AnthropicProvider."""
+        config = _make_config(tmp_path, anthropic_api_key="my-secret-key")
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(config)
+
+        mock_provider_cls.assert_called_once_with(api_key="my-secret-key")
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_get_model_returns_model_object(self, mock_model_cls, mock_provider_cls, brain_config):
+        """get_model() returns a model object (not None)."""
+        expected = MagicMock()
+        mock_model_cls.return_value = expected
+
+        result = get_model(brain_config)
+
+        assert result is expected
+
+    @patch("pydantic_ai.providers.ollama.OllamaProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_anthropic_model_exception_falls_to_next_path(
+        self, mock_anthropic_cls, mock_anthropic_prov, mock_openai_cls, mock_ollama_cls, tmp_path
+    ):
+        """When AnthropicModel raises, falls through to the Ollama fallback path."""
+        # use_subscription=False prevents subscription path from running
+        # (USE_SUBSCRIPTION may be set in host env, which _clean_env doesn't clear)
+        config = _make_config(tmp_path, anthropic_api_key="sk-test", use_subscription=False)
+        mock_anthropic_cls.side_effect = Exception("model init failed")
+        fallback_model = MagicMock()
+        mock_openai_cls.return_value = fallback_model
+
+        result = get_model(config)
+
+        # Anthropic failed, Ollama fallback returned successfully
+        assert result is fallback_model
+        mock_openai_cls.assert_called_once()
+
+    @patch("second_brain.models_sdk.create_sdk_model")
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_subscription_path_not_called_when_disabled(
+        self, mock_model_cls, mock_provider_cls, mock_sdk, brain_config
+    ):
+        """create_sdk_model is NOT called when use_subscription=False (default)."""
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(brain_config)
+
+        mock_sdk.assert_not_called()
+
+    @patch("second_brain.models_sdk.create_sdk_model")
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_subscription_path_attempted_when_enabled(
+        self, mock_model_cls, mock_provider_cls, mock_sdk, tmp_path
+    ):
+        """create_sdk_model is attempted when use_subscription=True and Anthropic fails."""
+        config = _make_config(tmp_path, anthropic_api_key=None, use_subscription=True)
+        sdk_model = MagicMock()
+        mock_sdk.return_value = sdk_model
+
+        result = get_model(config)
+
+        mock_sdk.assert_called_once_with(config)
+        assert result is sdk_model
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_primary_model_config_controls_model_name(
+        self, mock_model_cls, mock_provider_cls, tmp_path
+    ):
+        """config.primary_model is what gets used, not a hardcoded constant."""
+        custom_model = "anthropic:claude-custom-v99"
+        config = _make_config(
+            tmp_path, anthropic_api_key="sk-test", primary_model=custom_model
+        )
+        mock_model_cls.return_value = MagicMock()
+
+        get_model(config)
+
+        assert mock_model_cls.call_args[0][0] == "claude-custom-v99"
