@@ -459,7 +459,7 @@ class TestClaudeSDKModelStructuredOutput:
     def test_extract_output_schema_native_mode(self):
         """Extracts schema from output_object when output_mode='native'."""
         from pydantic_ai.models import ModelRequestParameters
-        from pydantic_ai.output import OutputObjectDefinition
+        from pydantic_ai.models import OutputObjectDefinition
 
         schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
         obj_def = OutputObjectDefinition(json_schema=schema)
@@ -500,7 +500,7 @@ class TestClaudeSDKModelStructuredOutput:
     async def test_request_structured_output_native_mode(self):
         """Native mode returns TextPart with JSON-serialized dict."""
         from pydantic_ai.models import ModelRequestParameters
-        from pydantic_ai.output import OutputObjectDefinition
+        from pydantic_ai.models import OutputObjectDefinition
 
         schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
         obj_def = OutputObjectDefinition(json_schema=schema)

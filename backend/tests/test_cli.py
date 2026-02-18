@@ -73,7 +73,10 @@ class TestCLIBasic:
         result = runner.invoke(cli, ["--subscription", "health"])
         assert result.exit_code == 0
         assert os.environ.get("USE_SUBSCRIPTION") == "true"
-        monkeypatch.delenv("USE_SUBSCRIPTION", raising=False)
+        # Clean up directly — do NOT use monkeypatch.delenv here because
+        # it records "true" as the undo value and restores it on teardown,
+        # leaking USE_SUBSCRIPTION=true into subsequent tests.
+        os.environ.pop("USE_SUBSCRIPTION", None)
 
 
 class TestRecallCommand:
