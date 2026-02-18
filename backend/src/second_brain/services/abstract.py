@@ -179,7 +179,7 @@ class MemoryServiceBase(ABC):
 
     @abstractmethod
     async def update_memory(
-        self, memory_id: str, content: str, metadata: dict | None = None
+        self, memory_id: str, content: str | None = None, metadata: dict | None = None
     ) -> None:
         """Update an existing memory. No-op if unsupported."""
 
@@ -232,7 +232,7 @@ class StubMemoryService(MemoryServiceBase):
     async def get_memory_count(self):
         return 0
 
-    async def update_memory(self, memory_id, content, metadata=None):
+    async def update_memory(self, memory_id, content=None, metadata=None):
         return None
 
     async def delete(self, memory_id):

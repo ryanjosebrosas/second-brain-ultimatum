@@ -304,7 +304,7 @@ class TestChiefOfStaffTools:
         """search_brain_context returns friendly message when no results."""
         config = _make_config()
         mock_memory = MagicMock()
-        mock_memory.search = MagicMock(return_value=[])
+        mock_memory.search = AsyncMock(return_value=[])
 
         deps = BrainDeps(
             config=config,

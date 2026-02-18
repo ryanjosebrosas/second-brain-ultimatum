@@ -63,10 +63,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         enable_graph: bool | None = None,
     ) -> SearchResult:
         """Semantic search via GraphitiService with user-scoped group_id."""
-        relations = await self._graphiti.search(
-            query, limit=limit or 10, group_id=self.user_id
-        )
-        return SearchResult(relations=relations)
+        try:
+            relations = await self._graphiti.search(
+                query, limit=limit or 10, group_id=self.user_id
+            )
+            return SearchResult(relations=relations)
+        except Exception as e:
+            logger.debug("GraphitiMemoryAdapter.search error: %s", e)
+            return SearchResult()
 
     async def search_with_filters(
         self,
@@ -76,28 +80,36 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         enable_graph: bool | None = None,
     ) -> SearchResult:
         """Search with metadata filters approximated by appending filter values to query."""
-        if metadata_filters:
-            extra = " ".join(str(v) for v in metadata_filters.values())
-            query = f"{query} {extra}"
-            logger.debug(
-                "GraphitiMemoryAdapter.search_with_filters: no native filter support — "
-                "appending filter terms to query: %r",
-                extra,
+        try:
+            if metadata_filters:
+                extra = " ".join(str(v) for v in metadata_filters.values())
+                query = f"{query} {extra}"
+                logger.debug(
+                    "GraphitiMemoryAdapter.search_with_filters: no native filter support — "
+                    "appending filter terms to query: %r",
+                    extra,
+                )
+            relations = await self._graphiti.search(
+                query, limit=limit, group_id=self.user_id
             )
-        relations = await self._graphiti.search(
-            query, limit=limit, group_id=self.user_id
-        )
-        return SearchResult(relations=relations)
+            return SearchResult(relations=relations)
+        except Exception as e:
+            logger.debug("GraphitiMemoryAdapter.search_with_filters error: %s", e)
+            return SearchResult()
 
     async def search_by_category(
         self, category: str, query: str, limit: int = 10
     ) -> SearchResult:
         """Search by category by prepending category to query string."""
-        combined = f"{category} {query}"
-        relations = await self._graphiti.search(
-            combined, limit=limit, group_id=self.user_id
-        )
-        return SearchResult(relations=relations)
+        try:
+            combined = f"{category} {query}"
+            relations = await self._graphiti.search(
+                combined, limit=limit, group_id=self.user_id
+            )
+            return SearchResult(relations=relations)
+        except Exception as e:
+            logger.debug("GraphitiMemoryAdapter.search_by_category error: %s", e)
+            return SearchResult()
 
     async def get_all(self) -> list[dict]:
         """Not supported by Graphiti. Returns empty list."""

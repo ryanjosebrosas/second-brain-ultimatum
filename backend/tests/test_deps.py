@@ -265,3 +265,27 @@ class TestCreateDepsMemoryProvider:
             mock_gs.return_value = MagicMock()
             deps = create_deps(config)
             assert isinstance(deps.memory_service, GraphitiMemoryAdapter)
+
+    def test_graphiti_provider_import_error_falls_back_to_mem0(self, tmp_path):
+        """memory_provider='graphiti' falls back to MemoryService when graphiti-core not installed."""
+        config = _config(
+            tmp_path,
+            memory_provider="graphiti",
+            neo4j_url="neo4j://localhost:7687",
+            neo4j_username="neo4j",
+            neo4j_password="test",
+        )
+        with patch(_MEMORY_SVC) as mock_mem, patch(_STORAGE_SVC):
+            # Simulate ImportError by poisoning the module
+            original = sys.modules.get("second_brain.services.graphiti_memory")
+            sys.modules["second_brain.services.graphiti_memory"] = None
+            try:
+                deps = create_deps(config)
+                # Falls back to MemoryService (mem0)
+                mock_mem.assert_called_once_with(config)
+                assert deps.memory_service is mock_mem.return_value
+            finally:
+                if original is not None:
+                    sys.modules["second_brain.services.graphiti_memory"] = original
+                else:
+                    sys.modules.pop("second_brain.services.graphiti_memory", None)

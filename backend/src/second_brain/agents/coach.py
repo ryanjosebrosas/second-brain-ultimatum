@@ -80,8 +80,7 @@ async def load_goals_context(ctx: RunContext[BrainDeps]) -> str:
 async def search_past_sessions(ctx: RunContext[BrainDeps], query: str = "daily session") -> str:
     """Search for past coaching sessions and learnings."""
     try:
-        import asyncio
-        results = await asyncio.to_thread(ctx.deps.memory_service.search, query, limit=3)
+        results = await ctx.deps.memory_service.search(query, limit=3)
         if not results:
             return "No past sessions found."
         from second_brain.agents.utils import format_memories

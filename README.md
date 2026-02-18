@@ -157,7 +157,7 @@ graph LR
 
 ## Service Layer
 
-Three external systems do the actual work. Agents call them through a clean service abstraction.
+Three external systems do the actual work. Agents call them through a clean service abstraction — swappable at runtime via `MEMORY_PROVIDER` (mem0, graphiti, or none).
 
 ```mermaid
 graph TD
@@ -202,16 +202,31 @@ graph TD
 | `embeddings.py` | Generates embeddings via Voyage AI (primary) or OpenAI (fallback) for vector search |
 | `voyage.py` | Voyage AI reranking — re-orders search results by relevance after initial retrieval |
 | `graphiti.py` | Optional knowledge graph via Graphiti + FalkorDB — entity and relationship extraction |
+| `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — drop-in replacement for Mem0 |
 | `health.py` | Brain metrics, growth milestones, and system health checks |
 | `retry.py` | Tenacity retry decorators for transient failures |
 | `search_result.py` | Shared data structures for search results across all retrieval methods |
-| `abstract.py` | Abstract base classes for pluggable service implementations |
+| `abstract.py` | Abstract base classes (`MemoryServiceBase`, etc.) for pluggable service implementations + stub services for testing |
 
 ---
 
 ## Multi-User Support
 
 Each Second Brain instance is scoped to a single user via the `BRAIN_USER_ID` environment variable. All reads and writes in `storage.py` are filtered by this value, so multiple instances can share one Supabase deployment without data leaking between users. Migration `015_user_id_isolation.sql` adds a `user_id` column and performance index to every relevant table, and updates the `vector_search` RPC to enforce the same boundary. Existing single-user setups work unchanged — the default value is `ryan`, so no configuration change is required unless you are adding a second user.
+
+---
+
+## Pluggable Memory Providers
+
+The memory layer is defined by an abstract interface (`MemoryServiceBase`) with three interchangeable backends — switch between them with a single environment variable:
+
+| Provider | `MEMORY_PROVIDER=` | Backend | Best For |
+|----------|-------------------|---------|----------|
+| **Mem0** | `mem0` (default) | Mem0 cloud API | Production — managed semantic memory with built-in embedding search |
+| **Graphiti** | `graphiti` | FalkorDB graph database | Knowledge graphs — entity/relationship extraction with graph-native search |
+| **None** | `none` | In-memory stub | Testing and CI — zero external dependencies, instant startup |
+
+All three providers implement the same 13-method interface. Agents never know which backend is active — they call `memory_service.search()` and get back a `SearchResult` regardless. If a provider fails to initialize (e.g., Graphiti packages not installed), it falls back to Mem0 automatically. Search errors return empty results instead of crashing.
 
 ---
 
@@ -311,6 +326,7 @@ SUPABASE_URL=...            # Required — structured storage + vector search
 SUPABASE_KEY=...            # Required — Supabase service role key
 VOYAGE_API_KEY=...          # Optional — falls back to OpenAI embeddings
 GRAPHITI_ENABLED=false      # Set true to enable knowledge graph (needs FalkorDB)
+MEMORY_PROVIDER=mem0        # mem0 (default), graphiti, or none (stub for testing)
 BRAIN_USER_ID=ryan          # Optional — isolates data per user (default: ryan)
 ```
 
@@ -460,12 +476,13 @@ backend/
 │       ├── embeddings.py      # Voyage AI / OpenAI embedding generation
 │       ├── voyage.py          # Voyage AI reranking
 │       ├── graphiti.py        # Knowledge graph (optional)
+│       ├── graphiti_memory.py # Graphiti-backed MemoryServiceBase adapter
 │       ├── health.py          # Brain metrics + growth milestones
 │       ├── retry.py           # Tenacity retry helpers
 │       ├── search_result.py   # Search result data structures
-│       └── abstract.py        # Abstract base classes
+│       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~856 tests (one file per module)
+├── tests/                     # ~895 tests (one file per module)
 ├── scripts/                   # Utility scripts
 ├── .env.example               # Documented env var template
 └── pyproject.toml             # Dependencies + pytest config
@@ -477,7 +494,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~856)
+pytest                              # All tests (~895)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -497,7 +514,7 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Service layer modules | 9 |
 | Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~856 |
+| Tests | ~895 |
 | Python version | 3.11+ |
 
 ---

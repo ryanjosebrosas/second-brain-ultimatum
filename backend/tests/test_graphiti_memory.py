@@ -148,3 +148,23 @@ class TestGraphitiMemoryAdapter:
         mock_graphiti.search.assert_awaited_once_with(
             "query", limit=10, group_id="test-user"
         )
+
+    async def test_search_returns_empty_search_result_on_error(self, adapter, mock_graphiti):
+        """search() catches exceptions and returns empty SearchResult."""
+        mock_graphiti.search.side_effect = RuntimeError("connection refused")
+        result = await adapter.search("test query")
+        assert isinstance(result, SearchResult)
+        assert result.memories == []
+        assert result.relations == []
+
+    async def test_search_with_filters_returns_empty_on_error(self, adapter, mock_graphiti):
+        """search_with_filters() catches exceptions and returns empty SearchResult."""
+        mock_graphiti.search.side_effect = RuntimeError("timeout")
+        result = await adapter.search_with_filters("query", {"cat": "pattern"})
+        assert isinstance(result, SearchResult)
+
+    async def test_search_by_category_returns_empty_on_error(self, adapter, mock_graphiti):
+        """search_by_category() catches exceptions and returns empty SearchResult."""
+        mock_graphiti.search.side_effect = RuntimeError("network error")
+        result = await adapter.search_by_category("patterns", "react")
+        assert isinstance(result, SearchResult)

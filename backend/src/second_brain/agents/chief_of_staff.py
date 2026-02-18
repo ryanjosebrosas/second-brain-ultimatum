@@ -5,7 +5,6 @@ and routes to the optimal specialist agent or pipeline. Never executes
 tasks directly — only coordinates.
 """
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -122,9 +121,7 @@ async def load_brain_overview(ctx: RunContext[BrainDeps]) -> str:
 async def search_brain_context(ctx: RunContext[BrainDeps], query: str) -> str:
     """Search brain memory for context relevant to routing the request."""
     try:
-        results = await asyncio.to_thread(
-            ctx.deps.memory_service.search, query, limit=5
-        )
+        results = await ctx.deps.memory_service.search(query, limit=5)
         if not results:
             return "No relevant context found in brain memory."
         from second_brain.agents.utils import format_memories
