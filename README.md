@@ -384,6 +384,24 @@ Review this draft and score it across all dimensions.
 Coach me — what should I be focused on today?
 ```
 
+You can also manage projects and knowledge directly:
+
+```
+List all my active projects.
+
+Update project "auth-system" — mark it as shipped.
+
+Search my stored experiences for anything related to Supabase migrations.
+
+Search patterns — find everything I've learned about rate limiting.
+
+Ingest this example into my brain: [paste code or content]
+
+Add an artifact to project "second-brain" — link to this PR.
+
+Ingest this knowledge entry: [paste article, doc, or note]
+```
+
 ---
 
 ## CLI
@@ -439,7 +457,7 @@ backend/
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # Abstract base classes
 ├── supabase/migrations/       # 14 SQL migrations (001–014)
-├── tests/                     # ~781 tests (one file per module)
+├── tests/                     # ~843 tests (one file per module)
 ├── scripts/                   # Utility scripts
 ├── .env.example               # Documented env var template
 └── pyproject.toml             # Dependencies + pytest config
@@ -451,7 +469,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~781)
+pytest                              # All tests (~843)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -467,10 +485,11 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Component | Count |
 |-----------|-------|
 | Pydantic AI agents | 13 |
+| MCP tools | 38 |
 | Service layer modules | 9 |
 | Database migrations | 14 |
 | Test files | 20 |
-| Tests | ~781 |
+| Tests | ~843 |
 | Python version | 3.11+ |
 
 ---
