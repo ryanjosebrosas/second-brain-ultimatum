@@ -154,6 +154,14 @@ class LearnResult(BaseModel):
     )
 
 
+class ReviewDimensionConfig(BaseModel):
+    """Per-content-type configuration for a review dimension."""
+
+    name: str = Field(description="Dimension name matching REVIEW_DIMENSIONS (e.g., 'Messaging')")
+    weight: float = Field(default=1.0, description="Relative weight for scoring (0.5=half, 1.0=normal, 1.5=extra)")
+    enabled: bool = Field(default=True, description="Whether this dimension applies to this content type")
+
+
 class ContentTypeConfig(BaseModel):
     """Configuration for a content type in the registry."""
 
@@ -234,14 +242,6 @@ class DimensionScore(BaseModel):
     strengths: list[str] = Field(default_factory=list, description="What's done well")
     suggestions: list[str] = Field(default_factory=list, description="Improvement suggestions")
     issues: list[str] = Field(default_factory=list, description="Must-fix problems")
-
-
-class ReviewDimensionConfig(BaseModel):
-    """Per-content-type configuration for a review dimension."""
-
-    name: str = Field(description="Dimension name matching REVIEW_DIMENSIONS (e.g., 'Messaging')")
-    weight: float = Field(default=1.0, description="Relative weight for scoring (0.5=half, 1.0=normal, 1.5=extra)")
-    enabled: bool = Field(default=True, description="Whether this dimension applies to this content type")
 
 
 class ReviewResult(BaseModel):
