@@ -149,6 +149,39 @@ class BrainConfig(BaseSettings):
         description="Path to Second Brain markdown data",
     )
 
+    # --- Vault Ingestion ---
+    vault_path: Path | None = Field(
+        default=None,
+        description="Path to Brainforge vault directory for ingestion",
+    )
+    vault_ingestion_batch_size: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        description="Number of files to process per ingestion batch",
+    )
+    vault_ingestion_concurrency: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Max concurrent Mem0 API calls during ingestion",
+    )
+    vault_skip_patterns: list[str] = Field(
+        default_factory=lambda: [
+            "INDEX.md", "README.md", ".gitkeep", "_template.md",
+            "CLAUDE.md", "AGENTS.md",
+        ],
+        description="Filenames to skip during vault ingestion",
+    )
+    vault_skip_dirs: list[str] = Field(
+        default_factory=lambda: [
+            ".claude", ".codex", ".github", "node_modules",
+            "brain-health", "experiences", "projects",
+            ".memory-system", "plans for this system",
+        ],
+        description="Directory names to skip during vault ingestion",
+    )
+
     # Model preferences
     primary_model: str = Field(
         default="anthropic:claude-sonnet-4-5",

@@ -1089,6 +1089,65 @@ CONFIDENCE_DOWNGRADE_THRESHOLD = 6.0  # Score below which consecutive failures c
 CONFIDENCE_DOWNGRADE_CONSECUTIVE = 2  # Consecutive failures before downgrade
 
 
+# --- Vault Ingestion Models ---
+
+
+class VaultFileMetadata(BaseModel):
+    """Metadata extracted from a vault file's path and frontmatter."""
+
+    file_path: str = Field(description="Absolute path to the source file")
+    relative_path: str = Field(description="Path relative to vault root")
+    user_id: str = Field(description="Mem0 user_id scope (uttam, robert, luke, or brainforge)")
+    category: str = Field(description="Content category (voice, patterns, examples, transcript, etc.)")
+    content_type: str | None = Field(default=None, description="Content format (linkedin, email, playbook, etc.)")
+    client: str | None = Field(default=None, description="Client name if client-scoped content")
+    author: str | None = Field(default=None, description="Author name if attributable")
+    title: str = Field(description="Derived or extracted title")
+    file_hash: str = Field(description="SHA-256 hash of file content for change detection")
+
+
+class VaultFileContent(BaseModel):
+    """Parsed content from a vault file."""
+
+    metadata: VaultFileMetadata = Field(description="File metadata")
+    body: str = Field(description="Main content body (markdown text)")
+    frontmatter: dict = Field(default_factory=dict, description="Parsed frontmatter key-value pairs")
+    is_transcript: bool = Field(default=False, description="Whether this file contains a WEBVTT transcript")
+
+
+class TranscriptHeader(BaseModel):
+    """Metadata from a transcript file's header block."""
+
+    meeting_title: str = Field(default="", description="Meeting title from header")
+    meeting_date: str = Field(default="", description="Meeting date from header")
+    participants: list[str] = Field(default_factory=list, description="Meeting participants")
+
+
+class TranscriptSummary(BaseModel):
+    """AI-generated summary of a meeting transcript."""
+
+    title: str = Field(description="Inferred title for this transcript")
+    summary: str = Field(description="2-4 sentence summary of the main discussion")
+    key_points: list[str] = Field(description="3-7 key takeaways")
+    key_quotes: list[str] = Field(default_factory=list, description="Notable verbatim quotes with speaker attribution")
+    speakers: list[str] = Field(default_factory=list, description="Speaker names identified")
+    topics: list[str] = Field(default_factory=list, description="Main topics covered")
+    action_items: list[str] = Field(default_factory=list, description="Action items or decisions made")
+
+
+class IngestionResult(BaseModel):
+    """Result of a vault ingestion run."""
+
+    total_files: int = Field(default=0, description="Total files discovered")
+    ingested: int = Field(default=0, description="Files successfully ingested")
+    skipped: int = Field(default=0, description="Files skipped (already ingested, stub files, etc.)")
+    errors: int = Field(default=0, description="Files that failed to ingest")
+    transcripts_summarized: int = Field(default=0, description="Transcripts summarized by AI")
+    by_user: dict[str, int] = Field(default_factory=dict, description="Counts per user_id")
+    by_category: dict[str, int] = Field(default_factory=dict, description="Counts per category")
+    error_files: list[str] = Field(default_factory=list, description="Paths of files that failed")
+
+
 def content_type_from_row(row: dict) -> ContentTypeConfig:
     """Convert a Supabase content_types row to a ContentTypeConfig."""
     dims = row.get("review_dimensions")
