@@ -221,6 +221,316 @@ async def learn(content: str, category: str = "general") -> str:
     return "\n".join(parts)
 
 
+# --- Multimodal Learning Tools ---
+
+
+@server.tool()
+async def learn_image(image_url: str, context: str = "", category: str = "visual") -> str:
+    """Store an image in your Second Brain's memory.
+
+    The image is processed by Mem0 to extract visual information and stored
+    as a searchable memory. Optionally generates a multimodal vector embedding
+    for Supabase similarity search.
+
+    Args:
+        image_url: Image URL (https://...) or base64 data URI
+                   (data:image/jpeg;base64,...). Supports JPEG, PNG, WebP, GIF.
+        context: Optional text description or context about the image.
+        category: Memory category for filtering (default: visual).
+    """
+    if not image_url or not image_url.strip():
+        return "image_url cannot be empty"
+
+    deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
+    results = []
+
+    # Build multimodal content blocks
+    content_blocks: list[dict] = [
+        {"type": "image_url", "image_url": {"url": image_url.strip()}},
+    ]
+    if context.strip():
+        content_blocks.insert(0, {"type": "text", "text": context.strip()})
+
+    metadata = {"category": category, "source": "learn_image", "content_type": "image"}
+
+    # Store to Mem0
+    try:
+        async with asyncio.timeout(timeout):
+            mem_result = await deps.memory_service.add_multimodal(
+                content_blocks, metadata=metadata
+            )
+        if mem_result:
+            results.append("Memory stored in Mem0")
+        else:
+            results.append("Mem0 storage returned empty result")
+    except TimeoutError:
+        results.append(f"Mem0 storage timed out after {timeout}s")
+    except Exception as e:
+        results.append(f"Mem0 storage failed: {type(e).__name__}")
+
+    # Generate multimodal embedding for Supabase (if Voyage configured)
+    if deps.embedding_service:
+        try:
+            if image_url.startswith("data:"):
+                from PIL import Image as PILImage
+                from io import BytesIO
+                import base64 as b64
+
+                b64_data = image_url.split(",", 1)[1] if "," in image_url else image_url
+                img = PILImage.open(BytesIO(b64.b64decode(b64_data)))
+            else:
+                img = image_url  # Voyage multimodal accepts URL strings
+
+            inputs = [[context.strip(), img]] if context.strip() else [[img]]
+            async with asyncio.timeout(timeout):
+                embeddings = await deps.embedding_service.embed_multimodal(
+                    inputs, input_type="document"
+                )
+            if embeddings:
+                results.append(f"Multimodal embedding generated ({len(embeddings[0])} dims)")
+        except ValueError as e:
+            results.append(f"Embedding skipped: {e}")
+        except Exception as e:
+            results.append(f"Embedding failed: {type(e).__name__}")
+
+    source = "base64" if image_url.startswith("data:") else image_url[:80]
+    parts = [f"# Learn Image\n"]
+    parts.append(f"- **Source**: {source}")
+    if context:
+        parts.append(f"- **Context**: {context[:100]}")
+    parts.append(f"- **Category**: {category}")
+    parts.append(f"\n## Results")
+    for r in results:
+        parts.append(f"- {r}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def learn_document(
+    document_url: str, document_type: str = "pdf", context: str = "", category: str = "document"
+) -> str:
+    """Store a document (PDF, text, or MDX) in your Second Brain's memory.
+
+    The document is processed by Mem0 to extract textual information and stored
+    as searchable memory.
+
+    Args:
+        document_url: Document URL (https://...) or base64 string.
+                      For PDFs: URL only. For text/MDX: URL or raw base64.
+        document_type: Type of document: pdf, mdx, or txt (default: pdf).
+        context: Optional text description or context about the document.
+        category: Memory category for filtering (default: document).
+    """
+    if not document_url or not document_url.strip():
+        return "document_url cannot be empty"
+
+    valid_types = {"pdf", "mdx", "txt"}
+    if document_type not in valid_types:
+        return f"Invalid document_type '{document_type}'. Must be one of: {valid_types}"
+
+    deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
+
+    # Map document_type to Mem0 content block type
+    type_map = {"pdf": "pdf_url", "mdx": "mdx_url", "txt": "mdx_url"}
+    block_type = type_map[document_type]
+
+    content_blocks: list[dict] = [
+        {"type": block_type, block_type: {"url": document_url.strip()}},
+    ]
+    if context.strip():
+        content_blocks.insert(0, {"type": "text", "text": context.strip()})
+
+    metadata = {
+        "category": category,
+        "source": "learn_document",
+        "content_type": document_type,
+    }
+
+    # Store to Mem0
+    results = []
+    try:
+        async with asyncio.timeout(timeout):
+            mem_result = await deps.memory_service.add_multimodal(
+                content_blocks, metadata=metadata
+            )
+        if mem_result:
+            results.append("Document stored in Mem0")
+        else:
+            results.append("Mem0 storage returned empty result")
+    except TimeoutError:
+        results.append(f"Mem0 storage timed out after {timeout}s")
+    except Exception as e:
+        results.append(f"Mem0 storage failed: {type(e).__name__}")
+
+    source = document_url[:80] if len(document_url) > 80 else document_url
+    parts = [f"# Learn Document ({document_type.upper()})\n"]
+    parts.append(f"- **Source**: {source}")
+    if context:
+        parts.append(f"- **Context**: {context[:100]}")
+    parts.append(f"- **Category**: {category}")
+    parts.append(f"\n## Results")
+    for r in results:
+        parts.append(f"- {r}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def learn_video(video_url: str, context: str = "", category: str = "video") -> str:
+    """Generate a vector embedding for a video and store it in your Second Brain.
+
+    Note: Video embedding is stored in Supabase via Voyage AI only.
+    Mem0 does not support video — only the vector embedding is generated.
+
+    Args:
+        video_url: Video URL (https://...) or local file path. MP4 format only.
+        context: Optional text description of the video content.
+        category: Memory category for filtering (default: video).
+    """
+    if not video_url or not video_url.strip():
+        return "video_url cannot be empty"
+
+    deps = _get_deps()
+
+    if not deps.embedding_service:
+        return "Video embedding unavailable: VOYAGE_API_KEY not configured."
+
+    timeout = deps.config.api_timeout_seconds
+    results = []
+
+    # Store text context to Mem0 (if provided)
+    if context.strip():
+        try:
+            metadata = {
+                "category": category,
+                "source": "learn_video",
+                "content_type": "video",
+                "video_url": video_url.strip()[:200],
+            }
+            async with asyncio.timeout(timeout):
+                await deps.memory_service.add(context.strip(), metadata=metadata)
+            results.append("Video context stored in Mem0 (text only)")
+        except Exception as e:
+            results.append(f"Mem0 context storage failed: {type(e).__name__}")
+
+    # Generate multimodal embedding with Voyage
+    try:
+        if video_url.startswith(("http://", "https://")):
+            inputs = (
+                [[context.strip(), {"type": "video_url", "video_url": video_url.strip()}]]
+                if context.strip()
+                else [[{"type": "video_url", "video_url": video_url.strip()}]]
+            )
+        else:
+            from voyageai.video_utils import Video
+
+            video = Video.from_path(
+                video_url.strip(), model=deps.config.voyage_embedding_model, optimize=False
+            )
+            inputs = [[context.strip(), video]] if context.strip() else [[video]]
+
+        async with asyncio.timeout(timeout * 2):  # Video takes longer
+            embeddings = await deps.embedding_service.embed_multimodal(
+                inputs, input_type="document"
+            )
+        if embeddings:
+            results.append(f"Video embedding generated ({len(embeddings[0])} dims)")
+    except ValueError as e:
+        results.append(f"Embedding skipped: {e}")
+    except ImportError:
+        results.append("Video support requires voyageai >= 0.3.6")
+    except Exception as e:
+        results.append(f"Video embedding failed: {type(e).__name__}")
+
+    parts = [f"# Learn Video\n"]
+    parts.append(f"- **Source**: {video_url[:80]}")
+    if context:
+        parts.append(f"- **Context**: {context[:100]}")
+    parts.append(f"- **Category**: {category}")
+    parts.append(f"\n## Results")
+    for r in results:
+        parts.append(f"- {r}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def multimodal_vector_search(
+    query: str = "",
+    image_url: str = "",
+    table: str = "memory_content",
+    limit: int = 10,
+) -> str:
+    """Search your Second Brain using multimodal vector similarity.
+
+    Combines text and/or image queries into a single embedding for
+    cross-modal search (e.g., find text content related to an image).
+
+    Args:
+        query: Optional text search query.
+        image_url: Optional image URL or base64 data URI to search with.
+        table: Table to search: memory_content, patterns, examples, knowledge_repo.
+        limit: Maximum results (default 10).
+    """
+    if not query.strip() and not image_url.strip():
+        return "Provide at least one of: query (text) or image_url."
+
+    deps = _get_deps()
+    if not deps.embedding_service:
+        return "Multimodal search unavailable: VOYAGE_API_KEY not configured."
+
+    timeout = deps.config.api_timeout_seconds
+
+    # Build multimodal input
+    input_items: list = []
+    if query.strip():
+        input_items.append(query.strip())
+    if image_url.strip():
+        url = image_url.strip()
+        if url.startswith("data:"):
+            from PIL import Image as PILImage
+            from io import BytesIO
+            import base64 as b64
+
+            b64_data = url.split(",", 1)[1] if "," in url else url
+            input_items.append(PILImage.open(BytesIO(b64.b64decode(b64_data))))
+        else:
+            input_items.append(url)
+
+    try:
+        async with asyncio.timeout(timeout):
+            embeddings = await deps.embedding_service.embed_multimodal(
+                [input_items], input_type="query"
+            )
+            embedding = embeddings[0]
+            results = await deps.storage_service.vector_search(
+                embedding=embedding,
+                table=table,
+                limit=limit,
+            )
+    except TimeoutError:
+        return f"Multimodal search timed out after {timeout}s."
+    except ValueError as e:
+        return str(e)
+
+    if not results:
+        return f"No multimodal matches found in '{table}'."
+
+    formatted = [f"# Multimodal Search\n"]
+    if query:
+        formatted.append(f"**Text query**: {query}")
+    if image_url:
+        src = "base64" if image_url.startswith("data:") else image_url[:60]
+        formatted.append(f"**Image query**: {src}")
+    formatted.append("")
+    for r in results:
+        sim = r.get("similarity", 0)
+        title = r.get("title", "Untitled")
+        content = r.get("content", "")[:200]
+        formatted.append(f"- [{sim:.3f}] **{title}**: {content}")
+    return "\n".join(formatted)
+
+
 @server.tool()
 async def create_content(
     prompt: str, content_type: str = "linkedin", mode: str | None = None

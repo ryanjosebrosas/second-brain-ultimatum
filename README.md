@@ -2,7 +2,7 @@
 
 **A personal AI memory and knowledge system — exposed as an MCP server for Claude Code.**
 
-13 Pydantic AI agents backed by Mem0 semantic memory, Supabase/pgvector, and Voyage AI embeddings. Your AI remembers what you've built, what you've learned, and how you think — across every session.
+13 Pydantic AI agents backed by Mem0 semantic memory, Supabase/pgvector, and Voyage AI multimodal embeddings. Your AI remembers what you've built, what you've learned, and how you think — across every session. Supports text, images, PDFs, and video.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -95,6 +95,9 @@ graph LR
 | `recall` | Semantic search across everything stored in memory — surfaces relevant past decisions, patterns, and notes |
 | `ask` | Answers questions using full brain context — connects your stored knowledge to new questions |
 | `learn` | Extracts patterns and insights from anything you feed it (notes, code, articles) and stores them |
+| `learn_image` | Stores images to Mem0 + generates multimodal Voyage AI embeddings for cross-modal search |
+| `learn_document` | Ingests PDFs, MDX, and TXT documents into semantic memory |
+| `learn_video` | Generates multimodal video embeddings via Voyage AI with text context stored to memory |
 
 ### Content Agents — Generate and score content in your voice
 
@@ -173,7 +176,7 @@ graph TD
     subgraph "External Systems"
         MEM0[("Mem0<br/>Semantic memory store")]
         SB[("Supabase<br/>PostgreSQL + pgvector")]
-        VAI[("Voyage AI<br/>text-embedding-3")]
+        VAI[("Voyage AI<br/>voyage-multimodal-3.5")]
         FK[("FalkorDB<br/>Graph database")]
     end
 
@@ -197,10 +200,10 @@ graph TD
 
 | Service | Purpose |
 |---------|---------|
-| `memory.py` | Wraps Mem0 — add, search, and retrieve semantic memories with embedding-based similarity |
+| `memory.py` | Wraps Mem0 — add, search, and retrieve semantic memories with embedding-based similarity. Supports multimodal content (images, PDFs, documents) |
 | `storage.py` | Wraps Supabase — CRUD for all structured data + `ContentTypeRegistry` for content type configs |
-| `embeddings.py` | Generates embeddings via Voyage AI (primary) or OpenAI (fallback) for vector search |
-| `voyage.py` | Voyage AI reranking — re-orders search results by relevance after initial retrieval |
+| `embeddings.py` | Generates embeddings via Voyage AI (primary) or OpenAI (fallback) for vector search. Supports multimodal inputs (text + images) via `embed_multimodal()` |
+| `voyage.py` | Voyage AI reranking + multimodal embeddings — `voyage-multimodal-3.5` embeds text, images, and video into a shared 1024-dim vector space |
 | `graphiti.py` | Optional knowledge graph via Graphiti + FalkorDB — entity and relationship extraction |
 | `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — drop-in replacement for Mem0 |
 | `health.py` | Brain metrics, growth milestones, and system health checks |
@@ -227,6 +230,23 @@ The memory layer is defined by an abstract interface (`MemoryServiceBase`) with 
 | **None** | `none` | In-memory stub | Testing and CI — zero external dependencies, instant startup |
 
 All three providers implement the same 13-method interface. Agents never know which backend is active — they call `memory_service.search()` and get back a `SearchResult` regardless. If a provider fails to initialize (e.g., Graphiti packages not installed), it falls back to Mem0 automatically. Search errors return empty results instead of crashing.
+
+---
+
+## Multimodal Support
+
+Second Brain supports storing and searching across multiple content types — not just text.
+
+| Content Type | MCP Tool | Memory Storage | Vector Embedding |
+|-------------|----------|---------------|-----------------|
+| **Images** (JPEG, PNG, WebP, GIF) | `learn_image` | Mem0 `image_url` block | Voyage multimodal embedding |
+| **Documents** (PDF, MDX, TXT) | `learn_document` | Mem0 `pdf_url` / `mdx_url` block | Text extraction + embedding |
+| **Video** | `learn_video` | Text context to Mem0 | Voyage multimodal embedding |
+| **Cross-modal search** | `multimodal_vector_search` | — | Combined text + image query vectors |
+
+All multimodal embeddings use `voyage-multimodal-3.5` (1024 dimensions) — the same vector space as text embeddings. This means images, documents, and video are searchable alongside text memories using the same pgvector infrastructure. No database migration needed.
+
+The Graphiti memory provider falls back to text-only mode for multimodal content — non-text blocks are skipped with a debug log.
 
 ---
 
@@ -299,7 +319,8 @@ graph TD
 | MCP server | FastMCP |
 | Semantic memory | Mem0 (`mem0ai`) |
 | Database | Supabase (PostgreSQL + pgvector) |
-| Embeddings | Voyage AI (primary), OpenAI (fallback) |
+| Embeddings | Voyage AI `voyage-multimodal-3.5` (primary, text + images + video), OpenAI (text fallback) |
+| Image processing | Pillow (PIL) — decodes base64 images for Voyage multimodal embeddings |
 | Knowledge graph | Graphiti + FalkorDB (optional, `GRAPHITI_ENABLED=false`) |
 | CLI | Click (`brain` entrypoint) |
 | Retries | Tenacity |
@@ -513,6 +534,20 @@ Add an artifact to project "second-brain" — link to this PR.
 Ingest this knowledge entry: [paste article, doc, or note]
 ```
 
+### Multimodal Content
+
+Store images, documents, and video alongside text memories:
+
+```
+Learn this image — it's my app's architecture diagram: [image URL]
+
+Learn this PDF — it's the Supabase RLS guide: [PDF URL]
+
+Learn this video — it's a demo of the new onboarding flow: [video URL]
+
+Search across all my stored content (text + images) for "authentication flow".
+```
+
 ---
 
 ## CLI
@@ -569,7 +604,7 @@ backend/
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~905 tests (one file per module)
+├── tests/                     # ~926 tests (one file per module)
 ├── scripts/                   # Utility scripts
 ├── Dockerfile                 # Multi-stage production image
 ├── docker-compose.yml         # Local dev compose (HTTP transport)
@@ -584,7 +619,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~905)
+pytest                              # All tests (~926)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -600,11 +635,11 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Component | Count |
 |-----------|-------|
 | Pydantic AI agents | 13 |
-| MCP tools | 38 |
+| MCP tools | 42 |
 | Service layer modules | 9 |
 | Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~905 |
+| Tests | ~926 |
 | Python version | 3.11+ |
 
 ---

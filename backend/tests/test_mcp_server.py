@@ -1248,3 +1248,127 @@ class TestNewMCPTools:
         call_args = mock_deps.storage_service.upsert_knowledge.call_args[0][0]
         assert isinstance(call_args.get("tags"), list)
         assert "enterprise" in call_args["tags"]
+
+
+class TestMultimodalMCPTools:
+    """Tests for multimodal MCP tools."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_image_stores_to_memory(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_image
+
+        deps = _mock_deps(
+            memory_service=MagicMock(
+                add_multimodal=AsyncMock(return_value={"id": "img-123"})
+            ),
+            embedding_service=None,
+        )
+        mock_deps_fn.return_value = deps
+
+        result = await learn_image(
+            image_url="https://example.com/photo.jpg",
+            context="Team photo",
+            category="visual",
+        )
+        assert "Learn Image" in result
+        assert "Memory stored" in result
+        deps.memory_service.add_multimodal.assert_awaited_once()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_image_empty_url_returns_error(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_image
+
+        result = await learn_image(image_url="", context="test")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_document_pdf(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_document
+
+        deps = _mock_deps(
+            memory_service=MagicMock(
+                add_multimodal=AsyncMock(return_value={"id": "doc-123"})
+            ),
+        )
+        mock_deps_fn.return_value = deps
+
+        result = await learn_document(
+            document_url="https://example.com/report.pdf",
+            document_type="pdf",
+        )
+        assert "Learn Document" in result
+        assert "PDF" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_document_invalid_type(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_document
+
+        deps = _mock_deps()
+        mock_deps_fn.return_value = deps
+
+        result = await learn_document(
+            document_url="https://example.com/file", document_type="xlsx"
+        )
+        assert "Invalid document_type" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_document_empty_url(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_document
+
+        result = await learn_document(document_url="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_video_requires_voyage(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_video
+
+        deps = _mock_deps(embedding_service=None)
+        mock_deps_fn.return_value = deps
+
+        result = await learn_video(video_url="https://example.com/vid.mp4")
+        assert "unavailable" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_learn_video_empty_url(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_video
+
+        result = await learn_video(video_url="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_multimodal_vector_search_with_text(self, mock_deps_fn):
+        from second_brain.mcp_server import multimodal_vector_search
+
+        mock_embedding = MagicMock()
+        mock_embedding.embed_multimodal = AsyncMock(return_value=[[0.1] * 1024])
+        mock_storage = MagicMock()
+        mock_storage.vector_search = AsyncMock(return_value=[
+            {"title": "Test Pattern", "content": "Found content", "similarity": 0.85}
+        ])
+        deps = _mock_deps(
+            embedding_service=mock_embedding,
+            storage_service=mock_storage,
+        )
+        mock_deps_fn.return_value = deps
+
+        result = await multimodal_vector_search(query="test query", table="patterns")
+        assert "Multimodal Search" in result
+        assert "Test Pattern" in result
+        assert "0.850" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_multimodal_search_requires_input(self, mock_deps_fn):
+        from second_brain.mcp_server import multimodal_vector_search
+
+        result = await multimodal_vector_search(query="", image_url="")
+        assert "Provide at least one" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_multimodal_search_no_embedding_service(self, mock_deps_fn):
+        from second_brain.mcp_server import multimodal_vector_search
+
+        deps = _mock_deps(embedding_service=None)
+        mock_deps_fn.return_value = deps
+
+        result = await multimodal_vector_search(query="test")
+        assert "unavailable" in result

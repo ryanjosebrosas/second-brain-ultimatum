@@ -7,6 +7,36 @@ from pydantic import BaseModel, Field
 ConfidenceLevel = Literal["LOW", "MEDIUM", "HIGH"]
 
 
+class MultimodalContentBlock(BaseModel):
+    """A single multimodal content block for Mem0 ingestion."""
+
+    type: Literal["image_url", "pdf_url", "mdx_url", "text"] = Field(
+        description="Content type: image_url, pdf_url, mdx_url, or text"
+    )
+    url: str | None = Field(
+        default=None,
+        description="URL or base64 data URI for the content (for image/pdf/mdx types)",
+    )
+    text: str | None = Field(
+        default=None,
+        description="Text content (for text type only)",
+    )
+
+
+class MultimodalLearnResult(BaseModel):
+    """Output from multimodal learn MCP tools."""
+
+    content_type: str = Field(description="Type of content ingested: image, document, video")
+    source: str = Field(description="Source URL or 'base64' for inline content")
+    memory_stored: bool = Field(default=False, description="Whether Mem0 memory was created")
+    memory_id: str = Field(default="", description="Mem0 memory ID if stored")
+    embedding_stored: bool = Field(
+        default=False, description="Whether vector embedding was stored"
+    )
+    context: str = Field(default="", description="User-provided context about the content")
+    summary: str = Field(default="", description="Processing summary")
+
+
 class Relation(BaseModel):
     """A graph relationship between entities."""
 

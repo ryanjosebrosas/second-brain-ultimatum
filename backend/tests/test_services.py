@@ -1979,3 +1979,71 @@ class TestMemoryServiceAbstraction:
         stub = StubMemoryService()
         result = await stub.get_memory_count()
         assert result == 0
+
+
+class TestEmbeddingServiceMultimodal:
+    """Tests for EmbeddingService multimodal support."""
+
+    async def test_embed_multimodal_delegates_to_voyage(self, mock_voyage_service, brain_config):
+        """Test embed_multimodal delegates to VoyageService."""
+        from second_brain.services.embeddings import EmbeddingService
+        service = EmbeddingService.__new__(EmbeddingService)
+        service.config = brain_config
+        service._voyage = mock_voyage_service
+        service._openai_client = None
+        service._model = brain_config.embedding_model
+        service._dimensions = brain_config.embedding_dimensions
+
+        inputs = [["text", "image_placeholder"]]
+        result = await service.embed_multimodal(inputs, input_type="document")
+
+        mock_voyage_service.multimodal_embed.assert_awaited_once_with(
+            inputs, input_type="document"
+        )
+        assert result == [[0.1] * 1024]
+
+    async def test_embed_multimodal_raises_without_voyage(self, brain_config):
+        """Test embed_multimodal raises ValueError without Voyage configured."""
+        from second_brain.services.embeddings import EmbeddingService
+        service = EmbeddingService.__new__(EmbeddingService)
+        service._voyage = None
+
+        with pytest.raises(ValueError, match="Multimodal embeddings require Voyage AI"):
+            await service.embed_multimodal([["text"]])
+
+
+class TestMemoryServiceMultimodal:
+    """Tests for MemoryService.add_multimodal()."""
+
+    async def test_add_multimodal_image(self, mock_memory):
+        """Test add_multimodal with image content block."""
+        blocks = [
+            {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+        ]
+        result = await mock_memory.add_multimodal(blocks, metadata={"category": "visual"})
+        mock_memory.add_multimodal.assert_awaited_once()
+        assert "id" in result
+
+    async def test_add_multimodal_with_text_context(self, mock_memory):
+        """Test add_multimodal with text + image blocks."""
+        blocks = [
+            {"type": "text", "text": "My favorite restaurant"},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/..."}},
+        ]
+        result = await mock_memory.add_multimodal(blocks, metadata={"category": "visual"})
+        assert "id" in result
+
+    async def test_add_multimodal_pdf(self, mock_memory):
+        """Test add_multimodal with PDF content block."""
+        blocks = [
+            {"type": "pdf_url", "pdf_url": {"url": "https://example.com/doc.pdf"}},
+        ]
+        result = await mock_memory.add_multimodal(blocks)
+        assert "id" in result
+
+    async def test_add_multimodal_stub_returns_empty(self):
+        """Test StubMemoryService.add_multimodal returns empty dict."""
+        from second_brain.services.abstract import StubMemoryService
+        stub = StubMemoryService()
+        result = await stub.add_multimodal([{"type": "text", "text": "test"}])
+        assert result == {}

@@ -111,6 +111,60 @@ class MemoryService(MemoryServiceBase):
             logger.debug("Mem0 add_with_metadata error detail: %s", e)
             return {}
 
+    async def add_multimodal(
+        self,
+        content_blocks: list[dict],
+        metadata: dict | None = None,
+        enable_graph: bool | None = None,
+    ) -> dict:
+        """Add a multimodal memory (images, PDFs, documents).
+
+        Constructs Mem0 multimodal messages from content blocks and stores them.
+
+        Args:
+            content_blocks: List of content block dicts. Each has a 'type' and
+                type-specific nested dict. Supported types:
+                - {"type": "image_url", "image_url": {"url": "https://... or data:image/...;base64,..."}}
+                - {"type": "pdf_url", "pdf_url": {"url": "https://..."}}
+                - {"type": "mdx_url", "mdx_url": {"url": "https://... or raw_base64_string"}}
+                - {"type": "text", "text": "descriptive context"}
+            metadata: Optional metadata dict.
+            enable_graph: Override graph setting. None = use config default.
+
+        Returns:
+            Result dict from Mem0 (may be empty on failure).
+        """
+        messages = []
+        for block in content_blocks:
+            block_type = block.get("type", "")
+            if block_type == "text":
+                messages.append({"role": "user", "content": block.get("text", "")})
+            elif block_type in ("image_url", "pdf_url", "mdx_url"):
+                messages.append({"role": "user", "content": block})
+            else:
+                logger.warning("Unsupported multimodal block type: %s", block_type)
+                continue
+
+        if not messages:
+            logger.warning("No valid multimodal content blocks provided")
+            return {}
+
+        kwargs: dict = {
+            "user_id": self.user_id,
+            "metadata": metadata or {},
+        }
+        use_graph = enable_graph if enable_graph is not None else self.enable_graph
+        if use_graph and self._is_cloud:
+            kwargs["enable_graph"] = True
+
+        try:
+            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning("Mem0 add_multimodal failed: %s", type(e).__name__)
+            logger.debug("Mem0 add_multimodal error detail: %s", e)
+            return {}
+
     @property
     def _is_cloud(self) -> bool:
         return type(self._client).__name__ == "MemoryClient"

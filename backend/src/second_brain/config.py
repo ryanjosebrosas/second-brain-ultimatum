@@ -26,8 +26,8 @@ class BrainConfig(BaseSettings):
         repr=False,
     )
     voyage_embedding_model: str = Field(
-        default="voyage-4-lite",
-        description="Voyage embedding model. Options: voyage-4-large, voyage-4, voyage-4-lite",
+        default="voyage-multimodal-3.5",
+        description="Voyage embedding model. Options: voyage-multimodal-3.5, voyage-4-large, voyage-4, voyage-4-lite",
     )
     voyage_rerank_model: str = Field(
         default="rerank-2-lite",
@@ -42,7 +42,7 @@ class BrainConfig(BaseSettings):
 
     # Embeddings
     embedding_model: str = Field(
-        default="voyage-4-lite",
+        default="voyage-multimodal-3.5",
         description="Embedding model for vector search",
     )
     embedding_dimensions: int = Field(
@@ -56,6 +56,16 @@ class BrainConfig(BaseSettings):
         ge=1,
         le=200,
         description="Batch size for embedding generation during migration. Range: 1-200.",
+    )
+    multimodal_max_file_size_mb: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="Maximum file size in MB for multimodal inputs (images, PDFs, videos).",
+    )
+    multimodal_supported_image_formats: list[str] = Field(
+        default_factory=lambda: ["jpeg", "jpg", "png", "webp", "gif"],
+        description="Supported image formats for multimodal ingestion.",
     )
 
     ollama_base_url: str = Field(

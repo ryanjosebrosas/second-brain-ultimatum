@@ -81,6 +81,7 @@ def mock_memory():
     memory.get_by_id = AsyncMock(return_value=None)
     memory.delete_all = AsyncMock(return_value=0)
     memory.search_by_category = AsyncMock(return_value=SearchResult(memories=[], relations=[]))
+    memory.add_multimodal = AsyncMock(return_value={"id": "test-multimodal-id"})
     return memory
 
 
@@ -222,6 +223,7 @@ def mock_embedding_service():
     service.embed = AsyncMock(return_value=[0.1] * 1024)
     service.embed_query = AsyncMock(return_value=[0.1] * 1024)
     service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
+    service.embed_multimodal = AsyncMock(return_value=[[0.1] * 1024])
     service.close = AsyncMock()
     return service
 
@@ -233,6 +235,7 @@ def mock_voyage_service():
     service.embed = AsyncMock(return_value=[0.1] * 1024)
     service.embed_query = AsyncMock(return_value=[0.1] * 1024)
     service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
+    service.multimodal_embed = AsyncMock(return_value=[[0.1] * 1024])
     service.rerank = AsyncMock(return_value=[
         {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
     ])

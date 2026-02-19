@@ -37,43 +37,41 @@ class TestVoyageServiceEmbed:
         mock_client = MagicMock()
         mock_result = MagicMock()
         mock_result.embeddings = [[0.1] * 1024]
-        mock_client.embed.return_value = mock_result
+        mock_client.multimodal_embed.return_value = mock_result
         mock_voyageai.Client.return_value = mock_client
 
         service = VoyageService(voyage_config)
         result = await service.embed("test text")
 
         assert len(result) == 1024
-        mock_client.embed.assert_called_once_with(
-            ["test text"],
+        mock_client.multimodal_embed.assert_called_once_with(
+            [["test text"]],
             model="voyage-4-lite",
             input_type="document",
-            output_dimension=1024,
         )
 
     async def test_embed_query(self, mock_voyageai, voyage_config):
         mock_client = MagicMock()
         mock_result = MagicMock()
         mock_result.embeddings = [[0.2] * 1024]
-        mock_client.embed.return_value = mock_result
+        mock_client.multimodal_embed.return_value = mock_result
         mock_voyageai.Client.return_value = mock_client
 
         service = VoyageService(voyage_config)
         result = await service.embed_query("search query")
 
         assert len(result) == 1024
-        mock_client.embed.assert_called_once_with(
-            ["search query"],
+        mock_client.multimodal_embed.assert_called_once_with(
+            [["search query"]],
             model="voyage-4-lite",
             input_type="query",
-            output_dimension=1024,
         )
 
     async def test_embed_batch(self, mock_voyageai, voyage_config):
         mock_client = MagicMock()
         mock_result = MagicMock()
         mock_result.embeddings = [[0.1] * 1024, [0.2] * 1024]
-        mock_client.embed.return_value = mock_result
+        mock_client.multimodal_embed.return_value = mock_result
         mock_voyageai.Client.return_value = mock_client
 
         service = VoyageService(voyage_config)
@@ -86,17 +84,16 @@ class TestVoyageServiceEmbed:
         mock_client = MagicMock()
         mock_result = MagicMock()
         mock_result.embeddings = [[0.1] * 1024]
-        mock_client.embed.return_value = mock_result
+        mock_client.multimodal_embed.return_value = mock_result
         mock_voyageai.Client.return_value = mock_client
 
         service = VoyageService(voyage_config)
         await service.embed_batch(["text1"], input_type="query")
 
-        mock_client.embed.assert_called_once_with(
-            ["text1"],
+        mock_client.multimodal_embed.assert_called_once_with(
+            [["text1"]],
             model="voyage-4-lite",
             input_type="query",
-            output_dimension=1024,
         )
 
     async def test_embed_no_api_key(self, tmp_path):
@@ -120,7 +117,7 @@ class TestVoyageServiceEmbed:
         mock_result.embeddings = [[0.1] * 1024] * 128
         mock_result2 = MagicMock()
         mock_result2.embeddings = [[0.1] * 1024] * 2
-        mock_client.embed.side_effect = [mock_result, mock_result2]
+        mock_client.multimodal_embed.side_effect = [mock_result, mock_result2]
         mock_voyageai.Client.return_value = mock_client
 
         service = VoyageService(voyage_config)
@@ -128,7 +125,7 @@ class TestVoyageServiceEmbed:
         result = await service.embed_batch(texts)
 
         assert len(result) == 130
-        assert mock_client.embed.call_count == 2
+        assert mock_client.multimodal_embed.call_count == 2
 
 
 class TestVoyageServiceRerank:
@@ -335,11 +332,11 @@ class TestVoyageConfig:
             _env_file=None,
         )
         assert config.voyage_api_key is None
-        assert config.voyage_embedding_model == "voyage-4-lite"
+        assert config.voyage_embedding_model == "voyage-multimodal-3.5"
         assert config.voyage_rerank_model == "rerank-2-lite"
         assert config.voyage_rerank_top_k == 10
         assert config.embedding_dimensions == 1024
-        assert config.embedding_model == "voyage-4-lite"
+        assert config.embedding_model == "voyage-multimodal-3.5"
 
     def test_voyage_rerank_top_k_bounds(self, tmp_path):
         from second_brain.config import BrainConfig
@@ -361,3 +358,85 @@ class TestVoyageConfig:
                 brain_data_path=tmp_path,
                 _env_file=None,
             )
+
+
+class TestVoyageMultimodal:
+    """Tests for VoyageService multimodal embedding methods."""
+
+    async def test_embed_uses_multimodal_api(self, voyage_config):
+        """Verify embed() now calls client.multimodal_embed instead of client.embed."""
+        service = VoyageService(voyage_config)
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.embeddings = [[0.1] * 1024]
+        mock_client.multimodal_embed = MagicMock(return_value=mock_result)
+        service._client = mock_client
+
+        result = await service.embed("test text")
+
+        mock_client.multimodal_embed.assert_called_once()
+        call_args = mock_client.multimodal_embed.call_args
+        assert call_args[0][0] == [["test text"]]
+        assert call_args[1]["model"] == voyage_config.voyage_embedding_model
+        assert call_args[1]["input_type"] == "document"
+        assert result == [0.1] * 1024
+
+    async def test_embed_query_uses_query_input_type(self, voyage_config):
+        """Verify embed_query() passes input_type='query'."""
+        service = VoyageService(voyage_config)
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.embeddings = [[0.2] * 1024]
+        mock_client.multimodal_embed = MagicMock(return_value=mock_result)
+        service._client = mock_client
+
+        await service.embed_query("search query")
+
+        call_args = mock_client.multimodal_embed.call_args
+        assert call_args[1]["input_type"] == "query"
+
+    async def test_multimodal_embed_with_mixed_input(self, voyage_config):
+        """Test multimodal_embed() with mixed text and image-like inputs."""
+        service = VoyageService(voyage_config)
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.embeddings = [[0.3] * 1024]
+        mock_client.multimodal_embed = MagicMock(return_value=mock_result)
+        service._client = mock_client
+
+        inputs = [["description", "fake_image_object"]]
+        result = await service.multimodal_embed(inputs, input_type="document")
+
+        mock_client.multimodal_embed.assert_called_once_with(
+            inputs, model=voyage_config.voyage_embedding_model, input_type="document"
+        )
+        assert result == [[0.3] * 1024]
+
+    async def test_embed_batch_uses_multimodal_api(self, voyage_config):
+        """Verify embed_batch() calls multimodal_embed for batches."""
+        service = VoyageService(voyage_config)
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.embeddings = [[0.1] * 1024, [0.2] * 1024]
+        mock_client.multimodal_embed = MagicMock(return_value=mock_result)
+        service._client = mock_client
+
+        result = await service.embed_batch(["text1", "text2"])
+
+        call_args = mock_client.multimodal_embed.call_args
+        assert call_args[0][0] == [["text1"], ["text2"]]
+        assert len(result) == 2
+
+    async def test_multimodal_embed_no_output_dimension(self, voyage_config):
+        """Verify multimodal_embed does NOT pass output_dimension parameter."""
+        service = VoyageService(voyage_config)
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.embeddings = [[0.1] * 1024]
+        mock_client.multimodal_embed = MagicMock(return_value=mock_result)
+        service._client = mock_client
+
+        await service.embed("test")
+
+        call_kwargs = mock_client.multimodal_embed.call_args[1]
+        assert "output_dimension" not in call_kwargs

@@ -56,6 +56,34 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Add content with metadata. Delegates to add()."""
         return await self.add(content, metadata=metadata)
 
+    async def add_multimodal(
+        self,
+        content_blocks: list[dict],
+        metadata: dict | None = None,
+        enable_graph: bool | None = None,
+    ) -> dict:
+        """Add multimodal content — extracts text blocks only (Graphiti is text-only).
+
+        Non-text content blocks (images, PDFs, videos) are skipped with a debug log.
+        """
+        text_parts = []
+        for block in content_blocks:
+            block_type = block.get("type", "")
+            if block_type == "text":
+                text_parts.append(block.get("text", ""))
+            else:
+                logger.debug(
+                    "GraphitiMemoryAdapter.add_multimodal: skipping %s block (text-only)",
+                    block_type,
+                )
+
+        if not text_parts:
+            logger.debug("GraphitiMemoryAdapter.add_multimodal: no text blocks, skipping")
+            return {}
+
+        combined_text = "\n".join(text_parts)
+        return await self.add(combined_text, metadata=metadata)
+
     async def search(
         self,
         query: str,

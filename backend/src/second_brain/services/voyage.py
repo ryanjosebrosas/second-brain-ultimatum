@@ -41,11 +41,10 @@ class VoyageService:
         client = self._get_client()
 
         def _call():
-            result = client.embed(
-                [text],
+            result = client.multimodal_embed(
+                [[text]],
                 model=self._embed_model,
                 input_type="document",
-                output_dimension=self._dimensions,
             )
             return result.embeddings[0]
 
@@ -57,11 +56,10 @@ class VoyageService:
         client = self._get_client()
 
         def _call():
-            result = client.embed(
-                [text],
+            result = client.multimodal_embed(
+                [[text]],
                 model=self._embed_model,
                 input_type="query",
-                output_dimension=self._dimensions,
             )
             return result.embeddings[0]
 
@@ -83,11 +81,11 @@ class VoyageService:
             batch = texts[i:i + batch_size]
 
             def _call(b=batch):
-                result = client.embed(
-                    b,
+                inputs = [[t] for t in b]
+                result = client.multimodal_embed(
+                    inputs,
                     model=self._embed_model,
                     input_type=input_type,
-                    output_dimension=self._dimensions,
                 )
                 return result.embeddings
 
@@ -95,6 +93,36 @@ class VoyageService:
             all_embeddings.extend(embeddings)
 
         return all_embeddings
+
+    async def multimodal_embed(
+        self,
+        inputs: list[list],
+        input_type: str = "document",
+    ) -> list[list[float]]:
+        """Generate multimodal embeddings for mixed content (text, images, video).
+
+        Args:
+            inputs: List of input sequences. Each sequence is a list of mixed
+                content items: str (text), PIL.Image.Image, or
+                voyageai.video_utils.Video objects.
+                Example: [["description text", PIL.Image.open("photo.jpg")]]
+            input_type: "document" for storage, "query" for search.
+
+        Returns:
+            List of embedding vectors (one per input sequence).
+        """
+        from second_brain.services.retry import async_retry
+        client = self._get_client()
+
+        def _call():
+            result = client.multimodal_embed(
+                inputs,
+                model=self._embed_model,
+                input_type=input_type,
+            )
+            return result.embeddings
+
+        return await async_retry(_call)
 
     async def rerank(
         self,

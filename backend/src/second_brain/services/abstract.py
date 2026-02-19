@@ -149,6 +149,26 @@ class MemoryServiceBase(ABC):
         """Add a memory with required structured metadata. Returns result dict."""
 
     @abstractmethod
+    async def add_multimodal(
+        self,
+        content_blocks: list[dict],
+        metadata: dict | None = None,
+        enable_graph: bool | None = None,
+    ) -> dict:
+        """Add a multimodal memory (images, PDFs, documents).
+
+        Args:
+            content_blocks: List of Mem0 multimodal content block dicts.
+                Each block has a 'type' key and type-specific nested dict.
+                Example: [{"type": "image_url", "image_url": {"url": "..."}}]
+            metadata: Optional metadata dict for categorization.
+            enable_graph: Override graph setting. None = use config default.
+
+        Returns:
+            Result dict from Mem0 (may be empty on failure).
+        """
+
+    @abstractmethod
     async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None) -> "SearchResult":
         """Semantic search. Returns SearchResult(memories, relations, search_filters)."""
@@ -211,6 +231,9 @@ class StubMemoryService(MemoryServiceBase):
         return {}
 
     async def add_with_metadata(self, content, metadata, enable_graph=None):
+        return {}
+
+    async def add_multimodal(self, content_blocks, metadata=None, enable_graph=None):
         return {}
 
     async def search(self, query, limit=None, enable_graph=None):

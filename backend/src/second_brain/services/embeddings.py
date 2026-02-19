@@ -90,6 +90,32 @@ class EmbeddingService:
             all_embeddings.extend(embeddings)
         return all_embeddings
 
+    async def embed_multimodal(
+        self,
+        inputs: list[list],
+        input_type: str = "document",
+    ) -> list[list[float]]:
+        """Generate multimodal embeddings for mixed content.
+
+        Requires Voyage AI — OpenAI fallback does not support multimodal.
+
+        Args:
+            inputs: List of input sequences containing text, PIL.Image, or Video objects.
+            input_type: "document" for storage, "query" for search.
+
+        Returns:
+            List of embedding vectors.
+
+        Raises:
+            ValueError: If Voyage AI is not configured.
+        """
+        if not self._voyage:
+            raise ValueError(
+                "Multimodal embeddings require Voyage AI. "
+                "Set VOYAGE_API_KEY in .env."
+            )
+        return await self._voyage.multimodal_embed(inputs, input_type=input_type)
+
     async def close(self) -> None:
         """Release client resources."""
         if self._voyage:
