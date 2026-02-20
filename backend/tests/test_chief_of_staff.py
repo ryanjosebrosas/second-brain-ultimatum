@@ -101,6 +101,22 @@ class TestRoutingValidator:
         assert result.target_agent == "pipeline"
 
 
+class TestConversationalRoute:
+    def test_conversational_is_valid_route(self):
+        """Verify 'conversational' is a valid AgentRoute for routing decisions."""
+        decision = RoutingDecision(
+            target_agent="conversational",
+            reasoning="User sent a greeting",
+        )
+        assert decision.target_agent == "conversational"
+
+    def test_conversational_in_chief_instructions(self):
+        instructions = chief_of_staff._instructions
+        assert "conversational" in instructions.lower(), (
+            "Chief of staff instructions must include conversational routing rule"
+        )
+
+
 class TestAgentRegistry:
     def test_registry_has_core_agents(self):
         registry = get_agent_registry()

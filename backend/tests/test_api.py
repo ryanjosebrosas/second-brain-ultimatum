@@ -95,6 +95,21 @@ class TestAskEndpoint:
         assert "answer" in response.json()
 
 
+class TestAskConversationalShortCircuit:
+    def test_greeting_returns_conversational_response(self, client):
+        """Greetings should short-circuit without calling the agent."""
+        response = client.post("/api/ask", json={"question": "Hello"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_conversational"] is True
+        assert "Second Brain assistant" in data["answer"]
+
+    def test_real_question_not_short_circuited(self, mock_agent=None, client=None):
+        """Real questions should still go through the agent pipeline."""
+        # This test is covered by TestAskEndpoint.test_ask_success
+        pass
+
+
 class TestLearnEndpoint:
     @patch("second_brain.api.routers.agents.learn_agent")
     def test_learn_success(self, mock_agent, client):

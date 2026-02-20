@@ -204,6 +204,73 @@ def classify_query_complexity(
     return "medium"
 
 
+_CONVERSATIONAL_TOKENS: set[str] = {
+    # Greetings
+    "hello", "hi", "hey", "howdy", "hola", "yo", "sup",
+    "good morning", "good afternoon", "good evening", "good night",
+    # Farewells
+    "bye", "goodbye", "see you", "later", "cya", "peace",
+    # Gratitude
+    "thanks", "thank you", "thx", "ty", "cheers", "appreciate it",
+    # Affirmations
+    "ok", "okay", "sure", "yep", "yup", "yeah", "yes", "no", "nope",
+    # Small talk
+    "lol", "haha", "hehe", "lmao", "rofl", "nice", "cool", "awesome",
+    "wow", "omg", "whoa",
+    # Pleasantries
+    "how are you", "what's up", "whats up", "how's it going",
+    "how do you do", "nice to meet you",
+}
+
+_GREETING_STARTS: set[str] = {
+    "hi", "hey", "hello", "yo", "sup", "howdy", "hola",
+    "morning", "evening", "afternoon", "night",
+    "bye", "goodbye", "thanks", "thank",
+}
+
+
+def is_conversational(query: str) -> bool:
+    """Detect greetings, small talk, and conversational queries.
+
+    Zero-latency heuristic — no LLM call needed. Used to short-circuit
+    expensive memory search tools when the user is just saying hello.
+
+    Args:
+        query: The user's input query.
+
+    Returns:
+        True if the query is conversational (greeting, small talk, etc.)
+    """
+    cleaned = query.strip()
+    if not cleaned:
+        return False
+
+    # Lowercase and strip trailing punctuation
+    cleaned_lower = cleaned.lower().rstrip(".!?")
+
+    # Check if all characters are non-ASCII (emoji-only string)
+    if cleaned_lower and all(ord(c) > 127 or c == " " for c in cleaned_lower):
+        return True
+
+    # Exact match against known conversational tokens
+    if cleaned_lower in _CONVERSATIONAL_TOKENS:
+        return True
+
+    # Short query starting with a greeting word (e.g., "Hi there", "Hey buddy")
+    words = cleaned_lower.split()
+    if len(words) <= 4 and words[0] in _GREETING_STARTS:
+        # Check none of the other words indicate a real question
+        substantive_signals = {"help", "write", "search", "find", "what", "how", "why",
+                               "when", "where", "who", "can", "could", "would", "should",
+                               "tell", "show", "explain", "create", "draft", "review",
+                               "recall", "remember", "pattern", "project", "content",
+                               "email", "plan", "need", "want"}
+        if not any(w in substantive_signals for w in words[1:]):
+            return True
+
+    return False
+
+
 def normalize_results(
     results: list[dict],
     source: str,

@@ -111,6 +111,10 @@ class AskResult(BaseModel):
         default="",
         description="Suggested next command (e.g., '/plan' for complex tasks)",
     )
+    is_conversational: bool = Field(
+        default=False,
+        description="True when the query was detected as a greeting or small talk — memory search was skipped.",
+    )
 
 
 class PatternExtract(BaseModel):
@@ -916,7 +920,7 @@ AgentRoute = Literal[
     "recall", "recall_deep", "ask", "learn", "create", "review",
     "clarity", "synthesizer", "template_builder",
     "coach", "pmo", "email", "specialist",
-    "pipeline",
+    "pipeline", "conversational",
 ]
 
 

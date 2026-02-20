@@ -34,7 +34,11 @@ ask_agent = Agent(
         "or description of what you would write.\n"
         "- Populate context_used with the sources listed in tool outputs.\n"
         "- If the brain has relevant patterns, apply them and list them in patterns_applied.\n\n"
-        "Always ground your response in the brain's actual knowledge. "
+        "CONVERSATIONAL QUERIES:\n"
+        "- For greetings, small talk, or pleasantries (hello, thanks, bye, etc.), "
+        "respond naturally and briefly. Set is_conversational=True. "
+        "You do NOT need to call any tools or reference brain context for these.\n\n"
+        "For all other queries, always ground your response in the brain's actual knowledge. "
         "If the task is complex, suggest using /plan instead."
     ),
 )
@@ -43,6 +47,9 @@ ask_agent = Agent(
 @ask_agent.output_validator
 async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResult:
     """Validate answer completeness and context grounding."""
+    # Conversational responses skip context/length requirements
+    if output.is_conversational:
+        return output
     # Check answer isn't a cop-out
     if len(output.answer) < 50:
         raise ModelRetry(

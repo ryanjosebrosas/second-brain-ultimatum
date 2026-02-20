@@ -431,6 +431,14 @@ async def ask(question: str) -> str:
         question = _validate_mcp_input(question, label="question")
     except ValueError as e:
         return str(e)
+    # Short-circuit for greetings and small talk — skip agent pipeline
+    from second_brain.agents.utils import is_conversational
+    if is_conversational(question):
+        return (
+            "Hey! I'm your Second Brain assistant. "
+            "Ask me anything — I can search your memory, help with content, "
+            "review your work, or answer questions using your accumulated knowledge."
+        )
     deps = _get_deps()
     model = _get_model("ask")
     timeout = deps.config.api_timeout_seconds
@@ -2409,6 +2417,13 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
             step_list = list(routing_output.pipeline_steps)
         else:
             step_list = [routing_output.target_agent]
+        # Short-circuit conversational routing — no pipeline needed
+        if step_list == ["conversational"]:
+            return (
+                "Hey! I'm your Second Brain assistant. "
+                "Ask me anything — I can search your memory, help with content, "
+                "review your work, or answer questions using your accumulated knowledge."
+            )
     else:
         step_list = [s.strip() for s in steps.split(",") if s.strip()]
 

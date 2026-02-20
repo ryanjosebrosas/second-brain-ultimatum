@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
+from pydantic_ai import ModelRetry
+
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
     CreateResult, ContentTypeConfig, DEFAULT_CONTENT_TYPES,
@@ -106,6 +108,117 @@ class TestAskAgent:
         assert "answer" in instructions.lower(), (
             "Ask agent instructions must reference the answer field"
         )
+
+
+class TestIsConversational:
+    """Test the is_conversational() heuristic detection."""
+
+    def test_greetings(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("hello")
+        assert is_conversational("Hello")
+        assert is_conversational("Hi")
+        assert is_conversational("hey")
+        assert is_conversational("Hey there")
+        assert is_conversational("yo")
+        assert is_conversational("howdy")
+
+    def test_farewells(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("bye")
+        assert is_conversational("goodbye")
+        assert is_conversational("see you")
+        assert is_conversational("later")
+
+    def test_gratitude(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("thanks")
+        assert is_conversational("thank you")
+        assert is_conversational("thx")
+        assert is_conversational("ty")
+
+    def test_small_talk(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("lol")
+        assert is_conversational("haha")
+        assert is_conversational("nice")
+        assert is_conversational("cool")
+        assert is_conversational("ok")
+        assert is_conversational("okay")
+
+    def test_pleasantries(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("how are you")
+        assert is_conversational("what's up")
+
+    def test_not_conversational_real_questions(self):
+        from second_brain.agents.utils import is_conversational
+        assert not is_conversational("What are my content patterns?")
+        assert not is_conversational("Search for client insights")
+        assert not is_conversational("Help me write an email to John")
+        assert not is_conversational("What did I learn about pricing?")
+
+    def test_not_conversational_greeting_with_question(self):
+        from second_brain.agents.utils import is_conversational
+        assert not is_conversational("Hello, can you help me with my project?")
+        assert not is_conversational("Hey, what are my latest patterns?")
+        assert not is_conversational("Hi, I need help writing content")
+
+    def test_not_conversational_short_but_substantive(self):
+        from second_brain.agents.utils import is_conversational
+        assert not is_conversational("pricing strategy")
+        assert not is_conversational("client insights")
+        assert not is_conversational("content patterns")
+
+    def test_whitespace_and_punctuation_handling(self):
+        from second_brain.agents.utils import is_conversational
+        assert is_conversational("  hello  ")
+        assert is_conversational("thanks.")
+        assert is_conversational("Hey.")
+
+    def test_empty_and_whitespace(self):
+        from second_brain.agents.utils import is_conversational
+        assert not is_conversational("")
+        assert not is_conversational("   ")
+
+
+class TestAskAgentConversationalBypass:
+    @pytest.mark.asyncio
+    async def test_conversational_skips_context_check(self):
+        from second_brain.agents.ask import ask_agent
+        output = AskResult(
+            answer="Hey there!",
+            is_conversational=True,
+        )
+        ctx = MagicMock()
+        validator = ask_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.answer == "Hey there!"
+        assert result.is_conversational is True
+
+    @pytest.mark.asyncio
+    async def test_non_conversational_still_requires_context(self):
+        from second_brain.agents.ask import ask_agent
+        output = AskResult(
+            answer="A" * 60,
+            is_conversational=False,
+        )
+        ctx = MagicMock()
+        validator = ask_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(ctx, output)
+
+    @pytest.mark.asyncio
+    async def test_non_conversational_short_answer_still_fails(self):
+        from second_brain.agents.ask import ask_agent
+        output = AskResult(
+            answer="Short",
+            is_conversational=False,
+        )
+        ctx = MagicMock()
+        validator = ask_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(ctx, output)
 
 
 class TestLearnResult:

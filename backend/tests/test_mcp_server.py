@@ -2463,3 +2463,78 @@ class TestLearnImageImportError:
         assert isinstance(result, str)
         # Should contain either the PIL error message or still succeed with embedding skipped
         assert "Learn Image" in result
+
+
+class TestConversationalShortCircuit:
+    """Test that greetings/small talk bypass the agent pipeline."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_hello_skips_agent(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask
+        result = await ask(question="Hello")
+        assert "Second Brain assistant" in result
+        mock_agent.run.assert_not_called()
+        mock_deps_fn.assert_not_called()
+        mock_model_fn.assert_not_called()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_thanks_skips_agent(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask
+        result = await ask(question="thanks")
+        assert "Second Brain assistant" in result
+        mock_agent.run.assert_not_called()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_lol_skips_agent(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask
+        result = await ask(question="lol")
+        assert "Second Brain assistant" in result
+        mock_agent.run.assert_not_called()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_bye_skips_agent(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask
+        result = await ask(question="bye")
+        assert "Second Brain assistant" in result
+        mock_agent.run.assert_not_called()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_real_question_still_calls_agent(self, mock_agent, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask
+        mock_result = MagicMock()
+        mock_result.output = AskResult(
+            answer="Here is information about content patterns...",
+            context_used=["memory/patterns"],
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+        result = await ask(question="What are my content patterns?")
+        mock_agent.run.assert_called_once()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_greeting_with_question_not_short_circuited(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """'Hello, can you help me with my project?' has substantive content."""
+        from second_brain.mcp_server import ask
+        mock_result = MagicMock()
+        mock_result.output = AskResult(
+            answer="Of course! Let me search your brain for project context...",
+            context_used=["memory/projects"],
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+        result = await ask(question="Hello, can you help me with my project?")
+        mock_agent.run.assert_called_once()

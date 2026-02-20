@@ -70,8 +70,21 @@ async def recall(body: RecallRequest, deps: BrainDeps = Depends(get_deps), model
 
 
 @router.post("/ask")
-async def ask(body: AskRequest, deps: BrainDeps = Depends(get_deps), model: "Model" = Depends(get_model)) -> dict[str, Any]:
+async def ask(body: AskRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Ask the Second Brain a question."""
+    # Short-circuit for greetings and small talk
+    from second_brain.agents.utils import is_conversational
+    if is_conversational(body.question):
+        from second_brain.schemas import AskResult
+        return AskResult(
+            answer=(
+                "Hey! I'm your Second Brain assistant. "
+                "Ask me anything — I can search your memory, help with content, "
+                "review your work, or answer questions using your accumulated knowledge."
+            ),
+            is_conversational=True,
+            confidence="HIGH",
+        ).model_dump()
     result = await _run_agent(
         "Ask",
         lambda: ask_agent.run(body.question, deps=deps, model=model),
