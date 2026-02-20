@@ -2570,7 +2570,7 @@ class TestMem0FilterConstruction:
         assert "filters" in kwargs
         assert "AND" in kwargs["filters"]
         assert {"user_id": "ryan"} in kwargs["filters"]["AND"]
-        assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
+        assert kwargs.get("version") == "v2", "search must use version=v2 for keyword_search support"
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_flattens_nested_and(self, mock_mem0_cls, cloud_config):
@@ -2645,8 +2645,8 @@ class TestMem0FilterConstruction:
         assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
 
     @patch("mem0.MemoryClient")
-    async def test_search_with_filters_no_version_kwarg(self, mock_mem0_cls, cloud_config):
-        """search_with_filters must not pass 'version' kwarg to Mem0 v1.0.0+."""
+    async def test_search_with_filters_uses_v2_endpoint(self, mock_mem0_cls, cloud_config):
+        """search_with_filters must use version=v2 for keyword_search support."""
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": [], "relations": []}
         mock_mem0_cls.return_value = mock_client
@@ -2656,7 +2656,7 @@ class TestMem0FilterConstruction:
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs
-        assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
+        assert kwargs.get("version") == "v2", "search must use version=v2 for keyword_search support"
 
 
 class TestWrapMetadataFilter:

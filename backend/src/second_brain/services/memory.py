@@ -221,7 +221,7 @@ class MemoryService(MemoryServiceBase):
 
             @_MEM0_RETRY
             def _search():
-                return self._client.search(query, **kwargs)
+                return self._client.search(query, version="v2", **kwargs)
 
             async with asyncio.timeout(self._timeout):
                 results = await asyncio.to_thread(_search)
@@ -285,12 +285,12 @@ class MemoryService(MemoryServiceBase):
 
             @_MEM0_RETRY
             def _search():
-                return self._client.search(query, **kwargs)
+                return self._client.search(query, version="v2", **kwargs)
 
             @_MEM0_RETRY
             def _search_no_filters():
                 kw = {k: v for k, v in kwargs.items() if k != "filters"}
-                return self._client.search(query, **kw)
+                return self._client.search(query, version="v2", **kw)
 
             try:
                 async with asyncio.timeout(self._timeout):
