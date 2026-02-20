@@ -129,3 +129,32 @@ class TestMemoryTablesConfig:
         for table_key, table_config in MEMORY_TABLES.items():
             assert isinstance(table_config["display_fields"], list), \
                 f"Table '{table_key}' display_fields is not a list"
+
+
+class TestCosAgentMapping:
+    """Tests for Chief of Staff to frontend agent name mapping."""
+
+    def test_cos_to_frontend_key_mapping(self):
+        """CoS agent names map correctly to frontend keys."""
+        from config import cos_to_frontend_key
+        assert cos_to_frontend_key("coach") == "coaching"
+        assert cos_to_frontend_key("pmo") == "prioritize"
+        assert cos_to_frontend_key("synthesizer") == "synthesize"
+        assert cos_to_frontend_key("template_builder") == "templates"
+        assert cos_to_frontend_key("recall") == "recall"  # identity
+        assert cos_to_frontend_key("ask") == "ask"  # identity
+        assert cos_to_frontend_key("recall_deep") == "recall"
+
+    def test_cos_agent_map_covers_all_mismatches(self):
+        """All CoS routes that differ from frontend keys are mapped."""
+        from config import AGENTS, COS_AGENT_MAP, cos_to_frontend_key
+        # Every mapped value should exist in AGENTS
+        for cos_name, frontend_key in COS_AGENT_MAP.items():
+            assert frontend_key in AGENTS, f"COS_AGENT_MAP[{cos_name}] = {frontend_key} not in AGENTS"
+
+    def test_cos_agent_map_identity_fallback(self):
+        """Unknown CoS names fall through to identity mapping."""
+        from config import cos_to_frontend_key
+        # Names not in the map should return as-is
+        assert cos_to_frontend_key("unknown_agent") == "unknown_agent"
+        assert cos_to_frontend_key("new_agent") == "new_agent"

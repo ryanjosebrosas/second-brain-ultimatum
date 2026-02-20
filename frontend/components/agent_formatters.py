@@ -133,6 +133,15 @@ def _format_pipeline(data: dict[str, Any]) -> None:
         copyable_output(data)
 
 
+def _format_conversational(data: dict[str, Any]) -> None:
+    """Format conversational (greeting/small-talk) response."""
+    answer = data.get("answer", "")
+    if answer:
+        st.markdown(answer)
+    else:
+        copyable_output(data)
+
+
 def _format_generic(data: dict[str, Any]) -> None:
     """Generic fallback formatter for agents without a dedicated formatter."""
     copyable_output(data)
@@ -149,6 +158,7 @@ AGENT_FORMATTERS: dict[str, Any] = {
     "coaching": _format_coaching,
     "prioritize": _format_prioritize,
     "pipeline": _format_pipeline,
+    "conversational": _format_conversational,
     # clarity, synthesize, templates, specialist -> fall through to _format_generic
 }
 

@@ -39,6 +39,12 @@ def _get_cached_content_types() -> dict[str, Any]:
     return {}
 
 
+@st.cache_data(ttl=60)
+def _get_cached_templates(content_type: str) -> dict[str, Any]:
+    """Fetch templates for a content type with 1-minute cache."""
+    return api_client.get_templates(content_type=content_type)
+
+
 # --- Load content types ---
 try:
     content_types: dict[str, Any] = _get_cached_content_types()
@@ -96,9 +102,38 @@ with tab_create:
             with st.expander("Structure Guide"):
                 st.markdown(hint)
 
+        # --- Template selector ---
+        selected_template_body = ""
+        try:
+            tmpl_response = _get_cached_templates(selected_key)
+            tmpl_list = tmpl_response.get("templates", []) if isinstance(tmpl_response, dict) else []
+        except Exception:
+            tmpl_list = []
+
+        if tmpl_list:
+            st.markdown("#### Use a Template (optional)")
+            tmpl_names = ["None — write from scratch"] + [
+                t.get("name", "Untitled") for t in tmpl_list
+            ]
+            tmpl_choice = st.selectbox(
+                "Template",
+                options=range(len(tmpl_names)),
+                format_func=lambda i: tmpl_names[i],
+                key="create_template",
+            )
+            if tmpl_choice and tmpl_choice > 0:
+                chosen = tmpl_list[tmpl_choice - 1]
+                selected_template_body = chosen.get("body", "")
+                if chosen.get("when_to_use"):
+                    st.caption(f"When to use: {chosen['when_to_use']}")
+                if chosen.get("customization_guide"):
+                    with st.expander("Customization Guide"):
+                        st.markdown(chosen["customization_guide"])
+
         # Input form
         prompt = st.text_area(
             "What do you want to create?",
+            value=selected_template_body,
             height=150,
             placeholder=f"Describe the {selected_type.get('name', '')} you want to create...",
         )

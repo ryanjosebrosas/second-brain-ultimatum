@@ -674,3 +674,108 @@ class TestHealthProbes:
         data = response.json()
         assert data["status"] == "ready"
         assert data["model"] == "unavailable"
+
+
+class TestChatEndpoint:
+    """Tests for the unified /chat endpoint."""
+
+    def test_chat_conversational_route(self, client):
+        """Chat with greeting routes to conversational, returns greeting."""
+        with patch("second_brain.agents.chief_of_staff.chief_of_staff") as mock_cos:
+            mock_output = MagicMock()
+            mock_output.target_agent = "conversational"
+            mock_output.reasoning = "Greeting detected"
+            mock_output.confidence = "HIGH"
+            mock_output.query_complexity = "simple"
+            mock_output.pipeline_steps = []
+            mock_result = MagicMock()
+            mock_result.output = mock_output
+            mock_cos.run = AsyncMock(return_value=mock_result)
+
+            response = client.post("/api/chat", json={"message": "Hello!"})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["agent"] == "conversational"
+            assert "answer" in data["output"]
+            assert data["output"]["is_conversational"] is True
+
+    def test_chat_single_agent_route(self, client):
+        """Chat routes to single agent and returns structured output."""
+        with patch("second_brain.agents.chief_of_staff.chief_of_staff") as mock_cos, \
+             patch("second_brain.agents.registry.get_agent_registry") as mock_registry:
+            # CoS routes to "recall"
+            mock_output = MagicMock()
+            mock_output.target_agent = "recall"
+            mock_output.reasoning = "Memory search needed"
+            mock_output.confidence = "HIGH"
+            mock_output.query_complexity = "medium"
+            mock_output.pipeline_steps = []
+            mock_result = MagicMock()
+            mock_result.output = mock_output
+            mock_cos.run = AsyncMock(return_value=mock_result)
+
+            # Mock the recall agent
+            mock_agent = MagicMock()
+            mock_agent_output = MagicMock()
+            mock_agent_output.model_dump = MagicMock(return_value={
+                "query": "test",
+                "matches": [],
+                "summary": "No matches",
+            })
+            mock_agent_result = MagicMock()
+            mock_agent_result.output = mock_agent_output
+            mock_agent.run = AsyncMock(return_value=mock_agent_result)
+            mock_registry.return_value = {"recall": (mock_agent, "Search memory")}
+
+            response = client.post("/api/chat", json={"message": "Find my notes about X"})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["agent"] == "recall"
+            assert "output" in data
+            assert "routing" in data
+
+    def test_chat_pipeline_route(self, client):
+        """Chat routes to pipeline for multi-step requests."""
+        with patch("second_brain.agents.chief_of_staff.chief_of_staff") as mock_cos, \
+             patch("second_brain.agents.utils.run_pipeline") as mock_pipeline:
+            mock_output = MagicMock()
+            mock_output.target_agent = "pipeline"
+            mock_output.reasoning = "Multi-step workflow needed"
+            mock_output.confidence = "HIGH"
+            mock_output.query_complexity = "complex"
+            mock_output.pipeline_steps = ["recall", "create"]
+            mock_result = MagicMock()
+            mock_result.output = mock_output
+            mock_cos.run = AsyncMock(return_value=mock_result)
+
+            mock_pipeline.return_value = {"final": "Generated content here"}
+
+            response = client.post("/api/chat", json={"message": "Write a LinkedIn post about AI"})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["agent"] == "pipeline"
+            assert "result" in data["output"]
+
+    def test_chat_empty_message_rejected(self, client):
+        """Empty message should be rejected by validation."""
+        response = client.post("/api/chat", json={"message": ""})
+        assert response.status_code == 422
+
+    def test_chat_unknown_agent_route(self, client):
+        """Unknown agent from CoS should return 400."""
+        with patch("second_brain.agents.chief_of_staff.chief_of_staff") as mock_cos, \
+             patch("second_brain.agents.registry.get_agent_registry", return_value={}):
+            mock_output = MagicMock()
+            mock_output.target_agent = "nonexistent_agent"
+            mock_output.reasoning = "Test"
+            mock_output.confidence = "LOW"
+            mock_output.query_complexity = "simple"
+            mock_output.pipeline_steps = []
+            mock_result = MagicMock()
+            mock_result.output = mock_output
+            mock_cos.run = AsyncMock(return_value=mock_result)
+
+            response = client.post("/api/chat", json={"message": "test"})
+            assert response.status_code == 400
+            assert "Unknown agent route" in response.json()["detail"]
+

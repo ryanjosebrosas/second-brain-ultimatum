@@ -63,6 +63,11 @@ def call_agent(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {"error": f"Cannot reach API: {type(e).__name__}", "status_code": 0}
 
 
+def call_chat(message: str) -> dict[str, Any]:
+    """Send a message to the unified /chat endpoint (Chief of Staff routing)."""
+    return call_agent("/chat", {"message": message})
+
+
 # --- Memory methods ---
 
 def search_memory(endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:

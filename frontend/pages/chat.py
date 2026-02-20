@@ -1,12 +1,12 @@
-"""Chat page — Interactive chat with agent selector."""
+"""Chat page — Unified chat with Chief of Staff routing."""
 
 import logging
 from typing import Any
 
 import streamlit as st
 
-from config import AGENTS, DEFAULT_CONTENT_TYPES, group_content_types_by_category
-from api_client import call_agent, get_content_types
+from config import AGENTS, DEFAULT_CONTENT_TYPES, group_content_types_by_category, cos_to_frontend_key
+from api_client import call_agent, call_chat, get_content_types
 from components.agent_formatters import format_agent_response
 
 logger = logging.getLogger(__name__)
@@ -47,31 +47,69 @@ def _get_content_type_options_full() -> dict[str, dict]:
     return {}
 
 
+def _cap_history(key: str) -> None:
+    """Cap chat history to prevent session state bloat."""
+    if len(st.session_state[key]) > _MAX_HISTORY:
+        st.session_state[key] = st.session_state[key][-_MAX_HISTORY:]
+
+
+def _handle_error(response: dict, history_key: str) -> None:
+    """Display error from API response and append to history."""
+    status = response.get("status_code", "")
+    error_msg = response["error"]
+    if status == 503:
+        st.warning("The Second Brain is still starting up. Please try again in a moment.")
+    elif status == 504:
+        st.warning("The request timed out. Try a shorter or simpler query.")
+    elif status == 0:
+        st.error("Cannot reach the Second Brain API. Is the backend running?")
+    else:
+        st.error(f"Error: {error_msg}")
+    st.session_state[history_key].append({"role": "assistant", "content": f"Error: {error_msg}"})
+
+
+def _show_generic_error(history_key: str) -> None:
+    """Show generic error and append to history."""
+    error_msg = "An error occurred. Please try again."
+    st.error(error_msg)
+    st.session_state[history_key].append({"role": "assistant", "content": error_msg})
+
+
 # --- Page header ---
 st.title(":material/chat: Chat")
-st.caption("Talk to your Second Brain agents")
 
-# --- Agent selector in sidebar ---
+# --- Mode toggle in sidebar ---
 with st.sidebar:
-    st.subheader("Agent")
-    selected_idx: int = st.radio(
-        "Select an agent",
-        range(len(_AGENT_KEYS)),
-        format_func=lambda i: _AGENT_LABELS[i],
-        label_visibility="collapsed",
-    ) or 0
-    agent_key: str = _AGENT_KEYS[selected_idx]
-    agent_config: dict[str, Any] = AGENTS[agent_key]
-    st.caption(agent_config["description"])
+    direct_mode = st.toggle("Direct Agent", value=False, help="Bypass auto-routing and pick a specific agent")
 
-# --- Initialize chat history per agent ---
-history_key = f"chat_history_{agent_key}"
+    if direct_mode:
+        st.subheader("Agent")
+        selected_idx: int = st.radio(
+            "Select an agent",
+            range(len(_AGENT_KEYS)),
+            format_func=lambda i: _AGENT_LABELS[i],
+            label_visibility="collapsed",
+        ) or 0
+        agent_key: str = _AGENT_KEYS[selected_idx]
+        agent_config: dict[str, Any] = AGENTS[agent_key]
+        st.caption(agent_config["description"])
+    else:
+        st.caption("Your message is auto-routed to the best agent.")
+
+# --- Determine mode and history key ---
+if direct_mode:
+    history_key = f"chat_history_{agent_key}"
+    mode = "direct"
+else:
+    history_key = "chat_history_unified"
+    mode = "unified"
+
 if history_key not in st.session_state:
     st.session_state[history_key] = []
 
-# --- Extra fields (above chat input) ---
+# --- Extra fields for direct mode ---
 extra_values: dict[str, str] = {}
-if agent_config["extra_fields"]:
+if direct_mode and agent_config["extra_fields"]:
     with st.expander("Options", expanded=False):
         for field_name, field_config in agent_config["extra_fields"].items():
             if field_config["type"] == "text":
@@ -108,7 +146,6 @@ if agent_config["extra_fields"]:
                         else:
                             extra_values[field_name] = field_config.get("default", "linkedin")
                 else:
-                    # Fallback to flat list if full options unavailable
                     options = _get_content_type_options()
                     default_val = field_config["default"]
                     default_idx = options.index(default_val) if default_val and default_val in options else 0
@@ -135,10 +172,17 @@ for msg in st.session_state[history_key]:
         if msg["role"] == "user":
             st.markdown(msg["content"])
         else:
-            format_agent_response(agent_key, msg["content"])
+            # Unified mode: use stored agent key for formatting
+            fmt_key = msg.get("agent", agent_key if direct_mode else "pipeline")
+            format_agent_response(fmt_key, msg["content"])
 
 # --- Chat input ---
-user_input = st.chat_input(agent_config["input_label"])
+if direct_mode:
+    input_label = agent_config["input_label"]
+else:
+    input_label = "Ask your Second Brain anything..."
+
+user_input = st.chat_input(input_label)
 
 if user_input:
     if len(user_input) > _MAX_INPUT_LENGTH:
@@ -151,40 +195,58 @@ if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Build payload
-    payload = {agent_config["input_field"]: user_input}
-    for field_name, value in extra_values.items():
-        if value:
-            payload[field_name] = value
+    # --- Direct mode: call specific agent ---
+    if direct_mode:
+        payload = {agent_config["input_field"]: user_input}
+        for field_name, value in extra_values.items():
+            if value:
+                payload[field_name] = value
 
-    # Call agent
-    with st.chat_message("assistant"):
-        with st.spinner(f"{agent_config['name']} is thinking..."):
-            try:
-                response = call_agent(agent_config["endpoint"], payload)
-                if "error" in response:
-                    status = response.get("status_code", "")
-                    error_msg = response["error"]
-                    if status == 503:
-                        st.warning("The Second Brain is still starting up. Please try again in a moment.")
-                    elif status == 504:
-                        st.warning("The request timed out. Try a shorter or simpler query.")
-                    elif status == 0:
-                        st.error("Cannot reach the Second Brain API. Is the backend running?")
+        with st.chat_message("assistant"):
+            with st.spinner(f"{agent_config['name']} is thinking..."):
+                try:
+                    response = call_agent(agent_config["endpoint"], payload)
+                    if "error" in response:
+                        _handle_error(response, history_key)
                     else:
-                        st.error(f"Error: {error_msg}")
-                    st.session_state[history_key].append({"role": "assistant", "content": f"Error: {error_msg}"})
-                else:
-                    format_agent_response(agent_key, response)
-                    st.session_state[history_key].append({"role": "assistant", "content": response})
-                # Cap history to prevent session state bloat
-                if len(st.session_state[history_key]) > _MAX_HISTORY:
-                    st.session_state[history_key] = st.session_state[history_key][-_MAX_HISTORY:]
-            except Exception as e:
-                logger.error("Agent %s call failed: %s", agent_key, e)
-                error_msg = "An error occurred. Please try again."
-                st.error(error_msg)
-                st.session_state[history_key].append({"role": "assistant", "content": error_msg})
-                # Cap history
-                if len(st.session_state[history_key]) > _MAX_HISTORY:
-                    st.session_state[history_key] = st.session_state[history_key][-_MAX_HISTORY:]
+                        format_agent_response(agent_key, response)
+                        st.session_state[history_key].append({
+                            "role": "assistant",
+                            "content": response,
+                            "agent": agent_key,
+                        })
+                except Exception as e:
+                    logger.error("Agent %s call failed: %s", agent_key, e)
+                    _show_generic_error(history_key)
+        _cap_history(history_key)
+
+    # --- Unified mode: call /chat endpoint ---
+    else:
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    response = call_chat(user_input)
+                    if "error" in response:
+                        _handle_error(response, history_key)
+                    else:
+                        routed_agent = response.get("agent", "pipeline")
+                        output = response.get("output", response)
+                        routing = response.get("routing", {})
+
+                        # Show routing info as subtle caption
+                        if routing.get("reasoning"):
+                            st.caption(f"Routed to **{routed_agent}**: {routing['reasoning']}")
+
+                        # Map CoS name to frontend formatter key
+                        fmt_key = cos_to_frontend_key(routed_agent)
+                        format_agent_response(fmt_key, output)
+
+                        st.session_state[history_key].append({
+                            "role": "assistant",
+                            "content": output,
+                            "agent": fmt_key,
+                        })
+                except Exception as e:
+                    logger.error("Unified chat failed: %s", e)
+                    _show_generic_error(history_key)
+        _cap_history(history_key)

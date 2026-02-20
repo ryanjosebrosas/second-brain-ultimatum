@@ -250,3 +250,20 @@ def group_content_types_by_category(
     for label in sorted(groups.keys()):
         ordered[label] = sorted(groups[label], key=lambda x: x[1])
     return ordered
+
+
+# Maps Chief of Staff route names → frontend AGENTS config keys.
+# Most are identical; these are the ones that differ.
+COS_AGENT_MAP: dict[str, str] = {
+    "coach": "coaching",
+    "pmo": "prioritize",
+    "synthesizer": "synthesize",
+    "template_builder": "templates",
+    "email": "email",
+    "recall_deep": "recall",
+}
+
+
+def cos_to_frontend_key(cos_agent: str) -> str:
+    """Convert a CoS route name to a frontend AGENTS config key."""
+    return COS_AGENT_MAP.get(cos_agent, cos_agent)

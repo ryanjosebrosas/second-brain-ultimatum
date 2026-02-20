@@ -13,17 +13,18 @@ if TYPE_CHECKING:
 from second_brain.deps import BrainDeps
 from second_brain.api.deps import get_deps, get_model
 from second_brain.api.schemas import (
-    RecallRequest,
     AskRequest,
-    LearnRequest,
-    CreateContentRequest,
-    ReviewContentRequest,
-    CoachingRequest,
-    PrioritizeRequest,
-    EmailRequest,
-    SpecialistRequest,
-    PipelineRequest,
+    ChatRequest,
     ClarityRequest,
+    CoachingRequest,
+    CreateContentRequest,
+    EmailRequest,
+    LearnRequest,
+    PipelineRequest,
+    PrioritizeRequest,
+    RecallRequest,
+    ReviewContentRequest,
+    SpecialistRequest,
     SynthesizeRequest,
     TemplateRequest,
 )
@@ -312,3 +313,91 @@ async def find_templates(body: TemplateRequest, deps: BrainDeps = Depends(get_de
         deps.config.api_timeout_seconds,
     )
     return result.output.model_dump()
+
+
+@router.post("/chat")
+async def unified_chat(body: ChatRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
+    """Unified chat — Chief of Staff routes to the optimal agent automatically."""
+    from second_brain.agents.chief_of_staff import chief_of_staff
+    from second_brain.agents.utils import run_pipeline as _run_pipeline
+
+    # Step 1: Run Chief of Staff routing
+    routing = await _run_agent(
+        "Chat routing",
+        lambda: chief_of_staff.run(body.message, deps=deps, model=model),
+        deps.config.api_timeout_seconds,
+    )
+    decision = routing.output
+    target = decision.target_agent
+    routing_info = {
+        "agent": target,
+        "reasoning": decision.reasoning,
+        "confidence": decision.confidence,
+        "complexity": decision.query_complexity,
+    }
+
+    # Step 2: Handle conversational short-circuit
+    if target == "conversational":
+        return {
+            "agent": "conversational",
+            "routing": routing_info,
+            "output": {
+                "answer": (
+                    "Hey! I'm your Second Brain assistant. "
+                    "Ask me anything — I can search your memory, help with content, "
+                    "review your work, or answer questions using your accumulated knowledge."
+                ),
+                "is_conversational": True,
+                "confidence": "HIGH",
+            },
+        }
+
+    # Step 3: Handle pipeline routing
+    if target == "pipeline":
+        step_list = list(decision.pipeline_steps)
+        results = await _run_agent(
+            "Pipeline",
+            lambda: _run_pipeline(steps=step_list, initial_prompt=body.message, deps=deps, model=model),
+            deps.config.api_timeout_seconds * 2,
+        )
+        final = results.get("final")
+        return {
+            "agent": "pipeline",
+            "routing": routing_info,
+            "output": {"result": str(final) if final else "Pipeline completed with no output."},
+        }
+
+    # Step 4: Handle single-agent routing
+    from second_brain.agents.registry import get_agent_registry
+    registry = get_agent_registry()
+
+    if target not in registry:
+        raise HTTPException(400, detail=f"Unknown agent route: {target}")
+
+    agent_instance, _desc = registry[target]
+
+    # Special handling for review (uses run_full_review)
+    if target == "review":
+        timeout = deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
+        result = await _run_agent(
+            "Review",
+            lambda: run_full_review(body.message, deps, model),
+            timeout,
+        )
+        return {
+            "agent": "review",
+            "routing": routing_info,
+            "output": result.model_dump(),
+        }
+
+    # Standard agent execution
+    result = await _run_agent(
+        target.title(),
+        lambda: agent_instance.run(body.message, deps=deps, model=model),
+        deps.config.api_timeout_seconds,
+    )
+    return {
+        "agent": target,
+        "routing": routing_info,
+        "output": result.output.model_dump(),
+    }
