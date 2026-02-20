@@ -2198,15 +2198,20 @@ class TestMemoryServiceResilience:
     @patch("mem0.MemoryClient")
     async def test_idle_detection_triggers_reconnect(self, mock_mem0_cls, mock_config):
         """After idle threshold, client should be re-instantiated."""
+        # Return different mock instances on successive calls
+        client_1 = MagicMock(name="client-1")
+        client_2 = MagicMock(name="client-2")
+        mock_mem0_cls.side_effect = [client_1, client_2]
+
         service = MemoryService(mock_config)
-        original_client = service._client
+        assert service._client is client_1
 
         # Simulate idle period
         service._last_activity = time.monotonic() - 300  # 5 min ago
         service._check_idle_reconnect()
 
         # Client should have been re-created (cloud client)
-        assert service._client is not original_client
+        assert service._client is client_2
 
     @patch("mem0.MemoryClient")
     async def test_idle_detection_skips_when_recent(self, mock_mem0_cls, mock_config):
@@ -2223,20 +2228,15 @@ class TestMemoryServiceResilience:
     async def test_retry_on_connection_error(self, mock_mem0_cls, mock_config):
         """Mem0 cloud calls should retry on ConnectionError."""
         service = MemoryService(mock_config)
-        # Simulate: first call fails, second succeeds
-        call_count = 0
-
-        def _add_side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise ConnectionError("Network error")
-            return {"id": "success"}
-
-        service._client.add = MagicMock(side_effect=_add_side_effect)
+        # Use side_effect list: first call raises, second succeeds
+        service._client.add = MagicMock(
+            side_effect=[ConnectionError("Network error"), {"id": "success"}]
+        )
+        # Increase timeout to give retry enough room
+        service._timeout = 30
         result = await service.add("test content")
         assert result.get("id") == "success"
-        assert call_count == 2  # retried once
+        assert service._client.add.call_count == 2  # retried once
 
     @patch("mem0.MemoryClient")
     async def test_retry_exhaustion_returns_empty(self, mock_mem0_cls, mock_config):
@@ -2245,5 +2245,6 @@ class TestMemoryServiceResilience:
         service._client.add = MagicMock(
             side_effect=ConnectionError("Persistent failure")
         )
+        service._timeout = 30
         result = await service.add("test content")
         assert result == {}
