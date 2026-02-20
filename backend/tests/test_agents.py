@@ -221,6 +221,122 @@ class TestAskAgentConversationalBypass:
             await validator.function(ctx, output)
 
 
+class TestRecallValidatorResilience:
+    """Tests for recall validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, empty results should NOT trigger ModelRetry."""
+        from second_brain.agents.recall import recall_agent
+        output = RecallResult(
+            query="test",
+            error="Mem0 search returned 400: validation error",
+        )
+        ctx = MagicMock()
+        validator = recall_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Mem0 search returned 400: validation error"
+        assert result.matches == []
+
+    @pytest.mark.asyncio
+    async def test_empty_results_without_error_still_retries(self):
+        """When no error is set AND results are empty, validator should retry."""
+        from second_brain.agents.recall import recall_agent
+        output = RecallResult(query="test")
+        ctx = MagicMock()
+        validator = recall_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(ctx, output)
+
+    def test_recall_result_error_field_default(self):
+        """Error field should default to empty string."""
+        result = RecallResult(query="test")
+        assert result.error == ""
+
+
+class TestAskValidatorResilience:
+    """Tests for ask validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_context_check(self):
+        """When error is set, missing context should NOT trigger ModelRetry."""
+        from second_brain.agents.ask import ask_agent
+        output = AskResult(
+            answer="A" * 60,
+            error="Brain context tools unavailable",
+        )
+        ctx = MagicMock()
+        validator = ask_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Brain context tools unavailable"
+
+    @pytest.mark.asyncio
+    async def test_error_bypasses_length_check(self):
+        """When error is set, even short answers pass validation."""
+        from second_brain.agents.ask import ask_agent
+        output = AskResult(
+            answer="Services down.",
+            error="All brain context tools failed",
+        )
+        ctx = MagicMock()
+        validator = ask_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.answer == "Services down."
+
+    def test_ask_result_error_field_default(self):
+        """Error field should default to empty string."""
+        result = AskResult(answer="test")
+        assert result.error == ""
+
+
+class TestRunAgentErrorHandling:
+    """Tests for _run_agent HTTP status code differentiation."""
+
+    @pytest.mark.asyncio
+    async def test_unexpected_model_behavior_returns_503(self):
+        """UnexpectedModelBehavior should map to 503 Service Degraded."""
+        from fastapi import HTTPException
+        from second_brain.api.routers.agents import _run_agent
+
+        class UnexpectedModelBehavior(Exception):
+            pass
+
+        async def failing_coro():
+            raise UnexpectedModelBehavior("Exceeded maximum retries (3)")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _run_agent("Test", failing_coro, timeout=30.0)
+        assert exc_info.value.status_code == 503
+        assert "degraded" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_returns_502(self):
+        """Other exceptions should map to 502 Bad Gateway."""
+        from fastapi import HTTPException
+        from second_brain.api.routers.agents import _run_agent
+
+        async def failing_coro():
+            raise RuntimeError("Something broke")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _run_agent("Test", failing_coro, timeout=30.0)
+        assert exc_info.value.status_code == 502
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_504(self):
+        """TimeoutError should map to 504 Gateway Timeout."""
+        import asyncio
+        from fastapi import HTTPException
+        from second_brain.api.routers.agents import _run_agent
+
+        async def slow_coro():
+            await asyncio.sleep(10)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _run_agent("Test", slow_coro, timeout=0.01)
+        assert exc_info.value.status_code == 504
+
+
 class TestLearnResult:
     def test_learn_result_defaults(self):
         result = LearnResult(input_summary="test")

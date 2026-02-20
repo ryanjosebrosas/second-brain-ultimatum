@@ -54,8 +54,15 @@ async def _run_agent(
     except HTTPException:
         raise
     except Exception as e:
+        error_name = type(e).__name__
+        if error_name == "UnexpectedModelBehavior":
+            logger.warning("%s agent exhausted retries: %s", name, e)
+            raise HTTPException(
+                503,
+                detail=f"{name} service degraded: backend services may be unavailable. Please retry later.",
+            )
         logger.error("%s agent failed: %s", name, e, exc_info=True)
-        raise HTTPException(502, detail=f"{name} failed: {type(e).__name__}: {e}")
+        raise HTTPException(502, detail=f"{name} failed: {error_name}: {e}")
 
 
 @router.post("/recall")

@@ -188,6 +188,13 @@ async def recall(query: str) -> str:
             )
     except TimeoutError:
         return f"Recall timed out after {timeout}s. Try a simpler query."
+    except Exception as e:
+        logger.error("Recall agent failed: %s", type(e).__name__)
+        logger.debug("Recall error detail: %s", e)
+        return (
+            f"Recall encountered an error: {type(e).__name__}. "
+            "Try quick_recall() for a direct search without agent overhead."
+        )
     output = result.output
 
     # Format as readable text for Claude Code

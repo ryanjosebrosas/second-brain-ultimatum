@@ -79,6 +79,12 @@ class RecallResult(BaseModel):
         default_factory=list,
         description="Sources that contributed results (e.g., 'mem0', 'pgvector:patterns', 'keyword:memory_content')",
     )
+    error: str = Field(
+        default="",
+        description="Error message when search backends are degraded or unavailable. "
+        "Empty string means no error. When set, empty matches/patterns/relations "
+        "are expected and should not trigger retries.",
+    )
 
 
 class AskResult(BaseModel):
@@ -114,6 +120,10 @@ class AskResult(BaseModel):
     is_conversational: bool = Field(
         default=False,
         description="True when the query was detected as a greeting or small talk — memory search was skipped.",
+    )
+    error: str = Field(
+        default="",
+        description="Error message when brain context is unavailable.",
     )
 
 

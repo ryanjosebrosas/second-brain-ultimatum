@@ -37,14 +37,23 @@ recall_agent = Agent(
         "or use pattern/experience search instead of semantic search.\n\n"
         "SOURCES: Track which search tools you used in the search_sources field. "
         "Include entries like 'mem0', 'hybrid:patterns', 'pgvector:experiences', "
-        "'pgvector:examples', 'projects' based on which tools returned results."
+        "'pgvector:examples', 'projects' based on which tools returned results.\n\n"
+        "ERROR HANDLING: If ALL search tools return 'unavailable' errors (indicating "
+        "backend service failures), do NOT keep retrying the same failing tools. "
+        "Instead, set the error field to describe which services are down and return "
+        "whatever partial results you have (even if empty). This prevents unnecessary "
+        "retries when the problem is infrastructure, not your search strategy."
     ),
 )
 
 
 @recall_agent.output_validator
 async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> RecallResult:
-    """Retry if recall returned nothing — try alternative search strategies."""
+    """Retry if recall returned nothing — but accept graceful degradation."""
+    # If the agent signaled a backend error, accept the empty result
+    if output.error:
+        return output
+    # Only retry if no error was signaled AND no results found
     if not output.matches and not output.patterns and not output.relations:
         raise ModelRetry(
             "No results found. Try alternative search strategies:\n"
@@ -52,7 +61,9 @@ async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> R
             "2. Search patterns by topic instead of semantic memory\n"
             "3. Search experiences for related past work\n"
             "4. Check examples for similar content types\n"
-            "You have multiple search tools — use a different one."
+            "You have multiple search tools — use a different one.\n\n"
+            "If ALL search tools returned 'unavailable' errors, set the error field "
+            "to describe what happened and return empty results."
         )
     return output
 

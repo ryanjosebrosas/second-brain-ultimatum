@@ -39,7 +39,10 @@ ask_agent = Agent(
         "respond naturally and briefly. Set is_conversational=True. "
         "You do NOT need to call any tools or reference brain context for these.\n\n"
         "For all other queries, always ground your response in the brain's actual knowledge. "
-        "If the task is complex, suggest using /plan instead."
+        "If the task is complex, suggest using /plan instead.\n\n"
+        "ERROR HANDLING: If brain context tools return 'unavailable' errors, "
+        "set the error field to describe the issue and answer the question "
+        "using your general knowledge. Do not keep retrying failing tools."
     ),
 )
 
@@ -49,6 +52,9 @@ async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResu
     """Validate answer completeness and context grounding."""
     # Conversational responses skip context/length requirements
     if output.is_conversational:
+        return output
+    # Backend errors skip context requirements
+    if output.error:
         return output
     # Check answer isn't a cop-out
     if len(output.answer) < 50:
@@ -61,7 +67,9 @@ async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResu
         raise ModelRetry(
             "You didn't reference any brain context or patterns. "
             "Use load_brain_context and find_relevant_patterns tools to ground "
-            "your response in the brain's actual knowledge."
+            "your response in the brain's actual knowledge.\n\n"
+            "If brain context tools returned 'unavailable' errors, set the error "
+            "field and answer based on your general knowledge instead."
         )
     return output
 

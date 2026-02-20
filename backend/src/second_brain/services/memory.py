@@ -225,11 +225,8 @@ class MemoryService(MemoryServiceBase):
         if self._is_cloud:
             kwargs["filters"] = {"user_id": self.user_id}
             kwargs["top_k"] = limit
-            kwargs["version"] = "v2"
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
-            if use_graph:
-                kwargs["enable_graph"] = True
         try:
             if self._is_cloud:
                 @_MEM0_RETRY
@@ -290,11 +287,8 @@ class MemoryService(MemoryServiceBase):
                 }
             kwargs["filters"] = base_filters
             kwargs["top_k"] = limit
-            kwargs["version"] = "v2"
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
-            if use_graph:
-                kwargs["enable_graph"] = True
         else:
             # Local client: pass filters directly if supported
             if metadata_filters:
