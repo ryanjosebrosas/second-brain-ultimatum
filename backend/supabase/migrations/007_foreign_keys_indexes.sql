@@ -1,9 +1,17 @@
--- Foreign key constraints, missing indexes, unique constraints, schema versioning
--- Using ON DELETE CASCADE to prevent orphaned records
+-- Foreign key constraints, supporting indexes, unique constraints, schema versioning.
+-- NOTE: 003_pattern_constraints.sql has a case-insensitive unique index (lower(name))
+-- for application-level dedup. This migration adds a formal UNIQUE constraint on name
+-- (case-sensitive) because PostgreSQL requires it as a FK reference target.
 
 -- Clean up orphaned entries before adding FK constraints
-DELETE FROM growth_log WHERE pattern_name NOT IN (SELECT name FROM patterns);
-DELETE FROM confidence_history WHERE pattern_name NOT IN (SELECT name FROM patterns);
+DELETE FROM growth_log gl
+  WHERE NOT EXISTS (SELECT 1 FROM patterns p WHERE p.name = gl.pattern_name);
+DELETE FROM confidence_history ch
+  WHERE NOT EXISTS (SELECT 1 FROM patterns p WHERE p.name = ch.pattern_name);
+
+-- Ensure patterns.name is unique (required for FK reference target)
+ALTER TABLE patterns
+  ADD CONSTRAINT patterns_name_unique UNIQUE (name);
 
 -- growth_log.pattern_name → patterns.name
 ALTER TABLE growth_log
@@ -27,6 +35,9 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_repo_created_at
 
 CREATE INDEX IF NOT EXISTS idx_growth_log_pattern_name
   ON growth_log(pattern_name);
+
+CREATE INDEX IF NOT EXISTS idx_confidence_history_pattern_name
+  ON confidence_history(pattern_name);
 
 -- Unique constraints for migration idempotency (enable safe upsert on re-migration)
 ALTER TABLE memory_content

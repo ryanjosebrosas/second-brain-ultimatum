@@ -48,7 +48,7 @@ def get_oauth_token(config_dir: Path | None = None) -> str | None:
     elif system == "Darwin":
         return _read_macos_keychain()
     elif system == "Linux":
-        return _read_linux_secret_service()
+        return _read_linux_secret_service(config_path)
     else:
         logger.debug("Unsupported platform for credential store: %s", system)
         return None
@@ -95,8 +95,15 @@ def _read_macos_keychain() -> str | None:
         return None
 
 
-def _read_linux_secret_service() -> str | None:
-    """Read OAuth token from Linux Secret Service via secret-tool."""
+def _read_linux_secret_service(config_dir: Path = DEFAULT_CONFIG_DIR) -> str | None:
+    """Read OAuth token from Linux Secret Service via secret-tool.
+
+    Falls back to reading .credentials.json (same as Windows)
+    when secret-tool is unavailable (e.g., WSL environments).
+
+    Args:
+        config_dir: Config directory containing .credentials.json fallback.
+    """
     try:
         result = subprocess.run(
             ["secret-tool", "lookup", "service", KEYCHAIN_SERVICE],
@@ -108,10 +115,14 @@ def _read_linux_secret_service() -> str | None:
             logger.info("Found OAuth token from Linux Secret Service")
             return result.stdout.strip()
         logger.debug("No OAuth token in Linux Secret Service")
-        return None
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
-        logger.debug("Linux Secret Service access failed: %s", e)
-        return None
+    except FileNotFoundError:
+        logger.debug("secret-tool not found; likely WSL or headless Linux")
+    except (subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("Linux Secret Service failed unexpectedly: %s", e)
+
+    # Fallback: read .credentials.json (covers WSL and headless Linux)
+    logger.warning("Falling back to .credentials.json for OAuth token")
+    return _read_windows_credentials(config_dir)
 
 
 def validate_oauth_token(token: str) -> bool:
