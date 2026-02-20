@@ -542,3 +542,255 @@ class TestAddEpisodeMetadata:
         call_kwargs = service._client.add_episode.call_args.kwargs
         # Should still have a reference_time (falls back to now)
         assert call_kwargs["reference_time"] is not None
+
+
+class TestRemoveEpisode:
+    """Test remove_episode() via Cypher query."""
+
+    async def test_remove_episode_success(self, graphiti_config):
+        """remove_episode() deletes an episode and returns True."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([{"deleted": 1}], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.remove_episode("ep-uuid-1")
+        assert result is True
+        mock_driver.execute_query.assert_awaited_once()
+
+    async def test_remove_episode_not_found(self, graphiti_config):
+        """remove_episode() returns False when episode doesn't exist."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([{"deleted": 0}], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.remove_episode("nonexistent")
+        assert result is False
+
+    async def test_remove_episode_no_driver(self, graphiti_config):
+        """remove_episode() returns False when driver unavailable."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = MagicMock(spec=[])  # no driver attr
+        result = await service.remove_episode("ep-uuid-1")
+        assert result is False
+
+    async def test_remove_episode_not_initialized(self, graphiti_config):
+        """remove_episode() returns False when not initialized."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.remove_episode("ep-uuid-1")
+        assert result is False
+
+    async def test_remove_episode_exception(self, graphiti_config):
+        """remove_episode() returns False on exception."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(side_effect=Exception("db error"))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.remove_episode("ep-uuid-1")
+        assert result is False
+
+
+class TestGetEpisodes:
+    """Test get_episodes() via Cypher query."""
+
+    async def test_get_episodes_with_group_id(self, graphiti_config):
+        """get_episodes() returns episodes filtered by group_id."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([
+            {"id": "uuid-1", "content": "ep 1", "source": "test", "created_at": "2026-01-01"},
+            {"id": "uuid-2", "content": "ep 2", "source": "test", "created_at": "2026-01-02"},
+        ], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.get_episodes("user-1")
+        assert len(result) == 2
+        assert result[0]["id"] == "uuid-1"
+        assert result[0]["content"] == "ep 1"
+
+    async def test_get_episodes_without_group_id(self, graphiti_config):
+        """get_episodes() returns all episodes when no group_id."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([
+            {"id": "uuid-1", "content": "ep 1", "source": None, "created_at": None},
+        ], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.get_episodes()
+        assert len(result) == 1
+        assert result[0]["source"] == "unknown"
+
+    async def test_get_episodes_no_driver(self, graphiti_config):
+        """get_episodes() returns [] when driver unavailable."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = MagicMock(spec=[])
+        result = await service.get_episodes("user-1")
+        assert result == []
+
+    async def test_get_episodes_not_initialized(self, graphiti_config):
+        """get_episodes() returns [] when not initialized."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.get_episodes("user-1")
+        assert result == []
+
+    async def test_get_episodes_exception(self, graphiti_config):
+        """get_episodes() returns [] on exception."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(side_effect=Exception("network error"))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.get_episodes("user-1")
+        assert result == []
+
+
+class TestGetEpisodeCount:
+    """Test get_episode_count() delegation to get_episodes()."""
+
+    async def test_get_episode_count_returns_length(self, graphiti_config):
+        """get_episode_count() returns the number of episodes."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([
+            {"id": "uuid-1", "content": "ep 1", "source": "t", "created_at": None},
+            {"id": "uuid-2", "content": "ep 2", "source": "t", "created_at": None},
+            {"id": "uuid-3", "content": "ep 3", "source": "t", "created_at": None},
+        ], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.get_episode_count("user-1")
+        assert result == 3
+
+    async def test_get_episode_count_returns_zero_when_empty(self, graphiti_config):
+        """get_episode_count() returns 0 when no episodes."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.get_episode_count("user-1")
+        assert result == 0
+
+
+class TestDeleteGroupData:
+    """Test delete_group_data() via Cypher query."""
+
+    async def test_delete_group_data_success(self, graphiti_config):
+        """delete_group_data() deletes episodes and returns count."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(return_value=([{"deleted": 5}], None, None))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.delete_group_data("user-1")
+        assert result == 5
+
+    async def test_delete_group_data_no_driver(self, graphiti_config):
+        """delete_group_data() returns 0 when driver unavailable."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = MagicMock(spec=[])
+        result = await service.delete_group_data("user-1")
+        assert result == 0
+
+    async def test_delete_group_data_not_initialized(self, graphiti_config):
+        """delete_group_data() returns 0 when not initialized."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.delete_group_data("user-1")
+        assert result == 0
+
+    async def test_delete_group_data_exception(self, graphiti_config):
+        """delete_group_data() returns 0 on exception."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query = AsyncMock(side_effect=Exception("db error"))
+        service._client = MagicMock()
+        service._client.driver = mock_driver
+        result = await service.delete_group_data("user-1")
+        assert result == 0
+
+
+class TestTimeoutWrapping:
+    """Test asyncio.timeout wrapping on key methods."""
+
+    def test_timeout_stored_from_config(self, graphiti_config):
+        """Timeout is read from config.service_timeout_seconds."""
+        graphiti_config.service_timeout_seconds = 25
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        assert service._timeout == 25
+
+    def test_timeout_default_fallback(self, tmp_path):
+        """Timeout defaults to 15 when config field absent."""
+        config = MagicMock(spec=[])
+        config.neo4j_url = None
+        config.falkordb_url = None
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(config)
+        assert service._timeout == 15
+
+    async def test_search_timeout_returns_empty(self, graphiti_config):
+        """search() returns [] on timeout."""
+        import asyncio
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._timeout = 0  # immediate timeout
+
+        async def slow_search(*args, **kwargs):
+            await asyncio.sleep(10)
+            return []
+
+        service._client = AsyncMock()
+        service._client.search = slow_search
+        # Should not have search_ attr to avoid group_id branch
+        if hasattr(service._client, "search_"):
+            del service._client.search_
+        result = await service.search("test query")
+        assert result == []
+
+    async def test_add_episode_timeout_does_not_raise(self, graphiti_config):
+        """add_episode() handles timeout gracefully."""
+        import asyncio
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._timeout = 0  # immediate timeout
+
+        async def slow_add(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        service._client = AsyncMock()
+        service._client.add_episode = slow_add
+        # Should not raise
+        await service.add_episode("test content")

@@ -22,8 +22,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     """Adapts GraphitiService to the MemoryServiceBase interface.
 
     Uses config.brain_user_id as the Graphiti group_id for multi-user isolation.
-    Methods not supported by Graphiti (get_all, update_memory, delete, get_by_id,
-    delete_all) return empty/zero/None values with a debug log.
+    All MemoryServiceBase methods are implemented except enable_project_graph
+    (Mem0-specific, documented no-op).
     """
 
     def __init__(self, config: "BrainConfig") -> None:
@@ -107,18 +107,36 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         limit: int = 10,
         enable_graph: bool | None = None,
     ) -> SearchResult:
-        """Search with metadata filters approximated by appending filter values to query."""
-        try:
-            if metadata_filters:
-                extra = " ".join(str(v) for v in metadata_filters.values())
-                query = f"{query} {extra}"
+        """Search with metadata filters approximated via query augmentation.
+
+        Supports common filter patterns:
+        - {"category": "pattern"} → prepends category to query
+        - {"AND": [{"key": "val"}, ...]} → extracts values, prepends to query
+        - {"key": {"in": [...]}} → joins list values, prepends to query
+        """
+        augmented_query = query
+        if metadata_filters:
+            parts: list[str] = []
+            for key, value in metadata_filters.items():
+                if key == "AND" and isinstance(value, list):
+                    for clause in value:
+                        if isinstance(clause, dict):
+                            parts.extend(str(v) for v in clause.values())
+                elif isinstance(value, dict) and "in" in value:
+                    parts.extend(str(v) for v in value["in"])
+                elif isinstance(value, dict):
+                    parts.extend(str(v) for v in value.values())
+                else:
+                    parts.append(str(value))
+            if parts:
+                augmented_query = f"{' '.join(parts)} {query}"
                 logger.debug(
-                    "GraphitiMemoryAdapter.search_with_filters: no native filter support — "
-                    "appending filter terms to query: %r",
-                    extra,
+                    "GraphitiMemoryAdapter.search_with_filters: augmented query: %r",
+                    augmented_query,
                 )
+        try:
             relations = await self._graphiti.search(
-                query, limit=limit, group_id=self.user_id
+                augmented_query, limit=limit, group_id=self.user_id
             )
             return SearchResult(relations=relations)
         except Exception as e:
@@ -140,48 +158,87 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             return SearchResult()
 
     async def get_all(self) -> list[dict]:
-        """Not supported by Graphiti. Returns empty list."""
-        logger.debug("GraphitiMemoryAdapter.get_all: not supported by Graphiti, returning []")
-        return []
+        """Retrieve all episodes for the current user's group."""
+        try:
+            episodes = await self._graphiti.get_episodes(self.user_id)
+            return [
+                {
+                    "id": ep.get("id", ""),
+                    "memory": ep.get("content", ""),
+                    "metadata": {
+                        "source": ep.get("source", "unknown"),
+                        "created_at": ep.get("created_at"),
+                    },
+                }
+                for ep in episodes
+            ]
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.get_all failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.get_all error detail: %s", e)
+            return []
 
     async def get_memory_count(self) -> int:
-        """Not supported by Graphiti. Returns 0."""
-        logger.debug(
-            "GraphitiMemoryAdapter.get_memory_count: not supported by Graphiti, returning 0"
-        )
-        return 0
+        """Count episodes for the current user's group."""
+        try:
+            return await self._graphiti.get_episode_count(self.user_id)
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.get_memory_count failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.get_memory_count error detail: %s", e)
+            return 0
 
     async def update_memory(
-        self, memory_id: str, content: str, metadata: dict | None = None
+        self, memory_id: str, content: str | None = None, metadata: dict | None = None
     ) -> None:
-        """Not supported by Graphiti. No-op."""
-        logger.debug(
-            "GraphitiMemoryAdapter.update_memory(%r): not supported by Graphiti, no-op",
-            memory_id,
-        )
-        return None
+        """Update a memory by deleting the old episode and adding a new one."""
+        if not content:
+            logger.debug("GraphitiMemoryAdapter.update_memory: no content provided, skipping")
+            return
+        try:
+            await self.delete(memory_id)
+            await self.add(content, metadata=metadata)
+            logger.debug("GraphitiMemoryAdapter.update_memory: replaced episode %s", memory_id)
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.update_memory failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.update_memory error detail: %s", e)
 
     async def delete(self, memory_id: str) -> None:
-        """Not supported by Graphiti. No-op."""
-        logger.debug(
-            "GraphitiMemoryAdapter.delete(%r): not supported by Graphiti, no-op", memory_id
-        )
-        return None
+        """Delete a memory (episode) by its UUID."""
+        try:
+            success = await self._graphiti.remove_episode(memory_id)
+            if not success:
+                logger.debug("GraphitiMemoryAdapter.delete: remove_episode returned False for %s", memory_id)
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.delete failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.delete error detail: %s", e)
 
     async def get_by_id(self, memory_id: str) -> dict | None:
-        """Not supported by Graphiti. Returns None."""
-        logger.debug(
-            "GraphitiMemoryAdapter.get_by_id(%r): not supported by Graphiti, returning None",
-            memory_id,
-        )
-        return None
+        """Retrieve a specific episode by UUID. Falls back to scanning get_episodes."""
+        try:
+            episodes = await self._graphiti.get_episodes(self.user_id)
+            for ep in episodes:
+                if ep.get("id") == memory_id:
+                    return {
+                        "id": ep.get("id", ""),
+                        "memory": ep.get("content", ""),
+                        "metadata": {
+                            "source": ep.get("source", "unknown"),
+                            "created_at": ep.get("created_at"),
+                        },
+                    }
+            return None
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.get_by_id failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.get_by_id error detail: %s", e)
+            return None
 
     async def delete_all(self) -> int:
-        """Not supported by Graphiti. Returns 0."""
-        logger.debug(
-            "GraphitiMemoryAdapter.delete_all: not supported by Graphiti, returning 0"
-        )
-        return 0
+        """Delete all episodes for the current user's group."""
+        try:
+            return await self._graphiti.delete_group_data(self.user_id)
+        except Exception as e:
+            logger.warning("GraphitiMemoryAdapter.delete_all failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.delete_all error detail: %s", e)
+            return 0
 
     async def enable_project_graph(self) -> None:
         """Mem0-specific. No-op for Graphiti backend."""

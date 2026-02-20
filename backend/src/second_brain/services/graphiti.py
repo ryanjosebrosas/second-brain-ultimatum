@@ -1,5 +1,6 @@
 """Graph memory via Graphiti (Neo4j/FalkorDB backend)."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -17,6 +18,7 @@ class GraphitiService:
         self._initialized = False
         self._init_failed = False
         self._backend: str | None = None
+        self._timeout: int = getattr(config, "service_timeout_seconds", 15)
 
     async def _ensure_init(self):
         """Lazy async initialization with Neo4j primary → FalkorDB fallback."""
@@ -205,7 +207,10 @@ class GraphitiService:
             if group_id:
                 kwargs["group_id"] = group_id
 
-            await self._client.add_episode(**kwargs)
+            async with asyncio.timeout(self._timeout * 2):
+                await self._client.add_episode(**kwargs)
+        except TimeoutError:
+            logger.warning("Graphiti add_episode timed out after %ds", self._timeout * 2)
         except Exception as e:
             logger.warning("Graphiti add_episode failed: %s", type(e).__name__)
             logger.debug("Graphiti add_episode error detail: %s", e)
@@ -308,11 +313,12 @@ class GraphitiService:
             return []
 
         try:
-            if group_id and hasattr(self._client, "search_"):
-                raw = await self._client.search_(query, group_ids=[group_id])
-                edges = getattr(raw, "edges", [])
-            else:
-                edges = await self._client.search(query)
+            async with asyncio.timeout(self._timeout):
+                if group_id and hasattr(self._client, "search_"):
+                    raw = await self._client.search_(query, group_ids=[group_id])
+                    edges = getattr(raw, "edges", [])
+                else:
+                    edges = await self._client.search(query)
             relations = []
             for edge in edges[:limit]:
                 relations.append({
@@ -321,10 +327,119 @@ class GraphitiService:
                     "target": getattr(edge, "target_node_name", "?"),
                 })
             return relations
+        except TimeoutError:
+            logger.warning("Graphiti search timed out after %ds", self._timeout)
+            return []
         except Exception as e:
             logger.warning("Graphiti search failed: %s", type(e).__name__)
             logger.debug("Graphiti search error detail: %s", e)
             return []
+
+    async def remove_episode(self, episode_uuid: str) -> bool:
+        """Delete an episode node by UUID via Cypher query. Returns True on success."""
+        await self._ensure_init()
+        if not self._initialized:
+            return False
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti remove_episode: no driver available")
+                return False
+            async with asyncio.timeout(self._timeout):
+                records, _, _ = await driver.execute_query(
+                    "MATCH (e:EpisodicNode {uuid: $uuid}) DETACH DELETE e RETURN count(e) AS deleted",
+                    uuid=episode_uuid,
+                )
+            deleted = records[0]["deleted"] if records else 0
+            if deleted > 0:
+                logger.debug("Removed episode %s", episode_uuid)
+            return deleted > 0
+        except TimeoutError:
+            logger.warning("Graphiti remove_episode timed out after %ds", self._timeout)
+            return False
+        except Exception as e:
+            logger.warning("Graphiti remove_episode failed: %s", type(e).__name__)
+            logger.debug("Graphiti error detail: %s", e)
+            return False
+
+    async def get_episodes(self, group_id: str | None = None) -> list[dict]:
+        """Retrieve all episodes, optionally filtered by group_id, via Cypher query."""
+        await self._ensure_init()
+        if not self._initialized:
+            return []
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti get_episodes: no driver available")
+                return []
+            if group_id:
+                query = (
+                    "MATCH (e:EpisodicNode {group_id: $gid}) "
+                    "RETURN e.uuid AS id, e.content AS content, "
+                    "e.source AS source, e.created_at AS created_at "
+                    "ORDER BY e.created_at DESC LIMIT 1000"
+                )
+                params = {"gid": group_id}
+            else:
+                query = (
+                    "MATCH (e:EpisodicNode) "
+                    "RETURN e.uuid AS id, e.content AS content, "
+                    "e.source AS source, e.created_at AS created_at "
+                    "ORDER BY e.created_at DESC LIMIT 1000"
+                )
+                params = {}
+            async with asyncio.timeout(self._timeout):
+                records, _, _ = await driver.execute_query(query, **params)
+            return [
+                {
+                    "id": str(r["id"]) if r["id"] else "",
+                    "content": str(r["content"]) if r["content"] else "",
+                    "source": str(r["source"]) if r["source"] else "unknown",
+                    "created_at": str(r["created_at"]) if r["created_at"] else None,
+                }
+                for r in records
+            ]
+        except TimeoutError:
+            logger.warning("Graphiti get_episodes timed out after %ds", self._timeout)
+            return []
+        except Exception as e:
+            logger.warning("Graphiti get_episodes failed: %s", type(e).__name__)
+            logger.debug("Graphiti error detail: %s", e)
+            return []
+
+    async def get_episode_count(self, group_id: str | None = None) -> int:
+        """Count episodes for a group. Returns 0 on failure."""
+        episodes = await self.get_episodes(group_id)
+        return len(episodes)
+
+    async def delete_group_data(self, group_id: str) -> int:
+        """Delete all episode data for a group_id. Returns count of deleted items."""
+        await self._ensure_init()
+        if not self._initialized:
+            return 0
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti delete_group_data: no driver available")
+                return 0
+            async with asyncio.timeout(self._timeout * 2):
+                records, _, _ = await driver.execute_query(
+                    "MATCH (e:EpisodicNode {group_id: $gid}) "
+                    "WITH e, count(e) AS cnt "
+                    "DETACH DELETE e "
+                    "RETURN sum(cnt) AS deleted",
+                    gid=group_id,
+                )
+            deleted = records[0]["deleted"] if records else 0
+            logger.debug("Deleted %d episodes for group %s", deleted, group_id)
+            return deleted
+        except TimeoutError:
+            logger.warning("Graphiti delete_group_data timed out after %ds", self._timeout * 2)
+            return 0
+        except Exception as e:
+            logger.warning("Graphiti delete_group_data failed: %s", type(e).__name__)
+            logger.debug("Graphiti error detail: %s", e)
+            return 0
 
     async def close(self):
         """Close the Graphiti client connection."""
@@ -352,7 +467,8 @@ class GraphitiService:
                 "error": "initialization failed",
             }
         try:
-            await self._client.search("health check", num_results=1)
+            async with asyncio.timeout(self._timeout):
+                await self._client.search("health check", num_results=1)
             return {
                 "status": "healthy",
                 "backend": self._backend or "unknown",
