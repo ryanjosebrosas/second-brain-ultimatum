@@ -153,6 +153,39 @@ class ManageContentTypeRequest(BaseModel):
     description: str = Field(default="")
 
 
+# --- Template request models ---
+
+class CreateTemplateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    content_type: str = Field(..., min_length=1, max_length=200)
+    body: str = Field(..., min_length=1, max_length=50000)
+    description: str = Field(default="")
+    structure_hint: str = Field(default="")
+    when_to_use: str = Field(default="")
+    when_not_to_use: str = Field(default="")
+    customization_guide: str = Field(default="")
+    tags: list[str] = Field(default_factory=list)
+    source_deliverable: str = Field(default="")
+    ai_generated: bool = Field(default=False)
+
+
+class UpdateTemplateRequest(BaseModel):
+    name: str | None = Field(default=None)
+    content_type: str | None = Field(default=None)
+    body: str | None = Field(default=None)
+    description: str | None = Field(default=None)
+    structure_hint: str | None = Field(default=None)
+    when_to_use: str | None = Field(default=None)
+    when_not_to_use: str | None = Field(default=None)
+    customization_guide: str | None = Field(default=None)
+    tags: list[str] | None = Field(default=None)
+
+
+class DeconstructRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=50000)
+    content_type: str = Field(default="", description="Optional hint for content type detection")
+
+
 # --- Graph request models ---
 
 class GraphSearchRequest(BaseModel):

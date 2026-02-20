@@ -604,6 +604,78 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return False
 
+    # --- Templates ---
+
+    async def get_templates(
+        self,
+        content_type: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[dict]:
+        """List active templates, optionally filtered by content_type or tags."""
+        try:
+            query = (
+                self._client.table("templates")
+                .select("*")
+                .eq("user_id", self.user_id)
+                .eq("is_active", True)
+                .order("updated_at", desc=True)
+            )
+            if content_type:
+                query = query.eq("content_type", content_type)
+            if tags:
+                query = query.contains("tags", tags)
+            result = await asyncio.to_thread(query.execute)
+            return result.data or []
+        except Exception as e:
+            logger.warning("Supabase get_templates failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return []
+
+    async def get_template(self, template_id: str) -> dict | None:
+        """Get a single template by ID."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("templates")
+                .select("*")
+                .eq("user_id", self.user_id)
+                .eq("id", template_id)
+                .single()
+                .execute
+            )
+            return result.data if result.data else None
+        except Exception as e:
+            logger.warning("Supabase get_template failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return None
+
+    async def upsert_template(self, template: dict) -> dict:
+        """Create or update a template."""
+        try:
+            data = {**template, "user_id": self.user_id}
+            query = self._client.table("templates").upsert(data)
+            result = await asyncio.to_thread(query.execute)
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.warning("Supabase upsert_template failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return {}
+
+    async def delete_template(self, template_id: str) -> bool:
+        """Soft-delete a template by setting is_active=False."""
+        try:
+            result = await asyncio.to_thread(
+                self._client.table("templates")
+                .update({"is_active": False})
+                .eq("id", template_id)
+                .eq("user_id", self.user_id)
+                .execute
+            )
+            return bool(result.data)
+        except Exception as e:
+            logger.warning("Supabase delete_template failed: %s", type(e).__name__)
+            logger.debug("Supabase error detail: %s", e)
+            return False
+
     # --- Knowledge Repo ---
 
     async def get_knowledge(

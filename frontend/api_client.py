@@ -189,6 +189,67 @@ def delete_project(project_id: str) -> dict[str, Any]:
     return response.json()
 
 
+# --- Template bank methods ---
+
+
+def get_templates(
+    content_type: str | None = None, tag: str | None = None,
+) -> dict[str, Any]:
+    """List templates from the bank."""
+    client = _get_client()
+    params: dict[str, str] = {}
+    if content_type:
+        params["content_type"] = content_type
+    if tag:
+        params["tag"] = tag
+    response = client.get("/templates/", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_template(template_id: str) -> dict[str, Any]:
+    """Get a single template by ID."""
+    client = _get_client()
+    response = client.get(f"/templates/{template_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def create_template(data: dict[str, Any]) -> dict[str, Any]:
+    """Create a new template."""
+    client = _get_client()
+    response = client.post("/templates/", json=data)
+    response.raise_for_status()
+    return response.json()
+
+
+def update_template(template_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Update an existing template."""
+    client = _get_client()
+    response = client.patch(f"/templates/{template_id}", json=data)
+    response.raise_for_status()
+    return response.json()
+
+
+def delete_template(template_id: str) -> dict[str, Any]:
+    """Soft-delete a template."""
+    client = _get_client()
+    response = client.delete(f"/templates/{template_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def deconstruct_content(content: str, content_type: str = "") -> dict[str, Any]:
+    """AI-deconstruct content into a template blueprint."""
+    client = _get_client()
+    payload: dict[str, Any] = {"content": content}
+    if content_type:
+        payload["content_type"] = content_type
+    response = client.post("/templates/deconstruct", json=payload)
+    response.raise_for_status()
+    return response.json()
+
+
 # --- Content type methods ---
 
 def get_content_types() -> list[dict[str, Any]] | dict[str, Any]:

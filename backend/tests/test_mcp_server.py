@@ -2192,27 +2192,25 @@ class TestOperationsMCPTools:
     @patch("second_brain.mcp_server._get_deps")
     async def test_find_template_opportunities_success(self, mock_deps_fn, mock_model_fn):
         from second_brain.mcp_server import find_template_opportunities
+        from second_brain.schemas import DeconstructedTemplate
 
         with patch("second_brain.agents.template_builder.template_builder_agent") as mock_agent:
             mock_result = MagicMock()
-            mock_result.output = TemplateBuilderResult(
-                templates_created=2,
-                opportunities=[
-                    TemplateOpportunity(
-                        name="Blog Post Template",
-                        when_to_use="For weekly blog content",
-                        source_deliverable="blog post about AI",
-                        structure="Introduction -> Body -> Conclusion",
-                    ),
-                ],
+            mock_result.output = DeconstructedTemplate(
+                name="Blog Post Template",
+                content_type="blog",
+                body="[INTRODUCTION]\n\n[BODY_SECTION]\n\n[CONCLUSION]",
+                structure_hint="Introduction -> Body -> Conclusion",
+                when_to_use="For weekly blog content",
+                tags=["blog", "content"],
             )
             mock_agent.run = AsyncMock(return_value=mock_result)
             mock_deps_fn.return_value = _mock_deps()
             mock_model_fn.return_value = MagicMock()
 
             result = await find_template_opportunities(deliverable="A blog post about AI")
-            assert "2 template" in result
             assert "Blog Post Template" in result
+            assert "TEMPLATE BODY" in result
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")

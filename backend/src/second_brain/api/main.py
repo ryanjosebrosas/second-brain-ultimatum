@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
     from second_brain.api.routers.projects import router as projects_router
     from second_brain.api.routers.graph import router as graph_router
     from second_brain.api.routers.settings import router as settings_router
+    from second_brain.api.routers.templates import router as templates_router
     from second_brain.api.deps import verify_api_key
 
     app.include_router(health_router, prefix="/api")  # No auth — monitoring
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_router, prefix="/api", dependencies=[Depends(verify_api_key)])
     app.include_router(graph_router, prefix="/api", dependencies=[Depends(verify_api_key)])
     app.include_router(settings_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+    app.include_router(templates_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
     return app
 

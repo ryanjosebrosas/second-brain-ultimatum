@@ -222,6 +222,15 @@ def mock_storage():
     storage.search_examples_semantic = AsyncMock(return_value=[])
     storage.search_knowledge_semantic = AsyncMock(return_value=[])
     storage.search_experiences_semantic = AsyncMock(return_value=[])
+    # Template bank
+    storage.get_templates = AsyncMock(return_value=[])
+    storage.get_template = AsyncMock(return_value=None)
+    storage.upsert_template = AsyncMock(return_value={
+        "id": "tmpl-1", "name": "Test Template", "content_type": "linkedin",
+        "body": "[HOOK]\n\n[BODY]\n\n[CTA]", "tags": ["test"],
+        "is_active": True, "use_count": 0,
+    })
+    storage.delete_template = AsyncMock(return_value=True)
     return storage
 
 

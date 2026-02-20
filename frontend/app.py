@@ -23,13 +23,14 @@ memory_page = st.Page("pages/memory.py", title="Memory", icon=":material/search:
 dashboard_page = st.Page("pages/dashboard.py", title="Dashboard", icon=":material/dashboard:")
 content_page = st.Page("pages/content.py", title="Content", icon=":material/edit:")
 projects_page = st.Page("pages/projects.py", title="Projects", icon=":material/folder:")
+templates_page = st.Page("pages/template_bank.py", title="Templates", icon=":material/library_books:")
 graph_page = st.Page("pages/graph.py", title="Graph", icon=":material/hub:")
 settings_page = st.Page("pages/settings.py", title="Settings", icon=":material/settings:")
 
 # Navigation
 pg = st.navigation({
     "Main": [chat_page, memory_page],
-    "Tools": [content_page, projects_page],
+    "Tools": [content_page, projects_page, templates_page],
     "Insights": [dashboard_page, graph_page],
     "System": [settings_page],
 })

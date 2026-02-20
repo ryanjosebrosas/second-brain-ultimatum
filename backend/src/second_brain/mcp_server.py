@@ -2521,10 +2521,166 @@ async def find_template_opportunities(deliverable: str) -> str:
     except TimeoutError:
         return f"Template analysis timed out after {timeout}s."
     out = result.output
-    lines = [f"{out.templates_created} template opportunities"]
-    for opp in out.opportunities:
-        lines.append(f"- {opp.name}: {opp.when_to_use}")
+    lines = [
+        f"Template: {out.name}",
+        f"Type: {out.content_type}",
+        f"Structure: {out.structure_hint}",
+        f"When to use: {out.when_to_use}",
+        f"Tags: {', '.join(out.tags)}",
+        "",
+        "--- TEMPLATE BODY ---",
+        out.body,
+        "--- END TEMPLATE ---",
+        "",
+        "Use save_template to persist this to your template bank.",
+    ]
     return "\n".join(lines)
+
+
+@server.tool()
+async def save_template(
+    name: str,
+    content_type: str,
+    body: str,
+    when_to_use: str = "",
+    structure_hint: str = "",
+    tags: str = "",
+    description: str = "",
+    customization_guide: str = "",
+    when_not_to_use: str = "",
+    source_deliverable: str = "",
+    ai_generated: bool = False,
+) -> str:
+    """Save a reusable content template to the template bank for future use.
+
+    When to use: After identifying or creating a reusable content structure.
+    Save templates you want to reuse across content creation sessions.
+
+    Returns: Confirmation with the stored template ID and name.
+
+    Args:
+        name: Template name (e.g., "LinkedIn Thought Leadership Post")
+        content_type: Content type slug — linkedin, email, case-study, newsletter, etc.
+        body: Full template text with [PLACEHOLDER] markers for customizable parts
+        when_to_use: When this template should be applied
+        structure_hint: Section flow summary (e.g., "Hook -> Body -> CTA")
+        tags: Comma-separated tags for filtering (e.g., "thought-leadership, professional")
+        description: Brief description of the template
+        customization_guide: What to customize vs keep standard
+        when_not_to_use: When NOT to use this template
+        source_deliverable: Original content this was deconstructed from
+        ai_generated: Whether this template was AI-generated
+    """
+    try:
+        name = _validate_mcp_input(name, label="name")
+        content_type = _validate_mcp_input(content_type, label="content_type")
+        body = _validate_mcp_input(body, label="body")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        template_data: dict = {
+            "name": name,
+            "content_type": content_type,
+            "body": body,
+            "when_to_use": when_to_use,
+            "structure_hint": structure_hint,
+            "tags": tag_list,
+            "description": description,
+            "customization_guide": customization_guide,
+            "when_not_to_use": when_not_to_use,
+            "source_deliverable": source_deliverable,
+            "ai_generated": ai_generated,
+        }
+        result = await deps.storage_service.upsert_template(template_data)
+        if result:
+            return (
+                f"Template saved: {name}\n"
+                f"Type: {content_type}\n"
+                f"ID: {result.get('id', 'unknown')}\n"
+                f"Tags: {', '.join(tag_list) or 'none'}"
+            )
+        return "Failed to save template."
+    except Exception as e:
+        logger.error("Failed to save template: %s", e)
+        return "Failed to save template. Check server logs for details."
+
+
+@server.tool()
+async def list_templates(content_type: str = "", tag: str = "") -> str:
+    """Browse the template bank — list available reusable content templates.
+
+    When to use: Before creating content, to check if a matching template
+    exists. Also useful for reviewing what templates are available.
+
+    Returns: List of templates with names, content types, and structure hints.
+
+    Args:
+        content_type: Optional filter by content type slug (linkedin, email, etc.)
+        tag: Optional filter by tag
+    """
+    deps = _get_deps()
+    try:
+        tags = [tag] if tag else None
+        templates = await deps.storage_service.get_templates(
+            content_type=content_type or None, tags=tags,
+        )
+        if not templates:
+            return "No templates found in the bank."
+        lines = [f"{len(templates)} templates found:"]
+        for t in templates:
+            tags_str = ", ".join(t.get("tags", [])) or "none"
+            lines.append(
+                f"- [{t.get('content_type', '?')}] {t.get('name', 'Untitled')} "
+                f"(tags: {tags_str}, uses: {t.get('use_count', 0)})\n"
+                f"  Structure: {t.get('structure_hint', 'N/A')}\n"
+                f"  ID: {t.get('id', 'unknown')}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("Failed to list templates: %s", e)
+        return "Failed to list templates. Check server logs for details."
+
+
+@server.tool()
+async def get_template(template_id: str) -> str:
+    """Retrieve a specific template's full content from the template bank.
+
+    When to use: After finding a template via list_templates, use this to
+    get the complete template body with placeholder markers.
+
+    Returns: Full template details including body, usage guidance, and metadata.
+
+    Args:
+        template_id: UUID of the template to retrieve
+    """
+    try:
+        template_id = _validate_mcp_input(template_id, label="template_id")
+    except ValueError as e:
+        return str(e)
+    deps = _get_deps()
+    try:
+        tmpl = await deps.storage_service.get_template(template_id)
+        if not tmpl:
+            return f"Template not found: {template_id}"
+        lines = [
+            f"Template: {tmpl.get('name', 'Untitled')}",
+            f"Type: {tmpl.get('content_type', '?')}",
+            f"Tags: {', '.join(tmpl.get('tags', [])) or 'none'}",
+            f"Structure: {tmpl.get('structure_hint', 'N/A')}",
+            f"When to use: {tmpl.get('when_to_use', 'N/A')}",
+            f"When NOT to use: {tmpl.get('when_not_to_use', 'N/A')}",
+            f"Customization: {tmpl.get('customization_guide', 'N/A')}",
+            "",
+            "--- TEMPLATE BODY ---",
+            tmpl.get("body", "(empty)"),
+            "--- END TEMPLATE ---",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("Failed to get template: %s", e)
+        return "Failed to get template. Check server logs for details."
 
 
 if __name__ == "__main__":

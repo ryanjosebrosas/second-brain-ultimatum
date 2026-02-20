@@ -196,14 +196,14 @@ class TestTemplateBuilderAgent:
 
 class TestTemplateValidator:
     @pytest.mark.asyncio
-    async def test_opportunity_without_when(self):
-        output = TemplateBuilderResult(
-            opportunities=[TemplateOpportunity(
-                name="Email Template",
-                source_deliverable="client email",
-                structure="Subject -> Body -> CTA",
-                when_to_use="",  # missing!
-            )]
+    async def test_template_without_when_to_use(self):
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="[GREETING]\n[BODY]\n[SIGN_OFF]",
+            structure_hint="Greeting -> Body -> Sign-off",
+            when_to_use="",  # missing!
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
@@ -211,14 +211,29 @@ class TestTemplateValidator:
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
-    async def test_opportunity_without_structure(self):
-        output = TemplateBuilderResult(
-            opportunities=[TemplateOpportunity(
-                name="Email Template",
-                source_deliverable="client email",
-                structure="",  # missing!
-                when_to_use="Follow-up emails",
-            )]
+    async def test_template_without_body(self):
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="",  # missing!
+            structure_hint="Greeting -> Body -> Sign-off",
+            when_to_use="Follow-up emails",
+        )
+        ctx = MagicMock()
+        validators = template_builder_agent._output_validators
+        with pytest.raises(ModelRetry):
+            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+
+    @pytest.mark.asyncio
+    async def test_template_insufficient_placeholders(self):
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="Hello [NAME], this is a template.",
+            structure_hint="Greeting -> Body",
+            when_to_use="Follow-up emails",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
@@ -227,47 +242,33 @@ class TestTemplateValidator:
 
     @pytest.mark.asyncio
     async def test_valid_template(self):
-        output = TemplateBuilderResult(
-            opportunities=[TemplateOpportunity(
-                name="Email Template",
-                source_deliverable="client email",
-                structure="Subject -> Body -> CTA",
-                when_to_use="Follow-up emails to prospects",
-            )]
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="[GREETING],\n\n[OPENING_LINE]\n\n[BODY_PARAGRAPH]\n\n[SIGN_OFF]",
+            structure_hint="Greeting -> Opening -> Body -> Sign-off",
+            when_to_use="Follow-up emails to prospects",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
         result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.templates_created == 1
+        assert result.name == "Email Template"
 
     @pytest.mark.asyncio
-    async def test_empty_opportunities_passes(self):
-        """No template opportunities found is a valid result."""
-        output = TemplateBuilderResult(opportunities=[])
-        ctx = MagicMock()
-        validators = template_builder_agent._output_validators
-        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.templates_created == 0
-
-    @pytest.mark.asyncio
-    async def test_templates_created_auto_set(self):
-        """templates_created is auto-computed from opportunities length."""
-        output = TemplateBuilderResult(
-            opportunities=[
-                TemplateOpportunity(
-                    name=f"Template {i}",
-                    source_deliverable=f"deliverable {i}",
-                    structure=f"Step A -> Step B -> Step C",
-                    when_to_use=f"Use case {i}",
-                )
-                for i in range(3)
-            ],
-            templates_created=0,  # intentionally wrong
+    async def test_template_without_structure_hint(self):
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="[GREETING]\n[BODY]\n[SIGN_OFF]",
+            structure_hint="",  # missing!
+            when_to_use="Follow-up emails",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
-        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
-        assert result.templates_created == 3
+        with pytest.raises(ModelRetry):
+            await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
 
 # --- Content Type Enrichment ---

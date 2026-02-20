@@ -1021,6 +1021,47 @@ class TemplateBuilderResult(BaseModel):
     summary: str = Field(default="", description="Summary of template analysis")
 
 
+class TemplateBankEntry(BaseModel):
+    """A stored template in the template bank."""
+
+    id: str | None = Field(default=None, description="Template UUID from database")
+    name: str = Field(description="Template name")
+    content_type: str = Field(description="Content type slug (linkedin, email, etc.)")
+    description: str = Field(default="", description="Brief description of when/why to use this template")
+    body: str = Field(description="Full template body with [PLACEHOLDER] markers for customizable sections")
+    structure_hint: str = Field(default="", description="Section flow summary, e.g. Hook -> Body -> CTA")
+    when_to_use: str = Field(description="Scenarios where this template applies")
+    when_not_to_use: str = Field(default="", description="Scenarios where this template is NOT appropriate")
+    customization_guide: str = Field(default="", description="What to customize vs keep standard")
+    tags: list[str] = Field(default_factory=list, description="Filterable tags")
+    source_deliverable: str = Field(default="", description="Original content this was deconstructed from")
+    ai_generated: bool = Field(default=False, description="Whether created by AI deconstruction")
+    use_count: int = Field(default=0, description="Times this template has been used")
+    is_active: bool = Field(default=True, description="Soft-delete flag")
+    created_at: str = Field(default="", description="ISO timestamp of creation")
+    updated_at: str = Field(default="", description="ISO timestamp of last update")
+
+
+class DeconstructedTemplate(BaseModel):
+    """Output from the enhanced template builder — full content structure deconstruction."""
+
+    name: str = Field(description="Short descriptive template name")
+    content_type: str = Field(description="Content type slug: linkedin, email, case-study, etc.")
+    body: str = Field(
+        description=(
+            "The full template body with [PLACEHOLDER] markers for customizable parts. "
+            "Preserve the complete section structure, headings, and formatting of the original. "
+            "Replace specific details with descriptive [PLACEHOLDER_NAME] markers."
+        )
+    )
+    structure_hint: str = Field(description="Section flow summary, e.g. Hook -> Body -> CTA")
+    when_to_use: str = Field(description="Scenario description for when to apply this template")
+    when_not_to_use: str = Field(default="", description="Scenarios where this template is NOT appropriate")
+    customization_guide: str = Field(default="", description="What parts to customize vs keep standard")
+    tags: list[str] = Field(default_factory=list, description="Suggested tags for categorization")
+    estimated_time_savings: str = Field(default="", description="Time saved per use")
+
+
 # --- Operations & Advisory Agents ---
 
 
