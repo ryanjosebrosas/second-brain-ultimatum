@@ -51,3 +51,24 @@ cp backend/.env.example backend/.env
 cd backend
 python scripts/reingest_graph.py     # Re-sync Graphiti graph from Mem0
 ```
+
+### Docker (Full Stack)
+```bash
+# Start both backend + frontend
+docker compose up -d
+
+# Start backend only
+docker compose up -d backend
+
+# Start frontend only
+docker compose up -d frontend
+
+# View logs
+docker compose logs -f
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Stop everything
+docker compose down
+```

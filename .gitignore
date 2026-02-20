@@ -1,16 +1,18 @@
 # Local settings and secrets
 .claude/settings.local.json
-settings.local.json
 
 # Python build artifacts
-__pycache__/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
 *.egg-info/
+**/.pytest_cache/
 
-# Personal memory (users create their own from MEMORY-TEMPLATE.md)
+# Personal memory
 memory.md
 memory-archive.md
 
-# User-generated plans (project-specific)
+# User-generated plans
 requests/*.md
 !requests/.gitkeep
 
@@ -20,3 +22,7 @@ worktrees/
 # Environment files
 .env
 .env.local
+
+# IDE
+.vscode/
+.idea/

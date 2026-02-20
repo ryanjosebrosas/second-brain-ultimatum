@@ -1,0 +1,60 @@
+services:
+  # Backend: MCP server + FastAPI REST API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: second-brain-backend:latest
+    container_name: second-brain-backend
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+      - "${API_PORT:-8001}:8001"
+    env_file:
+      - ./backend/.env
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - brain-data:/data
+    networks:
+      - brain-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+  # Frontend: Streamlit web app
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: second-brain-frontend:latest
+    container_name: second-brain-frontend
+    ports:
+      - "${FRONTEND_PORT:-8501}:8501"
+    environment:
+      - SECOND_BRAIN_API_URL=http://backend:8001
+    networks:
+      - brain-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  brain-data:
+
+networks:
+  brain-network:
+    driver: bridge

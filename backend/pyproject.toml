@@ -23,10 +23,6 @@ ollama = ["pydantic-ai[ollama]>=0.1.0,<1.0.0"]
 voyage = ["voyageai>=0.3.0,<1.0.0"]
 graphiti = ["graphiti-core[anthropic,falkordb,voyageai]>=0.1.0,<1.0.0"]
 subscription = ["claude-agent-sdk>=0.1.0"]
-frontend = [
-    "streamlit>=1.46.0,<2.0.0",
-    "st-link-analysis>=0.4.0",
-]
 dev = [
     "pydantic-ai[ollama]>=0.1.0,<1.0.0",
     "pytest>=8.0.0,<9.0.0",
