@@ -41,6 +41,12 @@ def mock_graphiti():
             "created_at": "2026-02-20T01:00:00",
         },
     ])
+    gs.get_episode_by_id = AsyncMock(return_value={
+        "id": "ep-uuid-2",
+        "content": "second episode content",
+        "source": "ask_agent",
+        "created_at": "2026-02-20T01:00:00",
+    })
     gs.get_episode_count = AsyncMock(return_value=2)
     gs.delete_group_data = AsyncMock(return_value=3)
     return gs
@@ -176,12 +182,13 @@ class TestGraphitiMemoryAdapter:
 
     async def test_get_by_id_returns_none_when_not_found(self, adapter, mock_graphiti):
         """get_by_id() returns None when ID doesn't match any episode."""
+        mock_graphiti.get_episode_by_id = AsyncMock(return_value=None)
         result = await adapter.get_by_id("nonexistent-id")
         assert result is None
 
     async def test_get_by_id_returns_none_on_error(self, adapter, mock_graphiti):
         """get_by_id() returns None on error."""
-        mock_graphiti.get_episodes.side_effect = RuntimeError("fail")
+        mock_graphiti.get_episode_by_id.side_effect = RuntimeError("fail")
         result = await adapter.get_by_id("ep-uuid-1")
         assert result is None
 

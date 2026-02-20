@@ -4,9 +4,19 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from second_brain.config import BrainConfig
 
 logger = logging.getLogger(__name__)
+
+# Retry config for Graphiti network calls — transient errors only
+_GRAPHITI_RETRY = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+    retry=retry_if_exception_type((ConnectionError, OSError)),
+    reraise=True,
+)
 
 
 class GraphitiService:
@@ -154,6 +164,7 @@ class GraphitiService:
 
         return llm_client, embedder, cross_encoder
 
+    @_GRAPHITI_RETRY
     async def add_episode(
         self,
         content: str,
@@ -211,6 +222,8 @@ class GraphitiService:
                 await self._client.add_episode(**kwargs)
         except TimeoutError:
             logger.warning("Graphiti add_episode timed out after %ds", self._timeout * 2)
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             logger.warning("Graphiti add_episode failed: %s", type(e).__name__)
             logger.debug("Graphiti add_episode error detail: %s", e)
@@ -304,6 +317,7 @@ class GraphitiService:
         logger.info("Added %d/%d chunked episodes", added, len(chunks))
         return added
 
+    @_GRAPHITI_RETRY
     async def search(
         self, query: str, limit: int = 10, group_id: str | None = None
     ) -> list[dict]:
@@ -330,11 +344,14 @@ class GraphitiService:
         except TimeoutError:
             logger.warning("Graphiti search timed out after %ds", self._timeout)
             return []
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             logger.warning("Graphiti search failed: %s", type(e).__name__)
             logger.debug("Graphiti search error detail: %s", e)
             return []
 
+    @_GRAPHITI_RETRY
     async def remove_episode(self, episode_uuid: str) -> bool:
         """Delete an episode node by UUID via Cypher query. Returns True on success."""
         await self._ensure_init()
@@ -357,11 +374,14 @@ class GraphitiService:
         except TimeoutError:
             logger.warning("Graphiti remove_episode timed out after %ds", self._timeout)
             return False
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             logger.warning("Graphiti remove_episode failed: %s", type(e).__name__)
             logger.debug("Graphiti error detail: %s", e)
             return False
 
+    @_GRAPHITI_RETRY
     async def get_episodes(self, group_id: str | None = None) -> list[dict]:
         """Retrieve all episodes, optionally filtered by group_id, via Cypher query."""
         await self._ensure_init()
@@ -402,16 +422,82 @@ class GraphitiService:
         except TimeoutError:
             logger.warning("Graphiti get_episodes timed out after %ds", self._timeout)
             return []
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             logger.warning("Graphiti get_episodes failed: %s", type(e).__name__)
             logger.debug("Graphiti error detail: %s", e)
             return []
 
-    async def get_episode_count(self, group_id: str | None = None) -> int:
-        """Count episodes for a group. Returns 0 on failure."""
-        episodes = await self.get_episodes(group_id)
-        return len(episodes)
+    @_GRAPHITI_RETRY
+    async def get_episode_by_id(self, episode_uuid: str) -> dict | None:
+        """Retrieve a single episode by UUID via Cypher. Returns None if not found."""
+        await self._ensure_init()
+        if not self._initialized:
+            return None
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti get_episode_by_id: no driver available")
+                return None
+            async with asyncio.timeout(self._timeout):
+                records, _, _ = await driver.execute_query(
+                    "MATCH (e:EpisodicNode {uuid: $uuid}) "
+                    "RETURN e.uuid AS id, e.content AS content, "
+                    "e.source AS source, e.created_at AS created_at "
+                    "LIMIT 1",
+                    uuid=episode_uuid,
+                )
+            if not records:
+                return None
+            r = records[0]
+            return {
+                "id": str(r["id"]) if r["id"] else "",
+                "content": str(r["content"]) if r["content"] else "",
+                "source": str(r["source"]) if r["source"] else "unknown",
+                "created_at": str(r["created_at"]) if r["created_at"] else None,
+            }
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti get_episode_by_id timed out after %ds", self._timeout)
+            return None
+        except Exception as e:
+            logger.warning("Graphiti get_episode_by_id failed: %s", type(e).__name__)
+            logger.debug("Graphiti get_episode_by_id error detail: %s", e)
+            return None
 
+    @_GRAPHITI_RETRY
+    async def get_episode_count(self, group_id: str | None = None) -> int:
+        """Count episodes for a group using efficient COUNT query."""
+        await self._ensure_init()
+        if not self._initialized:
+            return 0
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti get_episode_count: no driver available")
+                return 0
+            if group_id:
+                query = "MATCH (e:EpisodicNode {group_id: $gid}) RETURN count(e) AS cnt"
+                params = {"gid": group_id}
+            else:
+                query = "MATCH (e:EpisodicNode) RETURN count(e) AS cnt"
+                params = {}
+            async with asyncio.timeout(self._timeout):
+                records, _, _ = await driver.execute_query(query, **params)
+            return records[0]["cnt"] if records else 0
+        except (ConnectionError, OSError):
+            raise  # Let retry handle
+        except TimeoutError:
+            logger.warning("Graphiti get_episode_count timed out after %ds", self._timeout)
+            return 0
+        except Exception as e:
+            logger.warning("Graphiti get_episode_count failed: %s", type(e).__name__)
+            logger.debug("Graphiti get_episode_count error detail: %s", e)
+            return 0
+
+    @_GRAPHITI_RETRY
     async def delete_group_data(self, group_id: str) -> int:
         """Delete all episode data for a group_id. Returns count of deleted items."""
         await self._ensure_init()
@@ -436,6 +522,8 @@ class GraphitiService:
         except TimeoutError:
             logger.warning("Graphiti delete_group_data timed out after %ds", self._timeout * 2)
             return 0
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             logger.warning("Graphiti delete_group_data failed: %s", type(e).__name__)
             logger.debug("Graphiti error detail: %s", e)
@@ -457,6 +545,7 @@ class GraphitiService:
         """Return the active backend name or 'none'."""
         return self._backend or "none"
 
+    @_GRAPHITI_RETRY
     async def health_check(self) -> dict:
         """Check Graphiti connectivity and return status dict."""
         await self._ensure_init()
@@ -473,6 +562,8 @@ class GraphitiService:
                 "status": "healthy",
                 "backend": self._backend or "unknown",
             }
+        except (ConnectionError, OSError):
+            raise  # Let retry decorator handle
         except Exception as e:
             return {
                 "status": "degraded",

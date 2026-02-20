@@ -668,26 +668,24 @@ class TestGetEpisodes:
 
 
 class TestGetEpisodeCount:
-    """Test get_episode_count() delegation to get_episodes()."""
+    """Test get_episode_count() via COUNT Cypher query."""
 
-    async def test_get_episode_count_returns_length(self, graphiti_config):
-        """get_episode_count() returns the number of episodes."""
+    async def test_get_episode_count_returns_count(self, graphiti_config):
+        """get_episode_count() returns count from COUNT Cypher query."""
         from second_brain.services.graphiti import GraphitiService
         service = GraphitiService(graphiti_config)
         service._initialized = True
         mock_driver = AsyncMock()
         mock_driver.execute_query = AsyncMock(return_value=([
-            {"id": "uuid-1", "content": "ep 1", "source": "t", "created_at": None},
-            {"id": "uuid-2", "content": "ep 2", "source": "t", "created_at": None},
-            {"id": "uuid-3", "content": "ep 3", "source": "t", "created_at": None},
+            {"cnt": 3},
         ], None, None))
         service._client = MagicMock()
         service._client.driver = mock_driver
         result = await service.get_episode_count("user-1")
         assert result == 3
 
-    async def test_get_episode_count_returns_zero_when_empty(self, graphiti_config):
-        """get_episode_count() returns 0 when no episodes."""
+    async def test_get_episode_count_returns_zero_when_not_initialized(self, graphiti_config):
+        """get_episode_count() returns 0 when not initialized."""
         from second_brain.services.graphiti import GraphitiService
         service = GraphitiService(graphiti_config)
         service._init_failed = True

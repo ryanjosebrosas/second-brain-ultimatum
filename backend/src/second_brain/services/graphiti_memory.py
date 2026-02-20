@@ -18,6 +18,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _relations_to_memories(relations: list[dict]) -> list[dict]:
+    """Convert graph relation dicts to memory-format dicts.
+
+    Memory format: {"memory": str, "score": float, "metadata": dict}
+    This enables format_memories() and rerank_memories() to work with graph results.
+    """
+    return [
+        {
+            "memory": f"{r.get('source', '?')} {r.get('relationship', '?')} {r.get('target', '?')}",
+            "score": 1.0,
+            "metadata": {"source": "graphiti", "type": "relation"},
+        }
+        for r in relations
+    ]
+
+
 class GraphitiMemoryAdapter(MemoryServiceBase):
     """Adapts GraphitiService to the MemoryServiceBase interface.
 
@@ -90,12 +106,18 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         limit: int | None = None,
         enable_graph: bool | None = None,
     ) -> SearchResult:
-        """Semantic search via GraphitiService with user-scoped group_id."""
+        """Semantic search via GraphitiService with user-scoped group_id.
+
+        Populates BOTH memories (for reranking/formatting) and relations (for graph display).
+        """
         try:
             relations = await self._graphiti.search(
                 query, limit=limit or 10, group_id=self.user_id
             )
-            return SearchResult(relations=relations)
+            return SearchResult(
+                memories=_relations_to_memories(relations),
+                relations=relations,
+            )
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search error: %s", e)
             return SearchResult()
@@ -138,10 +160,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             relations = await self._graphiti.search(
                 augmented_query, limit=limit, group_id=self.user_id
             )
-            return SearchResult(relations=relations)
+            return SearchResult(
+                memories=_relations_to_memories(relations),
+                relations=relations,
+                search_filters=metadata_filters or {},
+            )
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search_with_filters error: %s", e)
-            return SearchResult()
+            return SearchResult(search_filters=metadata_filters or {})
 
     async def search_by_category(
         self, category: str, query: str, limit: int = 10
@@ -152,7 +178,10 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             relations = await self._graphiti.search(
                 combined, limit=limit, group_id=self.user_id
             )
-            return SearchResult(relations=relations)
+            return SearchResult(
+                memories=_relations_to_memories(relations),
+                relations=relations,
+            )
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search_by_category error: %s", e)
             return SearchResult()
@@ -212,20 +241,19 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             logger.debug("GraphitiMemoryAdapter.delete error detail: %s", e)
 
     async def get_by_id(self, memory_id: str) -> dict | None:
-        """Retrieve a specific episode by UUID. Falls back to scanning get_episodes."""
+        """Retrieve a specific episode by UUID."""
         try:
-            episodes = await self._graphiti.get_episodes(self.user_id)
-            for ep in episodes:
-                if ep.get("id") == memory_id:
-                    return {
-                        "id": ep.get("id", ""),
-                        "memory": ep.get("content", ""),
-                        "metadata": {
-                            "source": ep.get("source", "unknown"),
-                            "created_at": ep.get("created_at"),
-                        },
-                    }
-            return None
+            ep = await self._graphiti.get_episode_by_id(memory_id)
+            if ep is None:
+                return None
+            return {
+                "id": ep.get("id", ""),
+                "memory": ep.get("content", ""),
+                "metadata": {
+                    "source": ep.get("source", "unknown"),
+                    "created_at": ep.get("created_at"),
+                },
+            }
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.get_by_id failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.get_by_id error detail: %s", e)
