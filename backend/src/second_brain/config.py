@@ -244,6 +244,25 @@ class BrainConfig(BaseSettings):
         description="Number of days of memories to consider for graduation",
     )
 
+    # HNSW tuning
+    hnsw_ef_search: int = Field(
+        default=100, ge=10, le=500,
+        description="HNSW ef_search parameter for vector queries. Higher = better recall, more latency.",
+    )
+
+    # Service-level timeouts (used in sub-plan 02)
+    service_timeout_seconds: int = Field(
+        default=15, ge=1, le=60,
+        description="Timeout for individual service calls (Mem0, Supabase). "
+        "Separate from api_timeout_seconds which covers the full MCP tool.",
+    )
+
+    # Batch operation settings
+    batch_upsert_chunk_size: int = Field(
+        default=500, ge=1, le=1000,
+        description="Maximum rows per batch upsert to Supabase.",
+    )
+
     # API timeouts
     api_timeout_seconds: int = Field(
         default=30,

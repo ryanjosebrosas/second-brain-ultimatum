@@ -592,14 +592,17 @@ class StorageService:
         table: str = "memory_content",
         limit: int = 10,
         similarity_threshold: float = 0.7,
+        ef_search: int | None = None,
     ) -> list[dict]:
         """Search by vector similarity using pgvector cosine distance.
 
         Args:
-            embedding: Query embedding vector (1536 dimensions).
+            embedding: Query embedding vector (1024 dimensions).
             table: Table to search (must have 'embedding' column).
             limit: Maximum results to return.
             similarity_threshold: Minimum cosine similarity (0-1). Default 0.7.
+            ef_search: HNSW ef_search parameter. Higher = better recall, more latency.
+                       Defaults to config.hnsw_ef_search (100).
 
         Returns:
             List of matching rows with similarity score added.
@@ -618,6 +621,7 @@ class StorageService:
                         "match_count": limit,
                         "match_threshold": similarity_threshold,
                         "p_user_id": self.user_id,
+                        "p_ef_search": ef_search or self.config.hnsw_ef_search,
                     }
                 ).execute
             )
