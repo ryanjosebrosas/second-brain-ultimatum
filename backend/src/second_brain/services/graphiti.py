@@ -77,13 +77,14 @@ class GraphitiService:
     def _build_providers(self):
         """Build LLM, embedder, and cross-encoder providers."""
         from graphiti_core.llm_client.config import LLMConfig
-        from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 
-        # LLM: try Anthropic, fall back to Ollama
-        if self.config.anthropic_api_key:
+        # LLM: Anthropic primary -> Ollama (local or cloud) fallback
+        # graphiti_llm_model overrides the default model selection
+        llm_model_override = self.config.graphiti_llm_model
+
+        if self.config.anthropic_api_key and not llm_model_override:
             from graphiti_core.llm_client.anthropic_client import AnthropicClient
 
-            # Extract model name from config (strip "anthropic:" prefix if present)
             model_name = self.config.primary_model
             if model_name.startswith("anthropic:"):
                 model_name = model_name[len("anthropic:"):]
@@ -93,38 +94,61 @@ class GraphitiService:
                     model=model_name,
                 )
             )
-            logger.info("Graphiti using Anthropic LLM")
+            logger.info("Graphiti using Anthropic LLM (%s)", model_name)
         else:
-            from graphiti_core.llm_client.openai_generic_client import (
-                OpenAIGenericClient,
-            )
+            from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
+            ollama_model = llm_model_override or self.config.ollama_model
             llm_config = LLMConfig(
                 api_key=self.config.ollama_api_key or "ollama",
-                model=self.config.ollama_model,
+                model=ollama_model,
+                small_model=ollama_model,
                 base_url=f"{self.config.ollama_base_url}/v1",
             )
             llm_client = OpenAIGenericClient(config=llm_config)
-            logger.info(f"Graphiti using Ollama LLM: {self.config.ollama_model}")
+            logger.info("Graphiti using Ollama LLM (%s)", ollama_model)
 
-        # Embedder: OpenAI (required for Graphiti)
-        embedder = OpenAIEmbedder(
-            config=OpenAIEmbedderConfig(
-                api_key=self.config.openai_api_key or "",
-                embedding_model="text-embedding-3-small",
+        # Embedder: Voyage AI preferred, OpenAI fallback
+        if self.config.voyage_api_key:
+            from graphiti_core.embedder.voyage import VoyageAIEmbedder, VoyageAIEmbedderConfig
+
+            embedder = VoyageAIEmbedder(
+                config=VoyageAIEmbedderConfig(
+                    api_key=self.config.voyage_api_key,
+                    embedding_model=self.config.graphiti_embedding_model,
+                )
             )
-        )
+            logger.info("Graphiti using Voyage AI embedder (%s)", self.config.graphiti_embedding_model)
+        else:
+            from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 
-        # Cross-encoder: OpenAI reranker for result quality
-        from graphiti_core.cross_encoder.openai_reranker_client import (
-            OpenAIRerankerClient,
-        )
+            embedder = OpenAIEmbedder(
+                config=OpenAIEmbedderConfig(
+                    api_key=self.config.openai_api_key or "",
+                    embedding_model="text-embedding-3-small",
+                )
+            )
+            logger.info("Graphiti using OpenAI embedder (text-embedding-3-small)")
 
-        cross_encoder_config = LLMConfig(
-            api_key=self.config.openai_api_key or "",
-            model="gpt-4.1-mini",
-        )
-        cross_encoder = OpenAIRerankerClient(config=cross_encoder_config)
+        # Cross-encoder: OpenAI preferred, Ollama fallback
+        from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
+        if self.config.openai_api_key:
+            cross_encoder_config = LLMConfig(
+                api_key=self.config.openai_api_key,
+                model="gpt-4.1-mini",
+            )
+            cross_encoder = OpenAIRerankerClient(config=cross_encoder_config)
+            logger.info("Graphiti using OpenAI cross-encoder (gpt-4.1-mini)")
+        else:
+            reranker_model = llm_model_override or self.config.ollama_model
+            cross_config = LLMConfig(
+                api_key=self.config.ollama_api_key or "ollama",
+                model=reranker_model,
+                base_url=f"{self.config.ollama_base_url}/v1",
+            )
+            cross_encoder = OpenAIRerankerClient(config=cross_config)
+            logger.info("Graphiti using Ollama cross-encoder (%s)", reranker_model)
 
         return llm_client, embedder, cross_encoder
 
@@ -143,16 +167,40 @@ class GraphitiService:
         try:
             from graphiti_core.edges import EpisodeType
 
+            # Build descriptive episode name
+            ep_hash = f"{hash(content) & 0xFFFFFFFF:08x}"
+            if metadata:
+                source_name = metadata.get("source", metadata.get("category", "brain"))
+                ep_name = f"{source_name}_{ep_hash}"
+            else:
+                ep_name = f"episode_{ep_hash}"
+
+            # Use metadata for richer source description
             source_desc = "second-brain"
             if metadata:
-                source_desc = metadata.get("source", metadata.get("category", "second-brain"))
+                parts = []
+                if metadata.get("source"):
+                    parts.append(metadata["source"])
+                if metadata.get("category"):
+                    parts.append(f"category:{metadata['category']}")
+                if metadata.get("client"):
+                    parts.append(f"client:{metadata['client']}")
+                source_desc = " | ".join(parts) if parts else "second-brain"
+
+            # Support explicit reference_time from metadata (e.g., transcript dates)
+            ref_time = datetime.now(timezone.utc)
+            if metadata and metadata.get("reference_time"):
+                try:
+                    ref_time = datetime.fromisoformat(metadata["reference_time"])
+                except (ValueError, TypeError):
+                    pass  # Fall back to now
 
             kwargs = {
-                "name": f"episode_{hash(content) & 0xFFFFFFFF:08x}",
+                "name": ep_name,
                 "episode_body": content,
                 "source": EpisodeType.text,
                 "source_description": source_desc,
-                "reference_time": datetime.now(timezone.utc),
+                "reference_time": ref_time,
             }
             if group_id:
                 kwargs["group_id"] = group_id
@@ -184,6 +232,71 @@ class GraphitiService:
                 added += 1
             except Exception as e:
                 logger.debug("Batch episode failed: %s", e)
+        return added
+
+    async def add_episodes_chunked(
+        self,
+        content: str,
+        metadata: dict | None = None,
+        group_id: str | None = None,
+        chunk_size: int = 4000,
+        chunk_overlap: int = 200,
+    ) -> int:
+        """Split long content into contextual chunks and add as separate episodes.
+
+        Each chunk is prefixed with a context summary derived from the full content.
+        This produces richer entity/relationship extraction than a single large episode.
+
+        Returns the count of successfully added episodes.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            logger.debug("Graphiti not available, skipping chunked add")
+            return 0
+
+        if len(content) <= chunk_size:
+            await self.add_episode(content, metadata=metadata, group_id=group_id)
+            return 1
+
+        # Build context prefix from first ~500 chars
+        context_prefix = content[:500].rsplit(" ", 1)[0]
+        context_line = f"[Context: {context_prefix}...]\n\n"
+
+        # Chunk with overlap
+        chunks = []
+        start = 0
+        while start < len(content):
+            end = start + chunk_size
+            # Try to break at sentence boundary
+            if end < len(content):
+                for sep in [". ", ".\n", "\n\n", "\n", " "]:
+                    boundary = content[start:end].rfind(sep)
+                    if boundary > chunk_size * 0.5:
+                        end = start + boundary + len(sep)
+                        break
+            chunks.append(content[start:end])
+            start = end - chunk_overlap
+
+        added = 0
+        for i, chunk in enumerate(chunks):
+            chunk_meta = dict(metadata) if metadata else {}
+            chunk_meta["chunk_index"] = i
+            chunk_meta["total_chunks"] = len(chunks)
+
+            # Prefix with context for better entity extraction
+            episode_content = context_line + chunk if i > 0 else chunk
+
+            try:
+                await self.add_episode(
+                    content=episode_content,
+                    metadata=chunk_meta,
+                    group_id=group_id,
+                )
+                added += 1
+            except Exception as e:
+                logger.debug("Chunked episode %d/%d failed: %s", i + 1, len(chunks), e)
+
+        logger.info("Added %d/%d chunked episodes", added, len(chunks))
         return added
 
     async def search(

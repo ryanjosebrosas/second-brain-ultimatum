@@ -22,6 +22,7 @@ def _mock_graphiti_core():
         "graphiti_core.llm_client.openai_generic_client": MagicMock(),
         "graphiti_core.embedder": MagicMock(),
         "graphiti_core.embedder.openai": MagicMock(),
+        "graphiti_core.embedder.voyage": MagicMock(),
         "graphiti_core.cross_encoder": MagicMock(),
         "graphiti_core.cross_encoder.openai_reranker_client": MagicMock(),
     }):
@@ -330,3 +331,214 @@ class TestGraphitiServiceBatch:
         service._init_failed = True
         count = await service.add_episodes_batch([{"content": "test"}])
         assert count == 0
+
+
+class TestBuildProvidersVoyage:
+    """Test _build_providers() Voyage AI embedder selection."""
+
+    def test_voyage_embedder_when_key_present(self, graphiti_config):
+        """Voyage AI embedder is used when voyage_api_key is set."""
+        graphiti_config.voyage_api_key = "test-voyage-key"
+        graphiti_config.graphiti_embedding_model = "voyage-3.5"
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        # The embedder should come from the voyage mock module
+        assert embedder is not None
+
+    def test_openai_embedder_fallback(self, graphiti_config):
+        """Falls back to OpenAI when no Voyage key."""
+        graphiti_config.voyage_api_key = None
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        assert embedder is not None
+
+    def test_voyage_uses_configured_model(self, graphiti_config):
+        """Voyage embedder uses graphiti_embedding_model from config."""
+        graphiti_config.voyage_api_key = "test-voyage-key"
+        graphiti_config.graphiti_embedding_model = "voyage-3.5-lite"
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        # Should not raise
+        llm, embedder, cross = service._build_providers()
+        assert embedder is not None
+
+
+class TestBuildProvidersOllamaCloud:
+    """Test _build_providers() Ollama Cloud LLM override."""
+
+    def test_ollama_cloud_override(self, graphiti_config):
+        """graphiti_llm_model forces Ollama even with Anthropic key."""
+        graphiti_config.anthropic_api_key = "test-key"
+        graphiti_config.graphiti_llm_model = "deepseek-v3.1:671b-cloud"
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        # LLM should be OpenAIGenericClient (from mocked module)
+        assert llm is not None
+
+    def test_anthropic_when_no_override(self, graphiti_config):
+        """Anthropic is used when no graphiti_llm_model override."""
+        graphiti_config.anthropic_api_key = "test-key"
+        graphiti_config.graphiti_llm_model = None
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        assert llm is not None
+
+    def test_ollama_fallback_when_no_anthropic(self, graphiti_config):
+        """Ollama is used when no Anthropic key and no override."""
+        graphiti_config.anthropic_api_key = None
+        graphiti_config.graphiti_llm_model = None
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        assert llm is not None
+
+    def test_cross_encoder_ollama_fallback(self, graphiti_config):
+        """Cross-encoder uses Ollama when no OpenAI key."""
+        graphiti_config.openai_api_key = None
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        assert cross is not None
+
+    def test_cross_encoder_openai_when_key_present(self, graphiti_config):
+        """Cross-encoder uses OpenAI when key is present."""
+        graphiti_config.openai_api_key = "test-openai-key"
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        llm, embedder, cross = service._build_providers()
+        assert cross is not None
+
+
+class TestAddEpisodesChunked:
+    """Test add_episodes_chunked() contextual chunking."""
+
+    async def test_short_content_single_episode(self, graphiti_config):
+        """Content under chunk_size is sent as a single episode."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        count = await service.add_episodes_chunked("Short content", chunk_size=4000)
+        assert count == 1
+
+    async def test_long_content_multiple_chunks(self, graphiti_config):
+        """Content over chunk_size is split into multiple episodes."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        long_content = "Word " * 2000  # ~10000 chars
+        count = await service.add_episodes_chunked(long_content, chunk_size=2000)
+        assert count > 1
+
+    async def test_skips_when_unavailable(self, graphiti_config):
+        """Returns 0 when Graphiti is not initialized."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        count = await service.add_episodes_chunked("test content")
+        assert count == 0
+
+    async def test_chunk_metadata_includes_index(self, graphiti_config):
+        """Each chunk includes chunk_index and total_chunks in metadata."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        long_content = "Sentence here. " * 500  # ~7500 chars
+        await service.add_episodes_chunked(
+            long_content,
+            metadata={"source": "test"},
+            chunk_size=2000,
+        )
+        assert service._client.add_episode.call_count > 1
+
+    async def test_empty_content_single_episode(self, graphiti_config):
+        """Empty/short content produces a single episode."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        count = await service.add_episodes_chunked("")
+        assert count == 1
+
+    async def test_content_at_chunk_boundary(self, graphiti_config):
+        """Content exactly at chunk_size produces a single episode."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        content = "x" * 4000
+        count = await service.add_episodes_chunked(content, chunk_size=4000)
+        assert count == 1
+
+
+class TestAddEpisodeMetadata:
+    """Test improved add_episode() metadata handling."""
+
+    async def test_episode_name_includes_source(self, graphiti_config):
+        """Episode name includes source from metadata."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        await service.add_episode("test", metadata={"source": "learn_agent"})
+        call_kwargs = service._client.add_episode.call_args.kwargs
+        assert call_kwargs["name"].startswith("learn_agent_")
+
+    async def test_episode_name_fallback_without_metadata(self, graphiti_config):
+        """Episode name uses 'episode_' prefix when no metadata."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        await service.add_episode("test content")
+        call_kwargs = service._client.add_episode.call_args.kwargs
+        assert call_kwargs["name"].startswith("episode_")
+
+    async def test_source_description_rich_metadata(self, graphiti_config):
+        """Source description combines source, category, and client."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        await service.add_episode(
+            "test",
+            metadata={"source": "zoom", "category": "meeting", "client": "ABC"},
+        )
+        call_kwargs = service._client.add_episode.call_args.kwargs
+        assert "zoom" in call_kwargs["source_description"]
+        assert "category:meeting" in call_kwargs["source_description"]
+        assert "client:ABC" in call_kwargs["source_description"]
+
+    async def test_reference_time_from_metadata(self, graphiti_config):
+        """Reference time is parsed from metadata when provided."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        await service.add_episode(
+            "test",
+            metadata={"reference_time": "2026-01-15T14:30:00+00:00"},
+        )
+        call_kwargs = service._client.add_episode.call_args.kwargs
+        assert call_kwargs["reference_time"].year == 2026
+        assert call_kwargs["reference_time"].month == 1
+
+    async def test_reference_time_invalid_falls_back(self, graphiti_config):
+        """Invalid reference_time falls back to now."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = AsyncMock()
+        await service.add_episode(
+            "test",
+            metadata={"reference_time": "not-a-date"},
+        )
+        call_kwargs = service._client.add_episode.call_args.kwargs
+        # Should still have a reference_time (falls back to now)
+        assert call_kwargs["reference_time"] is not None

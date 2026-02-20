@@ -252,6 +252,7 @@ def mock_graphiti():
     ])
     graphiti.add_episode = AsyncMock(return_value=None)
     graphiti.add_episodes_batch = AsyncMock(return_value=1)
+    graphiti.add_episodes_chunked = AsyncMock(return_value=3)
     graphiti.health_check = AsyncMock(return_value={
         "status": "healthy",
         "backend": "neo4j",

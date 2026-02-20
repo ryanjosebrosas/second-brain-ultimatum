@@ -137,6 +137,14 @@ class BrainConfig(BaseSettings):
         description="FalkorDB password",
         repr=False,
     )
+    graphiti_embedding_model: str = Field(
+        default="voyage-3.5",
+        description="Embedding model for Graphiti. Options: voyage-3.5, voyage-3.5-lite, text-embedding-3-small (OpenAI fallback)",
+    )
+    graphiti_llm_model: str | None = Field(
+        default=None,
+        description="Override LLM model for Graphiti entity extraction. If None, uses primary_model (Anthropic) or ollama_model. Set to an Ollama Cloud model like 'deepseek-v3.1:671b-cloud' for better extraction.",
+    )
 
     # Supabase
     supabase_url: str = Field(..., description="Supabase project URL")
@@ -335,4 +343,4 @@ class BrainConfig(BaseSettings):
             )
         return self
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

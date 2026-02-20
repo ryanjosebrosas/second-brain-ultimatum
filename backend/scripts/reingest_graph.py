@@ -46,24 +46,39 @@ async def reingest():
     await migrator.migrate_patterns()
     await migrator.migrate_experiences()
 
-    # Step 5: If Graphiti provider, also ingest episodes
-    if config.graph_provider == "graphiti":
+    # Step 5: If Graphiti provider or graphiti_enabled, also ingest episodes
+    if config.graph_provider == "graphiti" or config.graphiti_enabled:
         try:
             from second_brain.services.graphiti import GraphitiService
 
             logger.info("Ingesting episodes into Graphiti...")
             graphiti = GraphitiService(config)
-            for category_dir in (config.brain_data_path / "memory").iterdir():
-                if not category_dir.is_dir():
-                    continue
-                for md_file in category_dir.glob("*.md"):
-                    content = md_file.read_text(encoding="utf-8")
-                    await graphiti.add_episode(
-                        content,
-                        metadata={"category": category_dir.name,
-                                  "source": str(md_file)},
-                    )
-                    logger.info(f"  Added episode: {md_file.name}")
+            file_count = 0
+            episode_count = 0
+            memory_dir = config.brain_data_path / "memory"
+            if memory_dir.exists():
+                for category_dir in memory_dir.iterdir():
+                    if not category_dir.is_dir():
+                        continue
+                    for md_file in category_dir.glob("*.md"):
+                        content = md_file.read_text(encoding="utf-8")
+                        file_count += 1
+                        metadata = {
+                            "category": category_dir.name,
+                            "source": str(md_file),
+                        }
+                        # Use chunked ingestion for long content
+                        if len(content) > 4000:
+                            added = await graphiti.add_episodes_chunked(
+                                content, metadata=metadata,
+                            )
+                            episode_count += added
+                            logger.info("  Chunked %s -> %d episodes", md_file.name, added)
+                        else:
+                            await graphiti.add_episode(content, metadata=metadata)
+                            episode_count += 1
+                            logger.info("  Added episode: %s", md_file.name)
+            logger.info("Graphiti ingestion complete: %d files -> %d episodes", file_count, episode_count)
             await graphiti.close()
         except ImportError:
             logger.warning("graphiti-core not installed, skipping Graphiti ingestion")

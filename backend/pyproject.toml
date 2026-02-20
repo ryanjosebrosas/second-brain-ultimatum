@@ -19,7 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 ollama = ["pydantic-ai[ollama]>=0.1.0,<1.0.0"]
 voyage = ["voyageai>=0.3.0,<1.0.0"]
-graphiti = ["graphiti-core[anthropic,falkordb]>=0.1.0,<1.0.0"]
+graphiti = ["graphiti-core[anthropic,falkordb,voyageai]>=0.1.0,<1.0.0"]
 subscription = ["claude-agent-sdk>=0.1.0"]
 dev = [
     "pydantic-ai[ollama]>=0.1.0,<1.0.0",
