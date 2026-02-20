@@ -2,11 +2,8 @@
 
 import streamlit as st
 from api_client import graph_search, graph_health, graph_episodes
-from components.styles import inject_styles
 from components.copy_button import copyable_text
 from components.graph_utils import relationships_to_graph
-
-inject_styles()
 
 st.title("Knowledge Graph")
 

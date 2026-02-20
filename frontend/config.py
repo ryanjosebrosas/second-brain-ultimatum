@@ -1,10 +1,18 @@
 """Shared configuration for the Streamlit frontend."""
 
 import os
+from urllib.parse import urlparse
 
 # --- API Connection ---
-FASTAPI_URL = os.getenv("SECOND_BRAIN_API_URL", "http://localhost:8001")
-API_BASE = FASTAPI_URL + "/api"
+_FASTAPI_URL_RAW = os.getenv("SECOND_BRAIN_API_URL", "http://localhost:8001")
+_parsed = urlparse(_FASTAPI_URL_RAW)
+if _parsed.scheme not in ("http", "https") or not _parsed.netloc:
+    raise ValueError(
+        f"Invalid SECOND_BRAIN_API_URL: {_FASTAPI_URL_RAW!r}. "
+        "Must be a valid http:// or https:// URL."
+    )
+FASTAPI_URL: str = _FASTAPI_URL_RAW
+API_BASE: str = FASTAPI_URL + "/api"
 
 # --- Agent Definitions ---
 # Each agent maps to a POST endpoint. Keys match the API route names.
@@ -184,22 +192,18 @@ MEMORY_TABLES = {
     },
 }
 
-# --- Graph API ---
-GRAPH_SEARCH_ENDPOINT = "/graph/search"
-GRAPH_HEALTH_ENDPOINT = "/graph/health"
-GRAPH_EPISODES_ENDPOINT = "/graph/episodes"
+# Explicit mapping from plural table keys to singular API delete names.
+# Do NOT use rstrip("s") — it's fragile for irregular plurals.
+DELETE_TABLE_MAP: dict[str, str] = {
+    "patterns": "pattern",
+    "examples": "example",
+    "knowledge": "knowledge",
+    "experiences": "experience",
+}
 
-# --- Settings API ---
-SETTINGS_CONFIG_ENDPOINT = "/settings/config"
-SETTINGS_PROVIDERS_ENDPOINT = "/settings/providers"
-
-# --- Health API ---
-HEALTH_METRICS_ENDPOINT = "/health/metrics"
-HEALTH_GROWTH_ENDPOINT = "/health/growth"
-HEALTH_MILESTONES_ENDPOINT = "/health/milestones"
-HEALTH_QUALITY_ENDPOINT = "/health/quality"
-HEALTH_SETUP_ENDPOINT = "/health/setup"
-
-# --- Projects API ---
-PROJECTS_ENDPOINT = "/projects"
-CONTENT_TYPES_ENDPOINT = "/content-types"
+# Offline fallback when /content-types API is unreachable.
+# Keep in sync with backend ContentTypeRegistry.
+DEFAULT_CONTENT_TYPES: list[str] = [
+    "linkedin", "email", "landing-page", "comment", "case-study",
+    "proposal", "one-pager", "presentation", "instagram", "essay",
+]

@@ -2,12 +2,20 @@
 
 import streamlit as st
 
+from api_client import check_api_health
+
 st.set_page_config(
     page_title="Second Brain",
     page_icon=":brain:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+@st.cache_data(ttl=30)
+def _is_api_online() -> bool:
+    return check_api_health()
+
 
 # Define pages
 chat_page = st.Page("pages/chat.py", title="Chat", icon=":material/chat:", default=True)
@@ -30,17 +38,10 @@ pg = st.navigation({
 with st.sidebar:
     st.markdown("### :brain: Second Brain")
     st.caption("Your AI-powered knowledge system")
-    try:
-        import httpx
-        from config import FASTAPI_URL
-        with httpx.Client(timeout=3.0) as client:
-            resp = client.get(f"{FASTAPI_URL}/api/health/metrics")
-            if resp.status_code == 200:
-                st.success("API Connected", icon=":material/check_circle:")
-            else:
-                st.warning(f"API Error ({resp.status_code})", icon=":material/warning:")
-    except Exception:
-        st.error("API Offline", icon=":material/error:")
+    if _is_api_online():
+        st.success("API Connected", icon=":material/check_circle:")
+    else:
+        st.warning("API Offline", icon=":material/warning:")
         st.caption("Start the API server first")
     st.divider()
 

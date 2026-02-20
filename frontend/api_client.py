@@ -4,10 +4,15 @@ All methods are synchronous — Streamlit's runtime is not async.
 Uses session_state to cache the httpx client instance.
 """
 
+import logging
+from typing import Any
+
 import httpx
 import streamlit as st
 
 from config import API_BASE
+
+logger = logging.getLogger(__name__)
 
 
 def _get_client() -> httpx.Client:
@@ -20,32 +25,50 @@ def _get_client() -> httpx.Client:
     return st.session_state.api_client
 
 
+def check_api_health(timeout: float = 3.0) -> bool:
+    """Check if the API server is reachable. Used by app.py sidebar."""
+    try:
+        response = _get_client().get("/health/metrics", timeout=timeout)
+        return response.status_code == 200
+    except Exception as e:
+        logger.warning("API health check failed: %s", type(e).__name__)
+        return False
+
+
 # --- Agent methods ---
 
-def call_agent(endpoint: str, payload: dict) -> dict:
+def call_agent(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Call an agent endpoint with a JSON payload."""
     client = _get_client()
-    response = client.post(endpoint, json=payload)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = client.post(endpoint, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Agent call to %s failed: %s", endpoint, e.response.status_code)
+        return {"error": str(e), "status_code": e.response.status_code}
 
 
 # --- Memory methods ---
 
-def search_memory(endpoint: str, params: dict | None = None) -> dict:
+def search_memory(endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Search a memory table with optional filter params."""
     client = _get_client()
-    response = client.get(endpoint, params=params or {})
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = client.get(endpoint, params=params or {})
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Memory search %s failed: %s", endpoint, e.response.status_code)
+        return {"error": str(e)}
 
 
-def semantic_search(query: str) -> dict:
+def semantic_search(query: str) -> dict[str, Any]:
     """Search Mem0 semantic memory via the recall agent."""
     return call_agent("/recall", {"query": query})
 
 
-def vector_search(query: str, table: str = "memory_content", limit: int = 10) -> dict:
+def vector_search(query: str, table: str = "memory_content", limit: int = 10) -> dict[str, Any]:
     """Search using vector similarity (pgvector)."""
     client = _get_client()
     response = client.post("/search/vector", json={
@@ -55,7 +78,7 @@ def vector_search(query: str, table: str = "memory_content", limit: int = 10) ->
     return response.json()
 
 
-def delete_item(table: str, item_id: str) -> dict:
+def delete_item(table: str, item_id: str) -> dict[str, Any]:
     """Delete an item by table and ID."""
     client = _get_client()
     response = client.delete(f"/items/{table}/{item_id}")
@@ -65,7 +88,7 @@ def delete_item(table: str, item_id: str) -> dict:
 
 # --- Health methods ---
 
-def get_health() -> dict:
+def get_health() -> dict[str, Any]:
     """Get brain health metrics."""
     client = _get_client()
     response = client.get("/health/metrics")
@@ -73,7 +96,7 @@ def get_health() -> dict:
     return response.json()
 
 
-def get_growth(days: int = 30) -> dict:
+def get_growth(days: int = 30) -> dict[str, Any]:
     """Get growth report."""
     client = _get_client()
     response = client.get("/health/growth", params={"days": days})
@@ -81,7 +104,7 @@ def get_growth(days: int = 30) -> dict:
     return response.json()
 
 
-def get_milestones() -> dict:
+def get_milestones() -> dict[str, Any]:
     """Get brain level and milestone progress."""
     client = _get_client()
     response = client.get("/health/milestones")
@@ -89,7 +112,7 @@ def get_milestones() -> dict:
     return response.json()
 
 
-def get_quality(days: int = 30) -> dict:
+def get_quality(days: int = 30) -> dict[str, Any]:
     """Get quality trending data."""
     client = _get_client()
     response = client.get("/health/quality", params={"days": days})
@@ -97,7 +120,7 @@ def get_quality(days: int = 30) -> dict:
     return response.json()
 
 
-def get_setup() -> dict:
+def get_setup() -> dict[str, Any]:
     """Check brain setup status."""
     client = _get_client()
     response = client.get("/health/setup")
@@ -107,7 +130,7 @@ def get_setup() -> dict:
 
 # --- Project methods ---
 
-def list_projects(lifecycle_stage: str | None = None, category: str | None = None) -> dict:
+def list_projects(lifecycle_stage: str | None = None, category: str | None = None) -> dict[str, Any]:
     """List projects with optional filters."""
     client = _get_client()
     params = {}
@@ -120,7 +143,7 @@ def list_projects(lifecycle_stage: str | None = None, category: str | None = Non
     return response.json()
 
 
-def get_project(project_id: str) -> dict:
+def get_project(project_id: str) -> dict[str, Any]:
     """Get project details."""
     client = _get_client()
     response = client.get(f"/projects/{project_id}")
@@ -128,10 +151,10 @@ def get_project(project_id: str) -> dict:
     return response.json()
 
 
-def create_project(name: str, category: str = "content", description: str | None = None) -> dict:
+def create_project(name: str, category: str = "content", description: str | None = None) -> dict[str, Any]:
     """Create a new project."""
     client = _get_client()
-    payload: dict = {"name": name, "category": category}
+    payload: dict[str, Any] = {"name": name, "category": category}
     if description:
         payload["description"] = description
     response = client.post("/projects/", json=payload)
@@ -139,7 +162,7 @@ def create_project(name: str, category: str = "content", description: str | None
     return response.json()
 
 
-def delete_project(project_id: str) -> dict:
+def delete_project(project_id: str) -> dict[str, Any]:
     """Delete a project."""
     client = _get_client()
     response = client.delete(f"/projects/{project_id}")
@@ -149,7 +172,7 @@ def delete_project(project_id: str) -> dict:
 
 # --- Content type methods ---
 
-def get_content_types() -> dict:
+def get_content_types() -> dict[str, Any]:
     """List all available content types."""
     client = _get_client()
     response = client.get("/content-types")
@@ -159,7 +182,7 @@ def get_content_types() -> dict:
 
 # --- Graph methods ---
 
-def graph_search(query: str, limit: int = 10) -> dict:
+def graph_search(query: str, limit: int = 10) -> dict[str, Any]:
     """Search knowledge graph."""
     client = _get_client()
     response = client.post("/graph/search", json={"query": query, "limit": limit})
@@ -167,7 +190,7 @@ def graph_search(query: str, limit: int = 10) -> dict:
     return response.json()
 
 
-def graph_health() -> dict:
+def graph_health() -> dict[str, Any]:
     """Get graph health status."""
     client = _get_client()
     response = client.get("/graph/health")
@@ -175,7 +198,7 @@ def graph_health() -> dict:
     return response.json()
 
 
-def graph_episodes(group_id: str | None = None) -> dict:
+def graph_episodes(group_id: str | None = None) -> dict[str, Any]:
     """List graph episodes."""
     client = _get_client()
     params = {"group_id": group_id} if group_id else {}
@@ -186,7 +209,7 @@ def graph_episodes(group_id: str | None = None) -> dict:
 
 # --- Settings methods ---
 
-def get_settings_config() -> dict:
+def get_settings_config() -> dict[str, Any]:
     """Get system config (secrets redacted)."""
     client = _get_client()
     response = client.get("/settings/config")
@@ -194,7 +217,7 @@ def get_settings_config() -> dict:
     return response.json()
 
 
-def get_settings_providers() -> dict:
+def get_settings_providers() -> dict[str, Any]:
     """Get active provider information."""
     client = _get_client()
     response = client.get("/settings/providers")

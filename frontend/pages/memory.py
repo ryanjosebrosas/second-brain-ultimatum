@@ -6,10 +6,7 @@ import streamlit as st
 
 from config import MEMORY_TABLES
 from api_client import search_memory, semantic_search, vector_search, delete_item
-from components.styles import inject_styles
 from components.copy_button import copyable_text
-
-inject_styles()
 
 st.title(":material/search: Memory Browser")
 st.caption("Search and browse your brain's memory stores")

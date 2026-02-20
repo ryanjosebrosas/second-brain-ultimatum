@@ -19,8 +19,11 @@ def mock_create_deps():
         deps = MagicMock()
         deps.config = MagicMock()
         deps.config.graph_provider = "none"
+        deps.config.content_preview_limit = 1000
+        deps.config.experience_limit = 5
         deps.storage_service = MagicMock()
         deps.storage_service.get_examples = AsyncMock(return_value=[])
+        deps.storage_service.get_memory_content = AsyncMock(return_value=[])
         deps.storage_service.get_knowledge = AsyncMock(return_value=[])
         deps.storage_service.delete_pattern = AsyncMock(return_value=True)
         deps.storage_service.delete_experience = AsyncMock(return_value=True)
@@ -233,6 +236,7 @@ class TestCreateCommand:
         type_config.default_mode = "casual"
         type_config.structure_hint = "Hook -> Body -> CTA"
         type_config.max_words = 300
+        type_config.length_guidance = ""
         registry = mock_create_deps.get_content_type_registry()
         registry.get = AsyncMock(return_value=type_config)
 
@@ -249,34 +253,43 @@ class TestCreateCommand:
         result = runner.invoke(cli, ["create", "Write about AI"])
         assert result.exit_code == 0
         assert "Draft" in result.output
+        # Verify voice-first prompt structure
+        call_args = mock_agent.run.call_args[0][0]
+        assert "No voice guide stored yet" in call_args
+        assert "Content type: LinkedIn Post" in call_args
 
     @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.create.create_agent")
-    def test_create_with_mode_override(self, mock_agent, mock_model, runner, mock_create_deps):
-        """create command passes --mode override to agent prompt."""
+    def test_create_voice_preload(self, mock_agent, mock_model, runner, mock_create_deps):
+        """create command pre-loads voice guide into agent prompt."""
         mock_model.return_value = MagicMock()
         type_config = MagicMock()
         type_config.name = "LinkedIn Post"
         type_config.default_mode = "casual"
         type_config.structure_hint = "Hook -> Body -> CTA"
         type_config.max_words = 300
+        type_config.length_guidance = ""
         registry = mock_create_deps.get_content_type_registry()
         registry.get = AsyncMock(return_value=type_config)
+        # Pre-load voice guide with test data
+        mock_create_deps.storage_service.get_memory_content = AsyncMock(
+            return_value=[{"title": "My Voice", "content": "Direct and punchy, no fluff"}]
+        )
         mock_output = MagicMock()
         mock_output.content_type = "linkedin"
-        mock_output.mode = "formal"
+        mock_output.mode = "casual"
         mock_output.draft = "Draft content here"
         mock_output.word_count = 80
-        mock_output.voice_elements = []
+        mock_output.voice_elements = ["direct"]
         mock_output.patterns_applied = []
         mock_output.examples_referenced = []
         mock_output.notes = None
         mock_agent.run = AsyncMock(return_value=MagicMock(output=mock_output))
-        result = runner.invoke(cli, ["create", "Write about AI", "--mode", "formal"])
+        result = runner.invoke(cli, ["create", "Write about AI"])
         assert result.exit_code == 0
-        call_args = mock_agent.run.call_args
-        prompt = call_args[0][0]
-        assert "Communication mode: formal" in prompt
+        call_args = mock_agent.run.call_args[0][0]
+        assert "Your Voice & Tone Guide" in call_args
+        assert "Direct and punchy" in call_args
 
 
 class TestReviewCommand:
@@ -676,6 +689,7 @@ class TestCLIAgentErrors:
         type_config.default_mode = "casual"
         type_config.structure_hint = "Hook -> Body -> CTA"
         type_config.max_words = 300
+        type_config.length_guidance = ""
         registry = mock_create_deps.get_content_type_registry()
         registry.get = AsyncMock(return_value=type_config)
         mock_agent.run = AsyncMock(side_effect=RuntimeError("Model unavailable"))

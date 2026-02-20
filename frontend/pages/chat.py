@@ -6,10 +6,7 @@ import streamlit as st
 
 from config import AGENTS
 from api_client import call_agent, get_content_types
-from components.styles import inject_styles
 from components.copy_button import copyable_text, copyable_output
-
-inject_styles()
 
 
 def _format_agent_response(agent: str, data):

@@ -2,9 +2,6 @@
 
 import streamlit as st
 from api_client import get_settings_config, get_settings_providers, get_health
-from components.styles import inject_styles
-
-inject_styles()
 
 st.title("Settings")
 

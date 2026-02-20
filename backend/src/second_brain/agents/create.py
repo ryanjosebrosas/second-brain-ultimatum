@@ -64,9 +64,12 @@ async def inject_content_types(ctx: RunContext[BrainDeps]) -> str:
 
         type_list = []
         for slug, ct in types.items():
-            type_list.append(
-                f"- {slug}: {ct.name} (max {ct.max_words} words, mode: {ct.default_mode})"
-            )
+            if ct.length_guidance:
+                # Use first sentence of length_guidance for compact display
+                length_info = ct.length_guidance.split(".")[0].strip()
+            else:
+                length_info = f"~{ct.max_words} words" if ct.max_words else "flexible length"
+            type_list.append(f"- {slug}: {ct.name} ({length_info})")
 
         parts = ["Available content types:\n" + "\n".join(type_list)]
 

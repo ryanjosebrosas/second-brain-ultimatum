@@ -171,13 +171,7 @@ def learn(content: str, category: str):
     default="linkedin",
     help="Content type slug (run 'brain types list' to see available types)",
 )
-@click.option(
-    "--mode",
-    "mode",
-    default=None,
-    help="Communication mode (casual, professional, formal). Defaults to type's default.",
-)
-def create(prompt: str, content_type: str, mode: str | None):
+def create(prompt: str, content_type: str):
     """Draft content in your voice using brain knowledge."""
     prompt = _validate_input(prompt, label="prompt")
     from second_brain.agents.create import create_agent
@@ -193,21 +187,74 @@ def create(prompt: str, content_type: str, mode: str | None):
             click.echo(f"Unknown content type '{content_type}'. Available: {', '.join(available)}")
             return
 
-        effective_mode = mode or type_config.default_mode
+        # Pre-load voice guide
+        voice_sections = []
+        try:
+            voice_content = await deps.storage_service.get_memory_content("style-voice")
+            if voice_content:
+                for item in voice_content:
+                    title = item.get("title", "Untitled")
+                    text = item.get("content", "")[:deps.config.content_preview_limit]
+                    voice_sections.append(f"### {title}\n{text}")
+        except Exception:
+            logger.debug("Failed to pre-load voice guide for create")
 
-        enhanced = (
-            f"Content type: {type_config.name} ({content_type})\n"
-            f"Communication mode: {effective_mode}\n"
-            f"Structure: {type_config.structure_hint}\n"
-        )
-        if type_config.max_words:
-            enhanced += f"Target length: ~{type_config.max_words} words\n"
-        enhanced += f"\nRequest: {prompt}"
+        # Pre-load content examples
+        example_sections = []
+        try:
+            examples = await deps.storage_service.get_examples(content_type=content_type)
+            if examples:
+                limit = deps.config.experience_limit
+                for ex in examples[:limit]:
+                    title = ex.get("title", "Untitled")
+                    text = ex.get("content", "")[:deps.config.content_preview_limit]
+                    example_sections.append(f"### {title}\n{text}")
+        except Exception:
+            logger.debug("Failed to pre-load examples for create")
+
+        # Build enhanced prompt
+        enhanced_parts = [
+            f"Content type: {type_config.name} ({content_type})",
+            f"Structure: {type_config.structure_hint}",
+        ]
+
+        # Length guidance (flexible, not rigid)
+        if type_config.length_guidance:
+            enhanced_parts.append(f"Length: {type_config.length_guidance}")
+        elif type_config.max_words:
+            enhanced_parts.append(
+                f"Typical length: around {type_config.max_words} words, "
+                "but adjust to fit the content"
+            )
+
+        # Voice guide
+        if voice_sections:
+            enhanced_parts.append(
+                "\n## Your Voice & Tone Guide\n" + "\n\n".join(voice_sections)
+            )
+        else:
+            enhanced_parts.append(
+                "\nNo voice guide stored yet. Write in a clear, direct, conversational tone. "
+                "Avoid corporate speak and AI-sounding phrases."
+            )
+
+        # Content examples
+        if example_sections:
+            enhanced_parts.append(
+                f"\n## Reference Examples ({content_type})\nStudy these examples of your past "
+                f"{type_config.name} content — match the style, structure, and voice:\n"
+                + "\n\n".join(example_sections)
+            )
+
+        # The actual request
+        enhanced_parts.append(f"\n## Request\n{prompt}")
+
+        enhanced = "\n".join(enhanced_parts)
 
         result = await create_agent.run(enhanced, deps=deps, model=model)
         output = result.output
 
-        click.echo(f"\n# Draft ({output.content_type} - {output.mode})\n")
+        click.echo(f"\n# Draft ({output.content_type})\n")
         click.echo(output.draft)
         click.echo(f"\n---")
         click.echo(f"Words: {output.word_count}")

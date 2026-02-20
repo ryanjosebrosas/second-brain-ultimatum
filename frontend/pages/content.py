@@ -4,11 +4,8 @@ import json
 
 import streamlit as st
 
-from components.styles import inject_styles
 from components.copy_button import copyable_text, copyable_output
 import api_client
-
-inject_styles()
 
 st.title(":material/edit: Content Studio")
 

@@ -5,11 +5,12 @@ No third-party packages needed.
 """
 
 import json
+from typing import Any
 
 import streamlit as st
 
 
-def copyable_text(text: str, language: str | None = None):
+def copyable_text(text: str, language: str | None = None) -> None:
     """Display text with a built-in copy button via st.code().
 
     Args:
@@ -19,7 +20,7 @@ def copyable_text(text: str, language: str | None = None):
     st.code(text, language=language)
 
 
-def copyable_output(output: dict, key_fields: list[str] | None = None):
+def copyable_output(output: dict[str, Any], key_fields: list[str] | None = None) -> None:
     """Display a structured agent output with copy buttons on key fields.
 
     Args:

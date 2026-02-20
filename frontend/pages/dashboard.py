@@ -2,7 +2,6 @@
 
 import streamlit as st
 
-from components.styles import inject_styles
 from components.charts import (
     metric_card,
     progress_bar,
@@ -13,8 +12,6 @@ from components.charts import (
     graph_status_card,
 )
 import api_client
-
-inject_styles()
 
 st.title(":material/dashboard: Dashboard")
 
