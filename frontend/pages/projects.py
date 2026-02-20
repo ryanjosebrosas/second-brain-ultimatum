@@ -1,22 +1,15 @@
 """Projects page — Project lifecycle management."""
 
-import json
+import logging
 
 import streamlit as st
 
 from components.copy_button import copyable_output
 import api_client
 
-st.title(":material/folder: Projects")
+logger = logging.getLogger(__name__)
 
-STAGE_COLORS = {
-    "planning": "#3B82F6",
-    "executing": "#F59E0B",
-    "reviewing": "#A855F7",
-    "learning": "#22C55E",
-    "complete": "#10B981",
-    "archived": "#6B7280",
-}
+st.title(":material/folder: Projects")
 
 # --- Sidebar: Create Project ---
 with st.sidebar:
@@ -38,8 +31,9 @@ with st.sidebar:
             )
             st.success(f"Created: {new_name}")
             st.rerun()
-        except Exception as e:
-            st.error(f"Failed to create project: {e}")
+        except Exception:
+            logger.exception("Failed to create project")
+            st.error("Failed to create project. Please try again.")
 
 # --- Filters ---
 col_filter1, col_filter2 = st.columns(2)
@@ -68,8 +62,9 @@ try:
         projects = projects_response.get("items", projects_response.get("projects", []))
     else:
         projects = []
-except Exception as e:
-    st.error(f"Failed to load projects: {e}")
+except Exception:
+    logger.exception("Failed to load projects")
+    st.error("Failed to load projects. Please try again.")
     projects = []
 
 if not projects:
@@ -85,16 +80,19 @@ else:
         description = proj.get("description", "")
         created = proj.get("created_at", proj.get("date_created", ""))
 
-        # Stage badge
-        color = STAGE_COLORS.get(stage, "#6B7280")
-        badge = (
-            f'<span style="background-color:{color}22;color:{color};'
-            f'padding:2px 8px;border-radius:8px;font-size:0.85em;font-weight:600;">'
-            f"{stage}</span>"
-        )
+        # Stage indicator
+        stage_icons = {
+            "planning": ":material/edit_note:",
+            "executing": ":material/play_circle:",
+            "reviewing": ":material/rate_review:",
+            "learning": ":material/school:",
+            "complete": ":material/check_circle:",
+            "archived": ":material/archive:",
+        }
+        stage_icon = stage_icons.get(stage, ":material/circle:")
 
         with st.expander(f"{name}  {category}", expanded=False):
-            st.markdown(badge, unsafe_allow_html=True)
+            st.caption(f"{stage_icon} **{stage.upper()}**")
 
             if description:
                 st.markdown(description)
@@ -122,5 +120,6 @@ else:
                     api_client.delete_project(proj_id)
                     st.success(f"Deleted: {name}")
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to delete: {e}")
+                except Exception:
+                    logger.exception("Failed to delete project")
+                    st.error("Failed to delete project. Please try again.")

@@ -1,28 +1,37 @@
 """Content page — Content creation studio with type selector and review."""
 
-import json
+import logging
+from typing import Any
 
 import streamlit as st
 
 from components.copy_button import copyable_text, copyable_output
 import api_client
 
+logger = logging.getLogger(__name__)
+
 st.title(":material/edit: Content Studio")
 
 tab_create, tab_review = st.tabs(["Create", "Review"])
 
+
+@st.cache_data(ttl=300)
+def _get_cached_content_types() -> dict[str, Any]:
+    """Fetch content types with 5-minute cache to avoid API calls on every rerun."""
+    ct_response = api_client.get_content_types()
+    if isinstance(ct_response, list):
+        return {ct.get("slug", ct.get("name", "unknown")): ct for ct in ct_response}
+    elif isinstance(ct_response, dict):
+        return ct_response
+    return {}
+
+
 # --- Load content types ---
 try:
-    ct_response = api_client.get_content_types()
-    # Handle both list and dict response formats
-    if isinstance(ct_response, list):
-        content_types = {ct.get("slug", ct.get("name", "unknown")): ct for ct in ct_response}
-    elif isinstance(ct_response, dict):
-        content_types = ct_response
-    else:
-        content_types = {}
-except Exception as e:
-    st.error(f"Failed to load content types: {e}")
+    content_types: dict[str, Any] = _get_cached_content_types()
+except Exception:
+    logger.exception("Failed to load content types")
+    st.error("Failed to load content types. Please try again.")
     content_types = {}
 
 
@@ -53,18 +62,11 @@ with tab_create:
         selected_type = content_types[selected_key]
 
         # Show type details
-        ui_config = selected_type.get("ui_config", {})
-        color = ui_config.get("color", "#7C3AED")
-        st.markdown(
-            f'<div style="background-color:{color}22;border-left:4px solid {color};'
-            f'padding:8px 12px;border-radius:4px;margin-bottom:1rem;">'
-            f'<strong>{selected_type.get("name", selected_key)}</strong><br>'
-            f'<small>{selected_type.get("description", "")}</small><br>'
-            f'<small>Max words: {selected_type.get("max_words", "N/A")} | '
-            f'Mode: {selected_type.get("default_mode", "N/A")}</small>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        type_name = selected_type.get("name", selected_key)
+        type_desc = selected_type.get("description", "")
+        max_words = selected_type.get("max_words", "N/A")
+        mode = selected_type.get("default_mode", "N/A")
+        st.info(f"**{type_name}**\n\n{type_desc}\n\nMax words: {max_words} | Mode: {mode}")
 
         # Structure hint
         hint = selected_type.get("structure_hint", "")
@@ -130,8 +132,9 @@ with tab_create:
                         st.markdown("**Editorial Notes:**")
                         st.info(notes)
 
-                except Exception as e:
-                    st.error(f"Creation failed: {e}")
+                except Exception:
+                    logger.exception("Content creation failed")
+                    st.error("Content creation failed. Please try again.")
 
 
 # --- Review Tab ---
@@ -172,18 +175,20 @@ with tab_review:
 
                 # Verdict banner
                 verdict = result.get("verdict", "")
-                verdict_colors = {
-                    "READY TO SEND": "#22C55E",
-                    "NEEDS REVISION": "#F59E0B",
-                    "MAJOR REWORK": "#EF4444",
+                verdict_icons = {
+                    "READY TO SEND": ":material/check_circle:",
+                    "NEEDS REVISION": ":material/warning:",
+                    "MAJOR REWORK": ":material/error:",
                 }
-                v_color = verdict_colors.get(verdict, "#6B7280")
-                st.markdown(
-                    f'<div style="background-color:{v_color}22;border:2px solid {v_color};'
-                    f'padding:12px;border-radius:8px;text-align:center;margin-bottom:1rem;">'
-                    f'<h3 style="color:{v_color};margin:0;">{verdict}</h3></div>',
-                    unsafe_allow_html=True,
-                )
+                verdict_icon = verdict_icons.get(verdict, ":material/info:")
+                if verdict == "READY TO SEND":
+                    st.success(f"{verdict_icon} **{verdict}**")
+                elif verdict == "NEEDS REVISION":
+                    st.warning(f"{verdict_icon} **{verdict}**")
+                elif verdict == "MAJOR REWORK":
+                    st.error(f"{verdict_icon} **{verdict}**")
+                else:
+                    st.info(f"{verdict_icon} **{verdict}**")
 
                 # Overall score
                 overall = result.get("overall_score", 0)
@@ -203,22 +208,22 @@ with tab_review:
                         score = dim_score.get("score", 0)
                         status = dim_score.get("status", "")
 
-                        status_colors = {
-                            "pass": "#22C55E",
-                            "warning": "#F59E0B",
-                            "issue": "#EF4444",
+                        status_icons = {
+                            "pass": ":material/check_circle:",
+                            "warning": ":material/warning:",
+                            "issue": ":material/error:",
                         }
-                        s_color = status_colors.get(status, "#6B7280")
+                        s_icon = status_icons.get(status, "")
 
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             st.markdown(f"**{dim_name}**")
                             st.progress(min(score / 10.0, 1.0))
                         with col2:
-                            st.markdown(
-                                f'<span style="color:{s_color};font-weight:600;">'
-                                f"{score}/10</span>",
-                                unsafe_allow_html=True,
+                            st.metric(
+                                label=dim_name,
+                                value=f"{score}/10",
+                                label_visibility="collapsed",
                             )
 
                         # Strengths / Suggestions / Issues
@@ -256,5 +261,6 @@ with tab_review:
                     for s in next_steps:
                         st.markdown(f"- {s}")
 
-            except Exception as e:
-                st.error(f"Review failed: {e}")
+            except Exception:
+                logger.exception("Content review failed")
+                st.error("Review failed. Please try again.")

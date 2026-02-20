@@ -1,6 +1,7 @@
 """Dashboard page — Brain health metrics and growth tracking."""
 
 import logging
+from typing import Any
 
 import streamlit as st
 
@@ -19,27 +20,27 @@ logger = logging.getLogger(__name__)
 
 
 @st.cache_data(ttl=60)
-def _cached_get_health() -> dict:
+def _cached_get_health() -> dict[str, Any]:
     return get_health()
 
 
 @st.cache_data(ttl=60)
-def _cached_get_milestones() -> dict:
+def _cached_get_milestones() -> dict[str, Any]:
     return get_milestones()
 
 
 @st.cache_data(ttl=60)
-def _cached_get_growth() -> dict:
+def _cached_get_growth() -> dict[str, Any]:
     return get_growth()
 
 
 @st.cache_data(ttl=60)
-def _cached_get_quality() -> dict:
+def _cached_get_quality() -> dict[str, Any]:
     return get_quality()
 
 
 @st.cache_data(ttl=300)
-def _cached_get_setup() -> dict:
+def _cached_get_setup() -> dict[str, Any]:
     return get_setup()
 
 

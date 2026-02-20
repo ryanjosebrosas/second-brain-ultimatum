@@ -4,8 +4,10 @@ Transforms GraphitiService search results (list of relationship dicts)
 into nodes + edges for st-link-analysis (Cytoscape.js-based).
 """
 
+from typing import Any
 
-def relationships_to_graph(relationships: list[dict]) -> dict:
+
+def relationships_to_graph(relationships: list[dict[str, Any]]) -> dict[str, Any]:
     """Convert GraphitiService search results to st-link-analysis format.
 
     Input shape (from /api/graph/search):
@@ -47,7 +49,7 @@ def relationships_to_graph(relationships: list[dict]) -> dict:
     }
 
 
-def episodes_to_graph(episodes: list[dict]) -> dict:
+def episodes_to_graph(episodes: list[dict[str, Any]]) -> dict[str, Any]:
     """Convert episode list to graph format.
 
     Input shape (from /api/graph/episodes):

@@ -4,7 +4,6 @@ Wraps Streamlit widgets with consistent styling for metrics,
 progress bars, badges, checklists, and charts.
 """
 
-import html
 from typing import Any
 
 import pandas as pd
@@ -38,14 +37,8 @@ LEVEL_COLORS = {
 
 
 def _render_badge(text: str, color: str) -> None:
-    """Render a colored badge with HTML-escaped text."""
-    safe_text = html.escape(text)
-    st.markdown(
-        f'<span style="background-color:{color}22;color:{color};'
-        f'padding:4px 12px;border-radius:12px;font-weight:600;">'
-        f"{safe_text}</span>",
-        unsafe_allow_html=True,
-    )
+    """Render a badge using Streamlit-native caption with bold text."""
+    st.caption(f"**{text}**")
 
 
 def brain_level_badge(level: str) -> None:
