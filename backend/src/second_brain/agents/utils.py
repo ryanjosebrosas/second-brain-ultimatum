@@ -150,6 +150,134 @@ def deduplicate_results(
     return deduped
 
 
+def classify_query_complexity(
+    query: str,
+    word_threshold: int = 8,
+) -> str:
+    """Classify a query as simple, medium, or complex using heuristics.
+
+    Zero-latency classification — no LLM call needed. Uses word count,
+    question structure, and multi-topic indicators to determine retrieval depth.
+
+    Simple: short factual lookups (1-3 words, single topic)
+    Medium: topic-based recall (4-threshold words, single topic)
+    Complex: synthesis queries (above threshold words, multi-topic, or comparison)
+
+    Args:
+        query: The search query string.
+        word_threshold: Word count above which queries are classified as complex.
+
+    Returns:
+        "simple", "medium", or "complex"
+    """
+    words = query.split()
+    word_count = len(words)
+    query_lower = query.lower()
+
+    # Complexity signals
+    has_comparison = any(w in query_lower for w in [
+        "compare", "contrast", "difference", "versus", "vs",
+        "better", "worse", "trade-off", "pros and cons",
+    ])
+    has_synthesis = any(w in query_lower for w in [
+        "synthesize", "combine", "integrate", "across",
+        "all", "everything", "comprehensive", "overview",
+    ])
+    has_multi_topic = " and " in query_lower or " or " in query_lower
+    multi_question = query.count("?") > 1
+
+    # Classification
+    if word_count <= 3 and not has_comparison and not has_synthesis:
+        return "simple"
+    if (word_count > word_threshold
+            or has_comparison
+            or has_synthesis
+            or multi_question):
+        return "complex"
+    return "medium"
+
+
+def normalize_results(
+    results: list[dict],
+    source: str,
+    content_key: str = "memory",
+    score_key: str = "score",
+) -> list[dict]:
+    """Normalize search results from any source into a canonical format.
+
+    Canonical format: {"memory": str, "score": float, "source": str}
+    This enables deduplicate_results() and rerank_memories() to work on
+    merged results from Mem0, pgvector, hybrid search, and Graphiti.
+
+    Args:
+        results: Raw results from any search source.
+        source: Source identifier (e.g., "mem0", "pgvector:patterns", "keyword:memory_content").
+        content_key: Key containing the text content in source results.
+        score_key: Key containing the relevance score in source results.
+
+    Returns:
+        List of normalized dicts with "memory", "score", and "source" keys.
+    """
+    normalized = []
+    for r in results:
+        content = r.get(content_key, r.get("memory", r.get("result", r.get("content", ""))))
+        score = r.get(score_key, r.get("score", r.get("similarity", r.get("relevance_score", 0))))
+        if not content:
+            continue
+        normalized.append({
+            "memory": content,
+            "score": float(score) if score else 0.0,
+            "source": source,
+            # Preserve original dict for metadata access
+            "_original": r,
+        })
+    return normalized
+
+
+async def parallel_search_gather(
+    searches: list[tuple[str, object]],
+) -> tuple[list[dict], list[str]]:
+    """Run multiple search coroutines in parallel with fault-tolerant error handling.
+
+    Each search source runs independently — individual failures don't abort the gather.
+    Failed sources are logged and excluded from results.
+
+    Args:
+        searches: List of (source_name, coroutine) tuples.
+                 source_name is used for logging and result tagging.
+
+    Returns:
+        Tuple of (all_results, source_names):
+        - all_results: Flat list of normalized result dicts from all successful sources.
+        - source_names: List of source names that contributed results.
+    """
+    import asyncio as _asyncio
+
+    source_names_input = [name for name, _ in searches]
+    coros = [coro for _, coro in searches]
+
+    results = await _asyncio.gather(*coros, return_exceptions=True)
+
+    all_results: list[dict] = []
+    contributing_sources: list[str] = []
+
+    for name, result in zip(source_names_input, results):
+        if isinstance(result, BaseException):
+            logger.debug("Parallel search source '%s' failed: %s", name, result)
+            continue
+        if isinstance(result, list) and result:
+            all_results.extend(result)
+            contributing_sources.append(name)
+        elif hasattr(result, "memories") and result.memories:
+            # Handle SearchResult objects from MemoryService
+            all_results.extend(
+                normalize_results(result.memories, source=name)
+            )
+            contributing_sources.append(name)
+
+    return all_results, contributing_sources
+
+
 async def search_with_graph_fallback(
     deps: "BrainDeps",
     query: str,

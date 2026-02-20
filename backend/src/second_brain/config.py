@@ -311,6 +311,12 @@ class BrainConfig(BaseSettings):
         le=1.0,
         description="Cosine similarity threshold for deduplicating results across sources. Range: 0.5-1.0.",
     )
+    complex_query_word_threshold: int = Field(
+        default=8,
+        ge=3,
+        le=30,
+        description="Queries with more words than this are classified as 'complex'. Range: 3-30.",
+    )
 
     # Service-level timeouts (used in sub-plan 02)
     service_timeout_seconds: int = Field(

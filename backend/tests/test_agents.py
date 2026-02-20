@@ -1549,3 +1549,143 @@ class TestAskAgentRetrieval:
         result = await tool.function(mock_ctx, query="writing patterns")
         # hybrid_search should have been called for patterns table
         mock_ctx.deps.storage_service.hybrid_search.assert_called_once()
+
+
+class TestQueryComplexity:
+    """Tests for classify_query_complexity heuristic."""
+
+    def test_simple_query(self):
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("patterns") == "simple"
+        assert classify_query_complexity("voice guide") == "simple"
+        assert classify_query_complexity("client list") == "simple"
+
+    def test_medium_query(self):
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("client voice patterns for emails") == "medium"
+        assert classify_query_complexity("what are our best practices") == "medium"
+
+    def test_complex_query_by_length(self):
+        from second_brain.agents.utils import classify_query_complexity
+        long_query = "compare all our enterprise patterns with the new healthcare engagement and synthesize recommendations"
+        assert classify_query_complexity(long_query) == "complex"
+
+    def test_complex_query_by_comparison(self):
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("compare email patterns versus linkedin") == "complex"
+
+    def test_complex_query_by_synthesis(self):
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("comprehensive overview of all patterns") == "complex"
+
+    def test_complex_query_multi_question(self):
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("what works? what doesn't?") == "complex"
+
+    def test_custom_threshold(self):
+        from second_brain.agents.utils import classify_query_complexity
+        # With threshold=4, a 5-word query becomes complex
+        assert classify_query_complexity("client voice patterns for emails", word_threshold=4) == "complex"
+
+
+class TestNormalizeResults:
+    """Tests for normalize_results cross-source adapter."""
+
+    def test_normalize_mem0_results(self):
+        from second_brain.agents.utils import normalize_results
+        mem0 = [{"memory": "test content", "score": 0.9}]
+        result = normalize_results(mem0, source="mem0")
+        assert len(result) == 1
+        assert result[0]["memory"] == "test content"
+        assert result[0]["score"] == 0.9
+        assert result[0]["source"] == "mem0"
+
+    def test_normalize_pgvector_results(self):
+        from second_brain.agents.utils import normalize_results
+        pg = [{"content": "pattern text", "similarity": 0.85, "title": "Hook First"}]
+        result = normalize_results(pg, source="pgvector:patterns", content_key="content", score_key="similarity")
+        assert result[0]["memory"] == "pattern text"
+        assert result[0]["score"] == 0.85
+        assert result[0]["source"] == "pgvector:patterns"
+        assert result[0]["_original"]["title"] == "Hook First"
+
+    def test_normalize_skips_empty_content(self):
+        from second_brain.agents.utils import normalize_results
+        results = [{"memory": "", "score": 0.5}, {"memory": "real", "score": 0.9}]
+        normalized = normalize_results(results, source="test")
+        assert len(normalized) == 1
+
+    def test_normalize_empty_input(self):
+        from second_brain.agents.utils import normalize_results
+        assert normalize_results([], source="test") == []
+
+    def test_normalize_hybrid_results(self):
+        from second_brain.agents.utils import normalize_results
+        hybrid = [{"content": "hybrid match", "similarity": 0.78, "search_type": "hybrid"}]
+        result = normalize_results(hybrid, source="hybrid:memory_content", content_key="content", score_key="similarity")
+        assert result[0]["source"] == "hybrid:memory_content"
+        assert result[0]["_original"]["search_type"] == "hybrid"
+
+
+class TestParallelSearchGather:
+    """Tests for parallel_search_gather fault-tolerant fan-out."""
+
+    async def test_all_succeed(self):
+        from second_brain.agents.utils import parallel_search_gather
+        async def source_a():
+            return [{"memory": "a", "score": 0.9, "source": "a"}]
+        async def source_b():
+            return [{"memory": "b", "score": 0.8, "source": "b"}]
+        results, sources = await parallel_search_gather([("a", source_a()), ("b", source_b())])
+        assert len(results) == 2
+        assert "a" in sources
+        assert "b" in sources
+
+    async def test_one_fails_gracefully(self):
+        from second_brain.agents.utils import parallel_search_gather
+        async def good():
+            return [{"memory": "ok", "score": 0.9, "source": "good"}]
+        async def bad():
+            raise ConnectionError("network error")
+        results, sources = await parallel_search_gather([("good", good()), ("bad", bad())])
+        assert len(results) == 1
+        assert "good" in sources
+        assert "bad" not in sources
+
+    async def test_all_fail_returns_empty(self):
+        from second_brain.agents.utils import parallel_search_gather
+        async def fail1():
+            raise TimeoutError("timeout")
+        async def fail2():
+            raise ValueError("bad")
+        results, sources = await parallel_search_gather([("f1", fail1()), ("f2", fail2())])
+        assert results == []
+        assert sources == []
+
+    async def test_handles_search_result_objects(self):
+        from second_brain.agents.utils import parallel_search_gather
+        from second_brain.services.search_result import SearchResult
+        async def mem0_search():
+            return SearchResult(memories=[{"memory": "from mem0", "score": 0.88}], relations=[])
+        results, sources = await parallel_search_gather([("mem0", mem0_search())])
+        assert len(results) == 1
+        assert results[0]["memory"] == "from mem0"
+        assert "mem0" in sources
+
+
+class TestChiefOfStaffComplexity:
+    """Tests for chief_of_staff complexity tool."""
+
+    def test_classify_complexity_tool_exists(self):
+        from second_brain.agents.chief_of_staff import chief_of_staff
+        tools = list(chief_of_staff._function_toolset.tools)
+        assert "classify_complexity" in tools
+
+    async def test_classify_complexity_returns_string(self, mock_deps):
+        from second_brain.agents.chief_of_staff import chief_of_staff
+        from unittest.mock import MagicMock
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        tool = chief_of_staff._function_toolset.tools["classify_complexity"]
+        result = await tool.function(ctx, query="patterns")
+        assert "simple" in result.lower()

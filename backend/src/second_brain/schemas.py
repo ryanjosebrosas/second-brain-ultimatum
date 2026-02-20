@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 ConfidenceLevel = Literal["LOW", "MEDIUM", "HIGH"]
+QueryComplexity = Literal["simple", "medium", "complex"]
 
 
 class MultimodalContentBlock(BaseModel):
@@ -73,6 +74,10 @@ class RecallResult(BaseModel):
     summary: str = Field(
         default="",
         description="Brief summary of what was found",
+    )
+    search_sources: list[str] = Field(
+        default_factory=list,
+        description="Sources that contributed results (e.g., 'mem0', 'pgvector:patterns', 'keyword:memory_content')",
     )
 
 
@@ -908,7 +913,7 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
 # --- Chief of Staff / Orchestration ---
 
 AgentRoute = Literal[
-    "recall", "ask", "learn", "create", "review",
+    "recall", "recall_deep", "ask", "learn", "create", "review",
     "clarity", "synthesizer", "template_builder",
     "coach", "pmo", "email", "specialist",
     "pipeline",
@@ -929,6 +934,10 @@ class RoutingDecision(BaseModel):
         description="If pipeline mode, ordered list of agents to chain. Empty for single agent.",
     )
     confidence: ConfidenceLevel = Field(default="MEDIUM", description="Routing confidence")
+    query_complexity: QueryComplexity = Field(
+        default="medium",
+        description="Estimated query complexity: simple (fact lookup), medium (topic recall), complex (synthesis across sources)",
+    )
 
 
 # --- Content Pipeline Agents ---

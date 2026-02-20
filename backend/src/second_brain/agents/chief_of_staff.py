@@ -9,7 +9,7 @@ import logging
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-from second_brain.agents.utils import format_memories, tool_error
+from second_brain.agents.utils import classify_query_complexity, format_memories, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import RoutingDecision
 
@@ -38,6 +38,12 @@ chief_of_staff = Agent(
         "- Email operations → 'email'\n"
         "- Claude Code questions → 'specialist'\n"
         "- Multi-step workflows → 'pipeline' with pipeline_steps filled\n\n"
+        "COMPLEXITY RULES:\n"
+        "- Use classify_complexity tool to assess query complexity before routing.\n"
+        "- Simple queries (fact lookups) → 'recall' (fast path)\n"
+        "- Medium queries (topic recall) → 'recall' (standard path)\n"
+        "- Complex queries (synthesis, comparison, multi-source) → 'recall_deep' (parallel sub-agents)\n"
+        "- Set query_complexity in your routing decision to match.\n\n"
         "PIPELINE MODE: When a request requires multiple agents in sequence, "
         "set target_agent='pipeline' and fill pipeline_steps with the ordered "
         "list of agents. Common pipelines:\n"
@@ -140,3 +146,20 @@ async def check_active_projects(ctx: RunContext[BrainDeps]) -> str:
         return "Active projects:\n" + "\n".join(lines)
     except Exception as e:
         return tool_error("check_active_projects", e)
+
+
+@chief_of_staff.tool
+async def classify_complexity(
+    ctx: RunContext[BrainDeps], query: str
+) -> str:
+    """Classify query complexity to determine retrieval depth.
+
+    Returns 'simple', 'medium', or 'complex' with explanation."""
+    try:
+        complexity = classify_query_complexity(
+            query,
+            word_threshold=ctx.deps.config.complex_query_word_threshold,
+        )
+        return f"Complexity: {complexity}"
+    except Exception as e:
+        return tool_error("classify_complexity", e)
