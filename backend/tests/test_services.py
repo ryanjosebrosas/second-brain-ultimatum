@@ -133,7 +133,7 @@ class TestVoyageServiceRetrieval:
         result = await voyage.rerank_with_instructions(
             "test query", docs, instruction=None, top_k=2,
         )
-        assert len(result) == 1  # mock returns 1 result
+        assert len(result) == 3  # mock returns 3 reranked results
 
     async def test_rerank_with_instructions_callable(self, mock_deps):
         """rerank_with_instructions should be callable with instruction."""

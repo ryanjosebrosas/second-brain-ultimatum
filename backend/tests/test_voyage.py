@@ -240,6 +240,67 @@ class TestRerankMemories:
         assert result[0]["result"] == "content A"
 
 
+class TestRerankIndexAlignment:
+    """Regression tests for rerank_memories index mapping after empty-doc filtering."""
+
+    async def test_rerank_with_empty_memories_skipped(self, mock_deps):
+        """When some memories have empty text, reranker indices must map to correct originals."""
+        from second_brain.agents.utils import rerank_memories
+
+        memories = [
+            {"memory": "First memory", "score": 0.9},
+            {"memory": "", "score": 0.8},           # empty — will be filtered
+            {"memory": "Third memory", "score": 0.7},
+            {"memory": "", "score": 0.6},           # empty — will be filtered
+            {"memory": "Fifth memory", "score": 0.5},
+        ]
+        # After filtering empties: documents = ["First memory", "Third memory", "Fifth memory"]
+        # Reranker returns indices relative to filtered list:
+        mock_deps.voyage_service.rerank = AsyncMock(return_value=[
+            {"index": 2, "document": "Fifth memory", "relevance_score": 0.95},
+            {"index": 0, "document": "First memory", "relevance_score": 0.85},
+        ])
+
+        result = await rerank_memories(mock_deps, "test query", memories)
+
+        # Index 2 in filtered = "Fifth memory" = memories[4] (original index 4)
+        assert result[0]["memory"] == "Fifth memory"
+        assert result[0]["rerank_score"] == 0.95
+        # Index 0 in filtered = "First memory" = memories[0] (original index 0)
+        assert result[1]["memory"] == "First memory"
+        assert result[1]["rerank_score"] == 0.85
+
+    async def test_rerank_all_empty_returns_original(self, mock_deps):
+        """If all memories have empty text, return original list unchanged."""
+        from second_brain.agents.utils import rerank_memories
+
+        memories = [
+            {"result": "", "score": 0.9},
+            {"score": 0.8},  # no memory or result key
+        ]
+        result = await rerank_memories(mock_deps, "query", memories)
+        assert result == memories  # unchanged
+
+    async def test_rerank_no_empties_indices_unchanged(self, mock_deps):
+        """When no empties filtered, indices map 1:1."""
+        from second_brain.agents.utils import rerank_memories
+
+        memories = [
+            {"memory": "A", "score": 0.9},
+            {"memory": "B", "score": 0.8},
+            {"memory": "C", "score": 0.7},
+        ]
+        mock_deps.voyage_service.rerank = AsyncMock(return_value=[
+            {"index": 1, "document": "B", "relevance_score": 0.99},
+            {"index": 2, "document": "C", "relevance_score": 0.88},
+        ])
+
+        result = await rerank_memories(mock_deps, "query", memories)
+        assert result[0]["memory"] == "B"
+        assert result[1]["memory"] == "C"
+        assert len(result) == 2
+
+
 class TestEmbeddingServiceDelegation:
     @patch("second_brain.services.voyage.VoyageService")
     async def test_uses_voyage_when_key_set(self, mock_vs_cls, tmp_path):

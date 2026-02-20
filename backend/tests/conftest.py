@@ -246,10 +246,14 @@ def mock_voyage_service():
     service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
     service.multimodal_embed = AsyncMock(return_value=[[0.1] * 1024])
     service.rerank = AsyncMock(return_value=[
-        {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
+        {"index": 2, "document": "Third doc", "relevance_score": 0.95},
+        {"index": 0, "document": "First doc", "relevance_score": 0.85},
+        {"index": 1, "document": "Second doc", "relevance_score": 0.75},
     ])
     service.rerank_with_instructions = AsyncMock(return_value=[
-        {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
+        {"index": 2, "document": "Third doc", "relevance_score": 0.95},
+        {"index": 0, "document": "First doc", "relevance_score": 0.85},
+        {"index": 1, "document": "Second doc", "relevance_score": 0.75},
     ])
     service.close = AsyncMock()
     return service

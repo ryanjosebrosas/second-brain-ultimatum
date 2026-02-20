@@ -1988,3 +1988,112 @@ class TestComplexityAwareRouting:
             assert "Deep Recall" in result or "No results" in result or "deep" in result.lower()
         finally:
             mcp_mod._get_deps = original_get_deps
+
+
+class TestEmbedQueryFailureGraceful:
+    """Tests that embed_query failure doesn't crash the recall pipeline."""
+
+    @pytest.fixture
+    def mock_deps_embed_fail(self, mock_deps):
+        mock_deps.embedding_service.embed_query = AsyncMock(
+            side_effect=ConnectionError("Voyage API unavailable")
+        )
+        return mock_deps
+
+    async def test_deep_recall_survives_embed_failure(self, mock_deps_embed_fail):
+        """deep_recall_search returns Mem0 results even when embedding fails."""
+        from second_brain.agents.utils import deep_recall_search
+        result = await deep_recall_search(mock_deps_embed_fail, "test query")
+        assert isinstance(result, dict)
+        assert "memories" in result
+        # Should still have Mem0 results despite embed failure
+        assert "mem0" in result.get("search_sources", [])
+
+    async def test_deep_recall_no_hybrid_on_embed_failure(self, mock_deps_embed_fail):
+        """When embedding fails, hybrid search is not attempted."""
+        from second_brain.agents.utils import deep_recall_search
+        result = await deep_recall_search(mock_deps_embed_fail, "test query")
+        sources = result.get("search_sources", [])
+        # No hybrid or semantic sources should be present
+        assert not any("hybrid" in s for s in sources)
+
+
+class TestParallelSearchGatherTimeout:
+    """Tests for per-source timeout in parallel_search_gather."""
+
+    async def test_slow_source_times_out_others_succeed(self):
+        """A slow source should timeout while fast sources return results."""
+        import asyncio
+        from second_brain.agents.utils import parallel_search_gather
+
+        async def fast_source():
+            return [{"content": "fast result", "score": 0.9}]
+
+        async def slow_source():
+            await asyncio.sleep(10)  # will timeout
+            return [{"content": "slow result", "score": 0.8}]
+
+        searches = [
+            ("fast", fast_source()),
+            ("slow", slow_source()),
+        ]
+        results, sources = await parallel_search_gather(searches, per_source_timeout=0.1)
+        assert "fast" in sources
+        assert "slow" not in sources
+        assert len(results) == 1
+
+    async def test_no_timeout_when_none(self):
+        """When per_source_timeout is None, no wrapping occurs."""
+        from second_brain.agents.utils import parallel_search_gather
+
+        async def source():
+            return [{"content": "result", "score": 0.9}]
+
+        searches = [("src", source())]
+        results, sources = await parallel_search_gather(searches, per_source_timeout=None)
+        assert "src" in sources
+        assert len(results) == 1
+
+    async def test_all_sources_timeout_returns_empty(self):
+        """If all sources timeout, return empty results."""
+        import asyncio
+        from second_brain.agents.utils import parallel_search_gather
+
+        async def slow():
+            await asyncio.sleep(10)
+            return [{"content": "never", "score": 0.9}]
+
+        searches = [("s1", slow()), ("s2", slow())]
+        results, sources = await parallel_search_gather(searches, per_source_timeout=0.1)
+        assert results == []
+        assert sources == []
+
+
+class TestFormatMemoriesSourceTag:
+    """Tests that format_memories includes source attribution."""
+
+    def test_source_tag_included(self):
+        from second_brain.agents.utils import format_memories
+        memories = [
+            {"memory": "Test content", "score": 0.9, "source": "mem0"},
+        ]
+        result = format_memories(memories)
+        assert "[mem0]" in result
+
+    def test_no_source_tag_when_absent(self):
+        from second_brain.agents.utils import format_memories
+        memories = [
+            {"memory": "Test content", "score": 0.9},
+        ]
+        result = format_memories(memories)
+        assert "[mem0]" not in result
+
+    def test_multiple_sources_tagged(self):
+        from second_brain.agents.utils import format_memories
+        memories = [
+            {"memory": "From mem0", "score": 0.9, "source": "mem0"},
+            {"memory": "From hybrid", "score": 0.8, "source": "hybrid:memory_content"},
+        ]
+        result = format_memories(memories)
+        assert "[mem0]" in result
+        assert "[hybrid:memory_content]" in result

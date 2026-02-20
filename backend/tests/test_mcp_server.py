@@ -2335,3 +2335,43 @@ class TestToolDescriptionQuality:
         empty = [name for name, tool in tools.items()
                  if not (tool.description or "").strip()]
         assert not empty, f"Tools with empty descriptions: {empty}"
+
+
+class TestQuickRecallExceptionHandler:
+    """Tests that quick_recall handles unexpected exceptions gracefully."""
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unexpected_exception_returns_error_string(self, mock_deps_fn):
+        """General exceptions return a user-friendly error string, not crash."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        # Trigger RuntimeError inside the try block (during search)
+        deps.memory_service.search = AsyncMock(side_effect=RuntimeError("unexpected"))
+        deps.embedding_service = None
+        deps.voyage_service = None
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test query")
+        assert isinstance(result, str)
+        assert "error" in result.lower() or "RuntimeError" in result
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_timeout_returns_timeout_message(self, mock_deps_fn):
+        """TimeoutError returns specific timeout message."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.001
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(side_effect=TimeoutError())
+        deps.embedding_service = None
+        deps.voyage_service = None
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test query")
+        assert isinstance(result, str)
+        assert "timed out" in result.lower() or "error" in result.lower()
