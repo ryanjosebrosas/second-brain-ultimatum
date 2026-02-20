@@ -3,9 +3,13 @@
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable
 from datetime import date, datetime, timedelta, timezone
+from typing import TypeVar
 
 from supabase import create_client, Client
+
+_T = TypeVar("_T")
 
 from second_brain.config import BrainConfig
 from second_brain.schemas import (
@@ -49,7 +53,7 @@ class StorageService:
             config.supabase_key,
         )
 
-    async def _with_timeout(self, coro):
+    async def _with_timeout(self, coro: Awaitable[_T]) -> _T:
         """Wrap an awaitable with the configured service timeout."""
         async with asyncio.timeout(self._timeout):
             return await coro

@@ -2,8 +2,12 @@
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent, ModelRetry, RunContext
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
 
 from second_brain.agents.utils import (
     format_relations,
@@ -154,7 +158,7 @@ async def load_graph_context(
 async def run_full_review(
     content: str,
     deps: BrainDeps,
-    model,
+    model: "Model | None",
     content_type: str | None = None,
 ) -> ReviewResult:
     """Run dimension reviews in parallel and aggregate into a ReviewResult.

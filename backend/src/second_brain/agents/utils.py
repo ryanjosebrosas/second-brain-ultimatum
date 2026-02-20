@@ -1,9 +1,14 @@
 """Shared utilities for Second Brain agents."""
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pydantic_ai import Agent
+    from pydantic_ai.models import Model
+
+    from second_brain.config import BrainConfig
     from second_brain.deps import BrainDeps
 
 logger = logging.getLogger(__name__)
@@ -230,8 +235,8 @@ async def run_review_learn_pipeline(
     content: str,
     content_type: str,
     deps: "BrainDeps",
-    model,
-) -> dict:
+    model: "Model | None",
+) -> dict[str, Any]:
     """Run the review->learn pipeline: review content, then learn from the review results.
 
     Returns dict with 'review' (ReviewResult) and 'learn' (LearnResult) keys.
@@ -273,7 +278,7 @@ async def run_review_learn_pipeline(
     }
 
 
-def format_pattern_registry(patterns: list[dict], config=None) -> str:
+def format_pattern_registry(patterns: list[dict[str, Any]], config: "BrainConfig | None" = None) -> str:
     """Format patterns as a registry table for display."""
     if not patterns:
         return "No patterns in registry."
@@ -319,13 +324,13 @@ def format_pattern_registry(patterns: list[dict], config=None) -> str:
 
 
 async def run_agent_with_retry(
-    agent,
+    agent: "Agent[BrainDeps, Any]",
     prompt: str,
     deps: "BrainDeps",
-    model=None,
+    model: "Model | None" = None,
     max_attempts: int = 3,
-    validate_fn=None,
-):
+    validate_fn: Callable[..., Any] | None = None,
+) -> Any:
     """Run an agent with optional external validation and retry.
 
     If validate_fn is provided, it receives the agent output and should return
@@ -451,9 +456,9 @@ async def run_pipeline(
     steps: list[str],
     initial_prompt: str,
     deps: "BrainDeps",
-    model=None,
+    model: "Model | None" = None,
     content_type: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Run a multi-agent pipeline, chaining results between agents.
 
     Each step's output is formatted and prepended to the next step's prompt.

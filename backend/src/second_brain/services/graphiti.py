@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -30,7 +31,7 @@ class GraphitiService:
         self._backend: str | None = None
         self._timeout: int = getattr(config, "service_timeout_seconds", 15)
 
-    async def _ensure_init(self):
+    async def _ensure_init(self) -> None:
         """Lazy async initialization with Neo4j primary → FalkorDB fallback."""
         if self._initialized:
             return
@@ -86,7 +87,7 @@ class GraphitiService:
         logger.error("Graphiti initialization failed — no backend available")
         self._init_failed = True
 
-    def _build_providers(self):
+    def _build_providers(self) -> tuple[Any, Any, Any]:
         """Build LLM, embedder, and cross-encoder providers."""
         from graphiti_core.llm_client.config import LLMConfig
 
@@ -899,7 +900,7 @@ class GraphitiService:
             logger.debug("Graphiti error detail: %s", e)
             return 0
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the Graphiti client connection."""
         if self._client:
             await self._client.close()

@@ -1,9 +1,14 @@
 """FastAPI dependency injection for BrainDeps and model."""
 
 import logging
+from typing import TYPE_CHECKING
+
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 from second_brain.deps import BrainDeps
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +21,7 @@ def get_deps(request: Request) -> BrainDeps:
     return deps
 
 
-def get_model(request: Request):
+def get_model(request: Request) -> "Model | None":
     """Get LLM model from app state. Returns None if not set."""
     return getattr(request.app.state, "model", None)
 

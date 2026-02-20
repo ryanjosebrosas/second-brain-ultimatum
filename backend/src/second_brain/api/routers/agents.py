@@ -2,8 +2,12 @@
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
 
 from second_brain.deps import BrainDeps
 from second_brain.api.deps import get_deps, get_model
@@ -33,7 +37,7 @@ router = APIRouter(tags=["Agents"])
 
 
 @router.post("/recall")
-async def recall(body: RecallRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def recall(body: RecallRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Search memory for relevant context, patterns, and past experiences."""
     timeout = deps.config.api_timeout_seconds
     try:
@@ -47,7 +51,7 @@ async def recall(body: RecallRequest, deps: BrainDeps = Depends(get_deps), model
 
 
 @router.post("/ask")
-async def ask(body: AskRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def ask(body: AskRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Ask the Second Brain a question."""
     timeout = deps.config.api_timeout_seconds
     try:
@@ -59,7 +63,7 @@ async def ask(body: AskRequest, deps: BrainDeps = Depends(get_deps), model=Depen
 
 
 @router.post("/learn")
-async def learn(body: LearnRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def learn(body: LearnRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Extract patterns and learnings from content."""
     timeout = deps.config.api_timeout_seconds
     prompt = f"Extract learnings from this work session (category: {body.category}):\n\n{body.content}"
@@ -72,7 +76,7 @@ async def learn(body: LearnRequest, deps: BrainDeps = Depends(get_deps), model=D
 
 
 @router.post("/create")
-async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Draft content in your voice using brain knowledge."""
     registry = deps.get_content_type_registry()
     type_config = await registry.get(body.content_type)
@@ -143,7 +147,7 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
 
 
 @router.post("/review")
-async def review_content(body: ReviewContentRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def review_content(body: ReviewContentRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Review content quality with adaptive dimension scoring."""
     timeout = deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
     try:
@@ -156,7 +160,7 @@ async def review_content(body: ReviewContentRequest, deps: BrainDeps = Depends(g
 
 
 @router.post("/coaching")
-async def coaching_session(body: CoachingRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def coaching_session(body: CoachingRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Get daily accountability coaching."""
     from second_brain.agents.coach import coach_agent
     prompt = f"Session type: {body.session_type}\n\n{body.request}"
@@ -170,7 +174,7 @@ async def coaching_session(body: CoachingRequest, deps: BrainDeps = Depends(get_
 
 
 @router.post("/prioritize")
-async def prioritize_tasks(body: PrioritizeRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def prioritize_tasks(body: PrioritizeRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Score and prioritize tasks using PMO methodology."""
     from second_brain.agents.pmo import pmo_agent
     timeout = deps.config.api_timeout_seconds
@@ -183,7 +187,7 @@ async def prioritize_tasks(body: PrioritizeRequest, deps: BrainDeps = Depends(ge
 
 
 @router.post("/email")
-async def compose_email(body: EmailRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def compose_email(body: EmailRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Compose emails with brand voice."""
     from second_brain.agents.email_agent import email_agent
     timeout = deps.config.api_timeout_seconds
@@ -196,7 +200,7 @@ async def compose_email(body: EmailRequest, deps: BrainDeps = Depends(get_deps),
 
 
 @router.post("/specialist")
-async def ask_specialist(body: SpecialistRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def ask_specialist(body: SpecialistRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Ask a specialist question about Claude Code or Pydantic AI."""
     from second_brain.agents.specialist import specialist_agent
     timeout = deps.config.api_timeout_seconds
@@ -209,7 +213,7 @@ async def ask_specialist(body: SpecialistRequest, deps: BrainDeps = Depends(get_
 
 
 @router.post("/pipeline")
-async def run_pipeline(body: PipelineRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def run_pipeline(body: PipelineRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Run a multi-agent pipeline."""
     from second_brain.agents.utils import run_pipeline as _run_pipeline
 
@@ -237,7 +241,7 @@ async def run_pipeline(body: PipelineRequest, deps: BrainDeps = Depends(get_deps
 
 
 @router.post("/clarity")
-async def analyze_clarity(body: ClarityRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def analyze_clarity(body: ClarityRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Analyze content for clarity and readability."""
     from second_brain.agents.clarity import clarity_agent
     timeout = deps.config.api_timeout_seconds
@@ -250,7 +254,7 @@ async def analyze_clarity(body: ClarityRequest, deps: BrainDeps = Depends(get_de
 
 
 @router.post("/synthesize")
-async def synthesize_feedback(body: SynthesizeRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def synthesize_feedback(body: SynthesizeRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Consolidate review findings into actionable themes."""
     from second_brain.agents.synthesizer import synthesizer_agent
     timeout = deps.config.api_timeout_seconds
@@ -263,7 +267,7 @@ async def synthesize_feedback(body: SynthesizeRequest, deps: BrainDeps = Depends
 
 
 @router.post("/templates")
-async def find_templates(body: TemplateRequest, deps: BrainDeps = Depends(get_deps), model=Depends(get_model)):
+async def find_templates(body: TemplateRequest, deps: BrainDeps = Depends(get_deps), model: "Model | None" = Depends(get_model)) -> dict[str, Any]:
     """Analyze a deliverable for reusable template opportunities."""
     from second_brain.agents.template_builder import template_builder_agent
     timeout = deps.config.api_timeout_seconds

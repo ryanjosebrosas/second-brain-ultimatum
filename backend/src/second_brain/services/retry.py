@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from tenacity import (
     before_sleep_log,
@@ -30,7 +32,7 @@ class RetryConfig:
 DEFAULT_RETRY = RetryConfig()
 
 
-async def async_retry(func, *args, config: RetryConfig | None = None, **kwargs):
+async def async_retry(func: Callable[..., Any], *args: Any, config: RetryConfig | None = None, **kwargs: Any) -> Any:
     """Run a sync function in a thread with retry on transient failures."""
     cfg = config or DEFAULT_RETRY
 

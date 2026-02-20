@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from second_brain.deps import BrainDeps
@@ -177,7 +177,7 @@ class HealthService:
 
         return metrics
 
-    async def compute_milestones(self, deps: "BrainDeps") -> dict:
+    async def compute_milestones(self, deps: "BrainDeps") -> dict[str, Any]:
         """Compute brain growth level and milestone progress."""
         from second_brain.schemas import (
             BRAIN_MILESTONES, BRAIN_LEVEL_THRESHOLDS,
@@ -256,7 +256,7 @@ class HealthService:
             "avg_review_score": growth.avg_review_score,
         }
 
-    async def compute_quality_trend(self, deps: "BrainDeps", days: int = 30) -> dict:
+    async def compute_quality_trend(self, deps: "BrainDeps", days: int = 30) -> dict[str, Any]:
         """Compute quality trend from review history."""
         trending_data = await deps.storage_service.get_quality_trending(days=days)
 
@@ -296,7 +296,7 @@ class HealthService:
             "needs_work_count": trending_data.get("needs_work_count", 0),
         }
 
-    async def check_confidence_downgrades(self, deps: "BrainDeps") -> list[dict]:
+    async def check_confidence_downgrades(self, deps: "BrainDeps") -> list[dict[str, Any]]:
         """Check for patterns that should be downgraded due to consecutive failures."""
         downgrades = []
         try:
@@ -348,7 +348,7 @@ class HealthService:
 
         return downgrades
 
-    async def compute_setup_status(self, deps: "BrainDeps") -> dict:
+    async def compute_setup_status(self, deps: "BrainDeps") -> dict[str, Any]:
         """Check brain onboarding/setup completion status."""
         status = await deps.storage_service.get_setup_status()
 

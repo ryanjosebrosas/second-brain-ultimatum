@@ -7,6 +7,7 @@ BrainDeps injection.
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class EmailServiceBase(ABC):
@@ -83,55 +84,55 @@ class TaskManagementServiceBase(ABC):
 class StubEmailService(EmailServiceBase):
     """Stub email service that logs operations without sending."""
 
-    async def send(self, to, subject, body, cc=None):
+    async def send(self, to: list[str], subject: str, body: str, cc: list[str] | None = None) -> dict[str, Any]:
         return {"status": "stub", "to": to, "subject": subject}
 
-    async def draft(self, to, subject, body):
+    async def draft(self, to: list[str], subject: str, body: str) -> dict[str, Any]:
         return {"status": "stub_draft", "to": to, "subject": subject}
 
-    async def search(self, query, limit=10):
+    async def search(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         return []
 
-    async def get_thread(self, thread_id):
+    async def get_thread(self, thread_id: str) -> list[dict[str, Any]]:
         return []
 
 
 class StubCalendarService(CalendarServiceBase):
     """Stub calendar service that returns empty results."""
 
-    async def get_events(self, date, days=1):
+    async def get_events(self, date: str, days: int = 1) -> list[dict[str, Any]]:
         return []
 
-    async def create_event(self, summary, start, end, description=""):
+    async def create_event(self, summary: str, start: str, end: str, description: str = "") -> dict[str, Any]:
         return {"status": "stub", "summary": summary, "start": start, "end": end}
 
-    async def get_available_slots(self, date, duration_minutes=60):
+    async def get_available_slots(self, date: str, duration_minutes: int = 60) -> list[dict[str, Any]]:
         return []
 
 
 class StubAnalyticsService(AnalyticsServiceBase):
     """Stub analytics service that returns empty results."""
 
-    async def query(self, sql):
+    async def query(self, sql: str) -> list[dict[str, Any]]:
         return []
 
-    async def get_metrics(self, metric_names, period_days=30):
+    async def get_metrics(self, metric_names: list[str], period_days: int = 30) -> dict[str, Any]:
         return {name: 0 for name in metric_names}
 
-    async def get_revenue(self, period_days=30):
+    async def get_revenue(self, period_days: int = 30) -> dict[str, Any]:
         return {"total": 0, "period_days": period_days}
 
 
 class StubTaskManagementService(TaskManagementServiceBase):
     """Stub task management service."""
 
-    async def get_tasks(self, status=None, limit=20):
+    async def get_tasks(self, status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         return []
 
-    async def create_task(self, title, description="", priority=0):
+    async def create_task(self, title: str, description: str = "", priority: int = 0) -> dict[str, Any]:
         return {"status": "stub", "title": title}
 
-    async def update_task(self, task_id, status=None, **kwargs):
+    async def update_task(self, task_id: str, status: str | None = None, **kwargs: Any) -> dict[str, Any]:
         return {"status": "stub", "task_id": task_id}
 
 
