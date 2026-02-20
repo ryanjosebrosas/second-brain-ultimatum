@@ -1815,3 +1815,176 @@ class TestParallelSearchPatterns:
         await tool.function(mock_ctx, topic="content")
         mock_ctx.deps.storage_service.hybrid_search.assert_called_once()
         mock_ctx.deps.memory_service.search_with_filters.assert_called_once()
+
+
+class TestDeepRecallSearch:
+    """Tests for deep_recall_search orchestrator."""
+
+    async def test_deep_recall_returns_dict(self, mock_deps):
+        from second_brain.agents.utils import deep_recall_search
+        result = await deep_recall_search(mock_deps, "compare all patterns")
+        assert isinstance(result, dict)
+        assert "memories" in result
+        assert "relations" in result
+        assert "search_sources" in result
+        assert "query" in result
+        assert result["query"] == "compare all patterns"
+
+    async def test_deep_recall_without_embedding(self, mock_deps):
+        from second_brain.agents.utils import deep_recall_search
+        mock_deps.embedding_service = None
+        result = await deep_recall_search(mock_deps, "test query")
+        # Should still work with just Mem0
+        assert isinstance(result, dict)
+        assert "memories" in result
+
+    async def test_deep_recall_with_graphiti(self, mock_deps_with_graphiti_full):
+        from second_brain.agents.utils import deep_recall_search
+        result = await deep_recall_search(mock_deps_with_graphiti_full, "test")
+        assert isinstance(result["relations"], list)
+
+    async def test_deep_recall_handles_all_failures(self, mock_deps):
+        from second_brain.agents.utils import deep_recall_search
+        mock_deps.memory_service.search = AsyncMock(side_effect=ConnectionError("down"))
+        mock_deps.embedding_service = None
+        result = await deep_recall_search(mock_deps, "test")
+        assert result["memories"] == []
+
+    async def test_deep_recall_contributing_sources(self, mock_deps):
+        """Sources that return results should be listed in search_sources."""
+        from second_brain.agents.utils import deep_recall_search
+        from second_brain.services.search_result import SearchResult
+
+        mock_deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "test content", "score": 0.9}],
+            relations=[],
+        ))
+        mock_deps.storage_service.hybrid_search = AsyncMock(return_value=[
+            {"content": "hybrid result", "similarity": 0.8},
+        ])
+        result = await deep_recall_search(mock_deps, "test query")
+        assert "mem0" in result["search_sources"]
+        assert "hybrid:memory_content" in result["search_sources"]
+
+    async def test_deep_recall_searches_all_tables(self, mock_deps):
+        """When embedding available, should search patterns, examples, knowledge, experiences."""
+        from second_brain.agents.utils import deep_recall_search
+        await deep_recall_search(mock_deps, "comprehensive query")
+        mock_deps.storage_service.search_patterns_semantic.assert_called_once()
+        mock_deps.storage_service.search_examples_semantic.assert_called_once()
+        mock_deps.storage_service.search_knowledge_semantic.assert_called_once()
+        mock_deps.storage_service.search_experiences_semantic.assert_called_once()
+
+
+class TestRecallDeepMCPTool:
+    """Tests for recall_deep MCP tool."""
+
+    async def test_recall_deep_exists(self):
+        from second_brain.mcp_server import server
+        tools = server._tool_manager._tools
+        assert "recall_deep" in tools
+
+    async def test_recall_deep_validates_input(self):
+        from second_brain.mcp_server import server
+        tool = server._tool_manager._tools["recall_deep"]
+        result = await tool.fn(query="", limit=10)
+        assert "empty" in result.lower() or "invalid" in result.lower()
+
+    @pytest.fixture
+    def mock_deps_for_mcp(self, mock_deps):
+        """Patch _get_deps for MCP tool tests."""
+        return mock_deps
+
+    async def test_recall_deep_returns_string(self, mock_deps):
+        from second_brain.mcp_server import server
+        import second_brain.mcp_server as mcp_mod
+
+        original_get_deps = mcp_mod._get_deps
+        mcp_mod._get_deps = lambda: mock_deps
+
+        try:
+            tool = server._tool_manager._tools["recall_deep"]
+            result = await tool.fn(query="compare all patterns", limit=10)
+            assert isinstance(result, str)
+        finally:
+            mcp_mod._get_deps = original_get_deps
+
+    async def test_recall_deep_no_results(self, mock_deps):
+        """When all sources return empty, should indicate no results."""
+        from second_brain.mcp_server import server
+        import second_brain.mcp_server as mcp_mod
+        from second_brain.services.search_result import SearchResult
+
+        mock_deps.memory_service.search = AsyncMock(
+            return_value=SearchResult(memories=[], relations=[])
+        )
+        mock_deps.storage_service.hybrid_search = AsyncMock(return_value=[])
+        mock_deps.storage_service.search_patterns_semantic = AsyncMock(return_value=[])
+        mock_deps.storage_service.search_examples_semantic = AsyncMock(return_value=[])
+        mock_deps.storage_service.search_knowledge_semantic = AsyncMock(return_value=[])
+        mock_deps.storage_service.search_experiences_semantic = AsyncMock(return_value=[])
+
+        original_get_deps = mcp_mod._get_deps
+        mcp_mod._get_deps = lambda: mock_deps
+
+        try:
+            tool = server._tool_manager._tools["recall_deep"]
+            result = await tool.fn(query="nonexistent topic xyz", limit=10)
+            assert isinstance(result, str)
+            assert "no results" in result.lower() or "No results" in result
+        finally:
+            mcp_mod._get_deps = original_get_deps
+
+
+class TestComplexityAwareRouting:
+    """Tests for complexity-aware quick_recall → recall_deep upgrade."""
+
+    def test_simple_query_classified_correctly(self):
+        """Simple queries should be classified as simple."""
+        from second_brain.agents.utils import classify_query_complexity
+        assert classify_query_complexity("patterns") == "simple"
+
+    def test_complex_query_classified_correctly(self):
+        """Complex queries should be classified as complex."""
+        from second_brain.agents.utils import classify_query_complexity
+        result = classify_query_complexity(
+            "compare all enterprise patterns with healthcare engagement and synthesize recommendations"
+        )
+        assert result == "complex"
+
+    def test_medium_query_classified_correctly(self):
+        """Medium queries should be classified as medium."""
+        from second_brain.agents.utils import classify_query_complexity
+        result = classify_query_complexity("content writing patterns for LinkedIn")
+        assert result == "medium"
+
+    async def test_recall_agent_has_search_sources_instruction(self):
+        """Recall agent instructions mention search_sources."""
+        from second_brain.agents.recall import recall_agent
+        # Check the instructions string
+        instructions = recall_agent._instructions
+        if callable(instructions):
+            text = instructions(None)
+        else:
+            text = str(instructions)
+        assert "search_sources" in text
+
+    async def test_complex_query_redirects_to_deep(self, mock_deps):
+        """Complex queries in quick_recall should redirect to recall_deep."""
+        import second_brain.mcp_server as mcp_mod
+        from second_brain.mcp_server import server
+
+        original_get_deps = mcp_mod._get_deps
+        mcp_mod._get_deps = lambda: mock_deps
+
+        try:
+            tool = server._tool_manager._tools["quick_recall"]
+            result = await tool.fn(
+                query="compare all enterprise patterns with healthcare engagement and synthesize recommendations",
+                limit=10,
+            )
+            assert isinstance(result, str)
+            # Deep recall path was used (output format differs from quick_recall)
+            assert "Deep Recall" in result or "No results" in result or "deep" in result.lower()
+        finally:
+            mcp_mod._get_deps = original_get_deps

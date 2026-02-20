@@ -215,6 +215,12 @@ async def quick_recall(query: str, limit: int = 10) -> str:
     deps = _get_deps()
     timeout = deps.config.api_timeout_seconds
 
+    # Auto-upgrade complex queries to deep recall
+    from second_brain.agents.utils import classify_query_complexity
+    complexity = classify_query_complexity(query, deps.config.complex_query_word_threshold)
+    if complexity == "complex":
+        return await recall_deep(query, limit=limit)
+
     try:
         async with asyncio.timeout(timeout):
             from second_brain.agents.utils import (
@@ -300,6 +306,59 @@ async def quick_recall(query: str, limit: int = 10) -> str:
         parts.append(rel_text)
     source_str = ", ".join(search_sources) if search_sources else "none"
     parts.append(f"\n---\n_Fast path ({len(memories)} results, sources: {source_str}). Use recall() for deeper search._")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def recall_deep(query: str, limit: int = 15) -> str:
+    """Deep multi-source memory search for complex queries. Fans out to ALL
+    search sources in parallel: Mem0, hybrid pgvector, patterns, examples,
+    knowledge, experiences, and graph. Use for synthesis queries, comparisons,
+    or comprehensive overviews.
+
+    Args:
+        query: Complex search query (e.g., "compare all content patterns with
+               enterprise client engagement approaches")
+        limit: Maximum results after dedup + reranking (default: 15)
+    """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
+
+    try:
+        async with asyncio.timeout(timeout):
+            from second_brain.agents.utils import (
+                deep_recall_search,
+                format_memories,
+                format_relations,
+            )
+
+            result = await deep_recall_search(deps, query, limit=limit)
+    except TimeoutError:
+        return f"Deep recall timed out after {timeout}s. Try a simpler query or use quick_recall()."
+
+    memories = result["memories"]
+    relations = result["relations"]
+    search_sources = result["search_sources"]
+
+    if not memories and not relations:
+        return "No results found across all sources. Try broadening your query."
+
+    # Format output
+    parts = [f"# Deep Recall: {query}\n"]
+    mem_text = format_memories(memories)
+    if mem_text:
+        parts.append("## Matches\n")
+        parts.append(mem_text)
+    rel_text = format_relations(relations)
+    if rel_text:
+        parts.append(rel_text)
+    source_str = ", ".join(search_sources) if search_sources else "none"
+    parts.append(f"\n---\n_Deep search ({len(memories)} results from {len(search_sources)} sources: {source_str})_")
     return "\n".join(parts)
 
 

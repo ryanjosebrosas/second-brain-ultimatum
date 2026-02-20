@@ -329,6 +329,118 @@ async def parallel_multi_table_search(
     return await parallel_search_gather(searches)
 
 
+async def deep_recall_search(
+    deps: "BrainDeps",
+    query: str,
+    limit: int = 10,
+) -> dict:
+    """Deep parallel recall — fans out to ALL search sources concurrently.
+
+    Complex query path: runs Mem0 semantic + hybrid pgvector +
+    4 table-specific semantic searches + optional Graphiti in parallel.
+    Results are normalized, deduplicated, and reranked.
+
+    Args:
+        deps: BrainDeps with all services.
+        query: Complex search query.
+        limit: Max final results after reranking.
+
+    Returns:
+        Dict with keys: memories (list[dict]), relations (list[dict]),
+        search_sources (list[str]), query (str).
+    """
+    import asyncio as _asyncio
+
+    expanded = expand_query(query)
+    oversample = deps.config.retrieval_oversample_factor
+    search_limit = limit * oversample
+
+    # --- Build all search coroutines ---
+    searches: list[tuple[str, object]] = []
+
+    # 1. Mem0 semantic search
+    searches.append(("mem0", deps.memory_service.search(expanded, limit=search_limit)))
+
+    # 2. Hybrid pgvector search (if embedding available)
+    embedding = None
+    if deps.embedding_service:
+        embedding = await deps.embedding_service.embed_query(query)
+        searches.append((
+            "hybrid:memory_content",
+            deps.storage_service.hybrid_search(
+                query_text=query,
+                query_embedding=embedding,
+                table="memory_content",
+                limit=search_limit,
+            ),
+        ))
+
+        # 3. Table-specific semantic searches
+        for table, method_name in [
+            ("patterns", "search_patterns_semantic"),
+            ("examples", "search_examples_semantic"),
+            ("knowledge", "search_knowledge_semantic"),
+            ("experiences", "search_experiences_semantic"),
+        ]:
+            method = getattr(deps.storage_service, method_name, None)
+            if method:
+                searches.append((
+                    f"pgvector:{table}",
+                    method(embedding=embedding, limit=search_limit),
+                ))
+
+    # 4. Optional Graphiti graph search
+    if deps.graphiti_service:
+        searches.append(("graphiti", deps.graphiti_service.search(query)))
+
+    # --- Execute all searches in parallel ---
+    source_names = [name for name, _ in searches]
+    coros = [coro for _, coro in searches]
+    raw_results = await _asyncio.gather(*coros, return_exceptions=True)
+
+    # --- Process results ---
+    all_memories: list[dict] = []
+    all_relations: list[dict] = []
+    contributing_sources: list[str] = []
+
+    for name, result in zip(source_names, raw_results):
+        if isinstance(result, BaseException):
+            logger.debug("Deep recall source '%s' failed: %s", name, result)
+            continue
+
+        # Handle SearchResult (from Mem0)
+        if hasattr(result, "memories"):
+            if result.memories:
+                all_memories.extend(normalize_results(result.memories, source=name))
+                contributing_sources.append(name)
+            if hasattr(result, "relations") and result.relations:
+                all_relations.extend(result.relations)
+            continue
+
+        # Handle list[dict] (from Supabase / hybrid)
+        if isinstance(result, list) and result:
+            if name == "graphiti":
+                all_relations.extend(result)
+                contributing_sources.append(name)
+            else:
+                all_memories.extend(
+                    normalize_results(result, source=name,
+                                      content_key="content", score_key="similarity")
+                )
+                contributing_sources.append(name)
+
+    # --- Deduplicate and rerank ---
+    all_memories = deduplicate_results(all_memories)
+    memories = await rerank_memories(deps, query, all_memories, top_k=limit)
+
+    return {
+        "memories": memories,
+        "relations": all_relations,
+        "search_sources": contributing_sources,
+        "query": query,
+    }
+
+
 async def search_with_graph_fallback(
     deps: "BrainDeps",
     query: str,

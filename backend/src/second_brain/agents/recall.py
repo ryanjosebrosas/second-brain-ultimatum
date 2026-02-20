@@ -32,7 +32,10 @@ recall_agent = Agent(
         "relevance. Always include the source of each match.\n\n"
         "IMPORTANT: If your initial search returns no results, try alternative "
         "search strategies: broaden the query, search different categories, "
-        "or use pattern/experience search instead of semantic search."
+        "or use pattern/experience search instead of semantic search.\n\n"
+        "SOURCES: Track which search tools you used in the search_sources field. "
+        "Include entries like 'mem0', 'hybrid:patterns', 'pgvector:experiences', "
+        "'pgvector:examples', 'projects' based on which tools returned results."
     ),
 )
 
