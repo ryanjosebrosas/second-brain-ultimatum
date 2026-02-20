@@ -1,3 +1,9 @@
+"""Model factory -- provider-based LLM selection with fallback chains.
+
+Uses the provider registry pattern: config.model_provider selects the primary
+provider, config.model_fallback_chain lists fallback providers tried in order.
+"""
+
 import logging
 
 from pydantic_ai.models import Model
@@ -8,58 +14,38 @@ logger = logging.getLogger(__name__)
 
 
 def get_model(config: BrainConfig) -> Model:
-    """Get the best available LLM model with fallback.
+    """Get the best available LLM model using provider registry + fallback chain.
 
-    Tries: Anthropic Claude (API key) -> Claude SDK (subscription) -> Ollama (local)
+    Tries the primary provider first, then each fallback in order.
+    Raises RuntimeError if all providers fail with diagnostic details.
     """
-    # Try primary model (Anthropic Claude) — only if API key is set
-    if config.anthropic_api_key:
-        try:
-            from pydantic_ai.models.anthropic import AnthropicModel
-            from pydantic_ai.providers.anthropic import AnthropicProvider
+    from second_brain.providers import get_provider_class
 
-            model = AnthropicModel(
-                config.primary_model.replace("anthropic:", ""),
-                provider=AnthropicProvider(api_key=config.anthropic_api_key),
-            )
-            logger.info(f"Using primary model: {config.primary_model}")
+    # Build list of providers to try: primary + fallbacks
+    providers_to_try = [config.model_provider] + config.fallback_chain_list
+    errors: list[tuple[str, str]] = []
+
+    for provider_name in providers_to_try:
+        try:
+            provider_cls = get_provider_class(provider_name)
+            provider = provider_cls.from_config(config)
+            provider.validate_config()
+            model = provider.build_model(config.model_name or "")
+            if providers_to_try.index(provider_name) > 0:
+                logger.info(
+                    "Primary provider unavailable, using fallback: %s",
+                    provider_name,
+                )
             return model
         except Exception as e:
-            logger.warning(f"Primary model unavailable: {e}")
-    else:
-        logger.info("No Anthropic API key set, skipping primary model")
+            reason = str(e)
+            errors.append((provider_name, reason))
+            logger.warning("Provider %s failed: %s", provider_name, reason)
 
-    # Try subscription auth (Claude SDK via OAuth token)
-    if config.use_subscription:
-        try:
-            from second_brain.models_sdk import create_sdk_model
-
-            sdk_model = create_sdk_model(config)
-            if sdk_model:
-                logger.info("Using subscription model: %s", sdk_model.model_name)
-                return sdk_model
-            else:
-                logger.info("Subscription auth not available, trying fallback")
-        except Exception as e:
-            logger.warning("SDK model creation failed: %s", e)
-
-    # Try fallback (Ollama via OpenAI-compatible API)
-    try:
-        from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.providers.ollama import OllamaProvider
-
-        model = OpenAIChatModel(
-            config.ollama_model,
-            provider=OllamaProvider(
-                base_url=f"{config.ollama_base_url}/v1",
-                api_key=config.ollama_api_key,
-            ),
-        )
-        logger.info(f"Using fallback model: {config.fallback_model}")
-        return model
-    except Exception as e:
-        logger.error(f"Fallback model also unavailable: {e}")
-        raise RuntimeError(
-            "No LLM available. Set ANTHROPIC_API_KEY, enable USE_SUBSCRIPTION=true "
-            "(requires claude CLI), or start Ollama."
-        ) from e
+    # All providers failed -- build diagnostic message
+    tried = ", ".join(f"{name} ({reason})" for name, reason in errors)
+    raise RuntimeError(
+        f"No LLM available. Tried: {tried}. "
+        "Set MODEL_PROVIDER and ensure the required API key/service is available. "
+        "Supported providers: anthropic, ollama-local, ollama-cloud, openai, groq."
+    )

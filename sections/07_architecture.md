@@ -11,10 +11,16 @@ backend/
     deps.py                # BrainDeps dataclass + create_deps() factory
     config.py              # BrainConfig (Pydantic Settings, loads .env)
     schemas.py             # All Pydantic output models — NO imports from other app modules
-    models.py              # AI model selection logic
-    models_sdk.py          # Claude SDK model support
+    models.py              # Model factory (provider registry + fallback chains)
+    models_sdk.py          # Claude SDK model support (subscription auth)
     auth.py                # Authentication helpers
     migrate.py             # Data migration utilities
+    providers/
+      __init__.py          # BaseProvider ABC + PROVIDER_REGISTRY
+      anthropic.py         # Anthropic Claude provider (API key + subscription)
+      ollama.py            # Ollama local + cloud providers
+      openai.py            # OpenAI GPT provider
+      groq.py              # Groq fast inference provider
     agents/
       recall.py            # Semantic memory search
       ask.py               # General Q&A with brain context

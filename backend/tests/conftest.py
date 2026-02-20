@@ -36,6 +36,7 @@ def brain_config(tmp_path):
         supabase_url="https://test.supabase.co",
         supabase_key="test-key",
         brain_data_path=tmp_path,
+        model_provider="anthropic",
         _env_file=None,
     )
 

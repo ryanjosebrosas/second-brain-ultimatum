@@ -18,6 +18,8 @@ _ENV_VARS = [
     "NEO4J_PASSWORD", "SUPABASE_URL", "SUPABASE_KEY", "BRAIN_USER_ID",
     "BRAIN_DATA_PATH", "PRIMARY_MODEL", "FALLBACK_MODEL", "USE_SUBSCRIPTION",
     "CLAUDE_OAUTH_TOKEN", "CLAUDECODE",
+    "MODEL_PROVIDER", "MODEL_NAME", "MODEL_FALLBACK_CHAIN",
+    "OPENAI_MODEL_NAME", "GROQ_API_KEY", "GROQ_MODEL_NAME",
 ]
 
 
@@ -403,35 +405,60 @@ class TestMCPConfigFormat:
 class TestGetModelFallbackChain:
     """Tests for get_model() with subscription in the chain."""
 
-    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
-    @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_api_key_takes_priority(self, mock_model_cls, mock_provider_cls, tmp_path):
-        """API key auth is used even when subscription is also enabled."""
+    @patch("second_brain.models_sdk.create_sdk_model")
+    def test_subscription_tried_first_when_enabled(self, mock_sdk, tmp_path):
+        """When use_subscription=True, subscription auth is tried first via provider."""
         config = _make_config(
             tmp_path,
             anthropic_api_key="sk-ant-api03-test-key",
             use_subscription=True,
+            model_provider="anthropic",
         )
+        sdk_model = MagicMock()
+        mock_sdk.return_value = sdk_model
+
+        from second_brain.models import get_model
+        model = get_model(config)
+        mock_sdk.assert_called_once_with(config)
+        assert model is sdk_model
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    @patch("second_brain.models_sdk.create_sdk_model")
+    def test_api_key_fallback_when_subscription_fails(
+        self, mock_sdk, mock_model_cls, mock_provider_cls, tmp_path
+    ):
+        """Falls back to API key when subscription fails."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-ant-api03-test-key",
+            use_subscription=True,
+            model_provider="anthropic",
+        )
+        mock_sdk.side_effect = Exception("SDK unavailable")
         mock_model_cls.return_value = MagicMock()
 
         from second_brain.models import get_model
         model = get_model(config)
         mock_model_cls.assert_called_once()
 
-    @patch("pydantic_ai.providers.ollama.OllamaProvider")
-    @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    def test_subscription_used_without_api_key(
-        self, mock_openai_cls, mock_ollama_cls, tmp_path
-    ):
+    @patch("second_brain.models_sdk.create_sdk_model")
+    def test_subscription_used_without_api_key(self, mock_sdk, tmp_path):
         """SDK model used when no API key but subscription enabled."""
-        config = _make_config(tmp_path, use_subscription=True)
+        config = _make_config(
+            tmp_path,
+            use_subscription=True,
+            model_provider="anthropic",
+            anthropic_api_key="placeholder",
+        )
 
         mock_sdk_model = MagicMock()
         mock_sdk_model.model_name = "claude-sdk:claude-sonnet-4-5-20250929"
-        with patch("second_brain.models_sdk.create_sdk_model", return_value=mock_sdk_model):
-            from second_brain.models import get_model
-            model = get_model(config)
-            assert model is mock_sdk_model
+        mock_sdk.return_value = mock_sdk_model
+
+        from second_brain.models import get_model
+        model = get_model(config)
+        assert model is mock_sdk_model
 
 
 class TestClaudeSDKModelStructuredOutput:

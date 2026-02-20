@@ -1,4 +1,4 @@
-"""Unit tests for get_model() LLM provider factory."""
+"""Unit tests for get_model() provider-based LLM factory."""
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -7,7 +7,7 @@ from second_brain.config import BrainConfig
 from second_brain.models import get_model
 
 
-# Known env vars that BrainConfig reads — clear to prevent host bleed.
+# Known env vars that BrainConfig reads -- clear to prevent host bleed.
 _ENV_VARS = [
     "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_BASE_URL", "OLLAMA_API_KEY",
     "OLLAMA_MODEL", "MEM0_API_KEY", "GRAPH_PROVIDER", "NEO4J_URL", "NEO4J_USERNAME",
@@ -17,6 +17,8 @@ _ENV_VARS = [
     "GRADUATION_MIN_MEMORIES", "GRADUATION_LOOKBACK_DAYS",
     "CONTENT_PREVIEW_LIMIT", "PATTERN_PREVIEW_LIMIT",
     "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
+    "MODEL_PROVIDER", "MODEL_NAME", "MODEL_FALLBACK_CHAIN",
+    "OPENAI_MODEL_NAME", "GROQ_API_KEY", "GROQ_MODEL_NAME",
 ]
 
 
@@ -40,12 +42,12 @@ def _make_config(tmp_path, **overrides):
 
 
 class TestGetModelAnthropic:
-    """Tests the primary (Anthropic) model path."""
+    """Tests the Anthropic provider path."""
 
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
     def test_returns_anthropic_model(self, mock_model_cls, mock_provider_cls, brain_config):
-        """get_model() returns AnthropicModel when API key is set."""
+        """get_model() returns AnthropicModel when provider=anthropic."""
         mock_model = MagicMock()
         mock_model_cls.return_value = mock_model
 
@@ -67,8 +69,13 @@ class TestGetModelAnthropic:
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
     def test_anthropic_with_custom_model(self, mock_model_cls, mock_provider_cls, tmp_path):
-        """get_model() uses custom primary_model name."""
-        config = _make_config(tmp_path, anthropic_api_key="sk-test", primary_model="anthropic:claude-opus-4")
+        """get_model() uses custom model_name."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            model_name="claude-opus-4",
+        )
 
         get_model(config)
 
@@ -76,20 +83,23 @@ class TestGetModelAnthropic:
 
 
 class TestGetModelOllamaFallback:
-    """Tests the Ollama fallback path when Anthropic is unavailable."""
+    """Tests the Ollama provider paths."""
 
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    def test_fallback_when_no_api_key(self, mock_openai_cls, mock_ollama_cls, tmp_path):
-        """Falls back to Ollama when anthropic_api_key is None."""
-        config = _make_config(tmp_path, anthropic_api_key=None)
+    def test_ollama_local_provider(self, mock_openai_cls, mock_ollama_cls, tmp_path):
+        """ollama-local provider uses correct base URL."""
+        config = _make_config(
+            tmp_path,
+            model_provider="ollama-local",
+        )
         mock_model = MagicMock()
         mock_openai_cls.return_value = mock_model
 
         result = get_model(config)
 
         mock_ollama_cls.assert_called_once_with(
-            base_url="http://localhost:11434/v1", api_key=None
+            base_url="http://localhost:11434/v1",
         )
         mock_openai_cls.assert_called_once()
         assert mock_openai_cls.call_args[0][0] == "llama3.1:8b"
@@ -97,28 +107,30 @@ class TestGetModelOllamaFallback:
 
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
-    @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_fallback_when_anthropic_fails(
-        self, mock_anthropic_cls, mock_anthropic_prov, mock_openai_cls, mock_ollama_cls, brain_config
-    ):
-        """Falls back to Ollama when Anthropic raises an exception."""
-        mock_anthropic_cls.side_effect = Exception("API error")
-        mock_fallback = MagicMock()
-        mock_openai_cls.return_value = mock_fallback
+    def test_ollama_cloud_provider(self, mock_openai_cls, mock_ollama_cls, tmp_path):
+        """ollama-cloud provider uses API key."""
+        config = _make_config(
+            tmp_path,
+            model_provider="ollama-cloud",
+            ollama_base_url="https://cloud.ollama.ai",
+            ollama_api_key="cloud-key-123",
+        )
+        mock_openai_cls.return_value = MagicMock()
 
-        result = get_model(brain_config)
+        get_model(config)
 
-        mock_openai_cls.assert_called_once()
-        assert result is mock_fallback
+        mock_ollama_cls.assert_called_once_with(
+            base_url="https://cloud.ollama.ai/v1",
+            api_key="cloud-key-123",
+        )
 
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    def test_fallback_with_custom_ollama_model(self, mock_openai_cls, mock_ollama_cls, tmp_path):
+    def test_ollama_with_custom_model(self, mock_openai_cls, mock_ollama_cls, tmp_path):
         """Uses custom ollama_model and ollama_base_url."""
         config = _make_config(
             tmp_path,
-            anthropic_api_key=None,
+            model_provider="ollama-local",
             ollama_model="mistral:7b",
             ollama_base_url="http://gpu-server:11434",
         )
@@ -127,20 +139,92 @@ class TestGetModelOllamaFallback:
 
         assert mock_openai_cls.call_args[0][0] == "mistral:7b"
         mock_ollama_cls.assert_called_once_with(
-            base_url="http://gpu-server:11434/v1", api_key=None
+            base_url="http://gpu-server:11434/v1",
         )
 
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    def test_fallback_with_ollama_api_key(self, mock_openai_cls, mock_ollama_cls, tmp_path):
-        """Passes ollama_api_key to OllamaProvider."""
-        config = _make_config(tmp_path, anthropic_api_key=None, ollama_api_key="ollama-key-123")
+    def test_fallback_when_anthropic_fails(
+        self, mock_openai_cls, mock_ollama_cls, mock_anthropic_prov, mock_anthropic_cls, tmp_path
+    ):
+        """Falls back to ollama-local when anthropic raises."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            model_fallback_chain="ollama-local",
+        )
+        mock_anthropic_cls.side_effect = Exception("API error")
+        mock_fallback = MagicMock()
+        mock_openai_cls.return_value = mock_fallback
+
+        result = get_model(config)
+
+        mock_openai_cls.assert_called_once()
+        assert result is mock_fallback
+
+
+class TestGetModelOpenAI:
+    """Tests the OpenAI provider path."""
+
+    @patch("pydantic_ai.providers.openai.OpenAIProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    def test_openai_provider(self, mock_openai_cls, mock_openai_prov, tmp_path):
+        """OpenAI provider uses correct API key."""
+        config = _make_config(
+            tmp_path,
+            model_provider="openai",
+            openai_api_key="sk-openai-test",
+        )
+        mock_model = MagicMock()
+        mock_openai_cls.return_value = mock_model
+
+        result = get_model(config)
+
+        mock_openai_prov.assert_called_once_with(api_key="sk-openai-test")
+        assert result is mock_model
+
+    @patch("pydantic_ai.providers.openai.OpenAIProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    def test_openai_custom_model_name(self, mock_openai_cls, mock_openai_prov, tmp_path):
+        """OpenAI provider uses custom model name."""
+        config = _make_config(
+            tmp_path,
+            model_provider="openai",
+            openai_api_key="sk-test",
+            model_name="gpt-4-turbo",
+        )
+        mock_openai_cls.return_value = MagicMock()
 
         get_model(config)
 
-        mock_ollama_cls.assert_called_once_with(
-            base_url="http://localhost:11434/v1", api_key="ollama-key-123"
+        assert mock_openai_cls.call_args[0][0] == "gpt-4-turbo"
+
+
+class TestGetModelGroq:
+    """Tests the Groq provider path."""
+
+    @patch("pydantic_ai.providers.openai.OpenAIProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    def test_groq_provider(self, mock_openai_cls, mock_openai_prov, tmp_path):
+        """Groq provider uses correct API key and base URL."""
+        config = _make_config(
+            tmp_path,
+            model_provider="groq",
+            groq_api_key="gsk-test-key",
         )
+        mock_model = MagicMock()
+        mock_openai_cls.return_value = mock_model
+
+        result = get_model(config)
+
+        mock_openai_prov.assert_called_once_with(
+            base_url="https://api.groq.com/openai/v1",
+            api_key="gsk-test-key",
+        )
+        assert result is mock_model
 
 
 class TestGetModelNoProvider:
@@ -148,47 +232,120 @@ class TestGetModelNoProvider:
 
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     def test_runtime_error_when_all_fail(self, mock_ollama_cls, tmp_path):
-        """Raises RuntimeError when no API key and Ollama fails."""
-        config = _make_config(tmp_path, anthropic_api_key=None)
-        mock_ollama_cls.side_effect = Exception("Connection refused")
-
-        with pytest.raises(RuntimeError):
-            get_model(config)
-
-    @patch("pydantic_ai.providers.ollama.OllamaProvider")
-    def test_runtime_error_message(self, mock_ollama_cls, tmp_path):
-        """Error message tells user to set API key or start Ollama."""
-        config = _make_config(tmp_path, anthropic_api_key=None)
+        """Raises RuntimeError when provider fails and no fallback."""
+        config = _make_config(tmp_path, model_provider="ollama-local")
         mock_ollama_cls.side_effect = Exception("Connection refused")
 
         with pytest.raises(RuntimeError, match="No LLM available"):
             get_model(config)
 
+    def test_runtime_error_lists_providers_tried(self, tmp_path):
+        """Error message lists all providers attempted."""
+        config = _make_config(
+            tmp_path,
+            model_provider="groq",
+            groq_api_key="",
+        )
+
+        with pytest.raises(RuntimeError, match="groq"):
+            get_model(config)
+
     @patch("pydantic_ai.providers.ollama.OllamaProvider")
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_anthropic_fails_ollama_fails(
-        self, mock_anthropic_cls, mock_anthropic_prov, mock_ollama_cls, brain_config
+    def test_all_fallbacks_fail(
+        self, mock_anthropic_cls, mock_anthropic_prov, mock_ollama_cls, tmp_path
     ):
-        """RuntimeError when both Anthropic and Ollama fail."""
+        """RuntimeError when primary and all fallbacks fail."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            model_fallback_chain="ollama-local",
+        )
         mock_anthropic_cls.side_effect = Exception("Anthropic down")
         mock_ollama_cls.side_effect = Exception("Ollama down")
 
+        with pytest.raises(RuntimeError, match="No LLM available"):
+            get_model(config)
+
+
+class TestFallbackChains:
+    """Tests for the fallback chain mechanism."""
+
+    @patch("pydantic_ai.providers.ollama.OllamaProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_primary_success_skips_fallback(
+        self, mock_anthropic_cls, mock_anthropic_prov, mock_openai_cls, mock_ollama_cls, tmp_path
+    ):
+        """When primary succeeds, fallback is never attempted."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            model_fallback_chain="ollama-local",
+        )
+        primary = MagicMock()
+        mock_anthropic_cls.return_value = primary
+
+        result = get_model(config)
+
+        assert result is primary
+        mock_openai_cls.assert_not_called()
+
+    @patch("pydantic_ai.providers.openai.OpenAIProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    @patch("pydantic_ai.providers.ollama.OllamaProvider")
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_multi_fallback_chain(
+        self, mock_anthropic_cls, mock_anthropic_prov,
+        mock_ollama_prov, mock_openai_cls, mock_openai_prov, tmp_path
+    ):
+        """Falls through multiple providers until one works."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            model_fallback_chain="ollama-local,openai",
+            openai_api_key="sk-openai",
+        )
+        mock_anthropic_cls.side_effect = Exception("Anthropic down")
+        mock_ollama_prov.side_effect = Exception("Ollama down")
+        openai_model = MagicMock()
+        mock_openai_cls.return_value = openai_model
+
+        result = get_model(config)
+
+        assert result is openai_model
+
+    def test_empty_fallback_chain_fail_fast(self, tmp_path):
+        """No fallback chain = fail on first provider failure."""
+        config = _make_config(
+            tmp_path,
+            model_provider="groq",
+            groq_api_key="",
+            model_fallback_chain="",
+        )
+
         with pytest.raises(RuntimeError):
-            get_model(brain_config)
+            get_model(config)
 
 
 class TestGetModelAnthropicVariants:
-    """Additional Anthropic model path tests for expanded coverage."""
+    """Additional Anthropic model path tests."""
 
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
     def test_anthropic_model_with_opus(self, mock_model_cls, mock_provider_cls, tmp_path):
-        """get_model() uses opus model when primary_model is set to opus."""
+        """get_model() uses opus model when model_name is set to opus."""
         config = _make_config(
             tmp_path,
             anthropic_api_key="sk-test",
-            primary_model="anthropic:claude-opus-4-5",
+            model_provider="anthropic",
+            model_name="claude-opus-4-5",
         )
         mock_model = MagicMock()
         mock_model_cls.return_value = mock_model
@@ -201,11 +358,12 @@ class TestGetModelAnthropicVariants:
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
     def test_anthropic_model_with_haiku(self, mock_model_cls, mock_provider_cls, tmp_path):
-        """get_model() uses haiku model when primary_model is set to haiku."""
+        """get_model() uses haiku model when model_name is set."""
         config = _make_config(
             tmp_path,
             anthropic_api_key="sk-test",
-            primary_model="anthropic:claude-haiku-4-5-20251001",
+            model_provider="anthropic",
+            model_name="claude-haiku-4-5-20251001",
         )
         mock_model_cls.return_value = MagicMock()
 
@@ -220,7 +378,8 @@ class TestGetModelAnthropicVariants:
         config = _make_config(
             tmp_path,
             anthropic_api_key="sk-test",
-            primary_model="anthropic:claude-sonnet-4-6",
+            model_provider="anthropic",
+            model_name="claude-sonnet-4-6",
         )
         mock_model_cls.return_value = MagicMock()
 
@@ -230,27 +389,13 @@ class TestGetModelAnthropicVariants:
 
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_model_name_without_prefix_passed_through(
-        self, mock_model_cls, mock_provider_cls, tmp_path
-    ):
-        """Model name without 'anthropic:' prefix is passed unchanged."""
-        config = _make_config(
-            tmp_path,
-            anthropic_api_key="sk-test",
-            primary_model="claude-sonnet-4-5",
-        )
-        mock_model_cls.return_value = MagicMock()
-
-        get_model(config)
-
-        # No prefix to strip — should be passed as-is
-        assert mock_model_cls.call_args[0][0] == "claude-sonnet-4-5"
-
-    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
-    @patch("pydantic_ai.models.anthropic.AnthropicModel")
     def test_api_key_passed_to_provider(self, mock_model_cls, mock_provider_cls, tmp_path):
         """API key from config is passed to AnthropicProvider."""
-        config = _make_config(tmp_path, anthropic_api_key="my-secret-key")
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="my-secret-key",
+            model_provider="anthropic",
+        )
         mock_model_cls.return_value = MagicMock()
 
         get_model(config)
@@ -268,27 +413,6 @@ class TestGetModelAnthropicVariants:
 
         assert result is expected
 
-    @patch("pydantic_ai.providers.ollama.OllamaProvider")
-    @patch("pydantic_ai.models.openai.OpenAIChatModel")
-    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
-    @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_anthropic_model_exception_falls_to_next_path(
-        self, mock_anthropic_cls, mock_anthropic_prov, mock_openai_cls, mock_ollama_cls, tmp_path
-    ):
-        """When AnthropicModel raises, falls through to the Ollama fallback path."""
-        # use_subscription=False prevents subscription path from running
-        # (USE_SUBSCRIPTION may be set in host env, which _clean_env doesn't clear)
-        config = _make_config(tmp_path, anthropic_api_key="sk-test", use_subscription=False)
-        mock_anthropic_cls.side_effect = Exception("model init failed")
-        fallback_model = MagicMock()
-        mock_openai_cls.return_value = fallback_model
-
-        result = get_model(config)
-
-        # Anthropic failed, Ollama fallback returned successfully
-        assert result is fallback_model
-        mock_openai_cls.assert_called_once()
-
     @patch("second_brain.models_sdk.create_sdk_model")
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
@@ -303,13 +427,14 @@ class TestGetModelAnthropicVariants:
         mock_sdk.assert_not_called()
 
     @patch("second_brain.models_sdk.create_sdk_model")
-    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
-    @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_subscription_path_attempted_when_enabled(
-        self, mock_model_cls, mock_provider_cls, mock_sdk, tmp_path
-    ):
-        """create_sdk_model is attempted when use_subscription=True and Anthropic fails."""
-        config = _make_config(tmp_path, anthropic_api_key=None, use_subscription=True)
+    def test_subscription_path_attempted_when_enabled(self, mock_sdk, tmp_path):
+        """create_sdk_model is attempted when use_subscription=True."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            use_subscription=True,
+        )
         sdk_model = MagicMock()
         mock_sdk.return_value = sdk_model
 
@@ -320,16 +445,92 @@ class TestGetModelAnthropicVariants:
 
     @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
     @patch("pydantic_ai.models.anthropic.AnthropicModel")
-    def test_primary_model_config_controls_model_name(
+    def test_default_model_derived_from_primary_model(
         self, mock_model_cls, mock_provider_cls, tmp_path
     ):
-        """config.primary_model is what gets used, not a hardcoded constant."""
-        custom_model = "anthropic:claude-custom-v99"
+        """When model_name not set, derives from primary_model config."""
         config = _make_config(
-            tmp_path, anthropic_api_key="sk-test", primary_model=custom_model
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            primary_model="anthropic:claude-custom-v99",
         )
         mock_model_cls.return_value = MagicMock()
 
         get_model(config)
 
         assert mock_model_cls.call_args[0][0] == "claude-custom-v99"
+
+
+class TestAutoProviderDetection:
+    """Tests backward compat: model_provider='auto' infers from keys."""
+
+    def test_auto_with_anthropic_key(self, tmp_path):
+        """Auto-detects anthropic when API key is present."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="auto",
+        )
+        assert config.model_provider == "anthropic"
+
+    def test_auto_with_subscription(self, tmp_path):
+        """Auto-detects anthropic when subscription is enabled."""
+        config = _make_config(
+            tmp_path,
+            use_subscription=True,
+            model_provider="auto",
+        )
+        assert config.model_provider == "anthropic"
+
+    def test_auto_with_ollama_api_key(self, tmp_path):
+        """Auto-detects ollama-cloud when ollama API key is present."""
+        config = _make_config(
+            tmp_path,
+            ollama_api_key="cloud-key",
+            model_provider="auto",
+        )
+        assert config.model_provider == "ollama-cloud"
+
+    def test_auto_default_to_ollama_local(self, tmp_path):
+        """Auto defaults to ollama-local when no keys present."""
+        config = _make_config(
+            tmp_path,
+            model_provider="auto",
+        )
+        assert config.model_provider == "ollama-local"
+
+    def test_invalid_provider_raises(self, tmp_path):
+        """Invalid model_provider raises ValueError."""
+        with pytest.raises(ValueError, match="model_provider must be one of"):
+            _make_config(tmp_path, model_provider="invalid-provider")
+
+
+class TestConfigFallbackChain:
+    """Tests config parsing of fallback chain."""
+
+    def test_empty_fallback_chain(self, tmp_path):
+        """Empty string produces empty list."""
+        config = _make_config(tmp_path, model_fallback_chain="")
+        assert config.fallback_chain_list == []
+
+    def test_single_fallback(self, tmp_path):
+        """Single provider in chain."""
+        config = _make_config(tmp_path, model_fallback_chain="ollama-local")
+        assert config.fallback_chain_list == ["ollama-local"]
+
+    def test_multiple_fallbacks(self, tmp_path):
+        """Multiple providers comma-separated."""
+        config = _make_config(
+            tmp_path,
+            model_fallback_chain="ollama-local,openai,groq",
+        )
+        assert config.fallback_chain_list == ["ollama-local", "openai", "groq"]
+
+    def test_fallback_chain_strips_whitespace(self, tmp_path):
+        """Whitespace around provider names is stripped."""
+        config = _make_config(
+            tmp_path,
+            model_fallback_chain=" ollama-local , openai ",
+        )
+        assert config.fallback_chain_list == ["ollama-local", "openai"]

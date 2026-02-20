@@ -10,14 +10,50 @@ logger = logging.getLogger(__name__)
 class BrainConfig(BaseSettings):
     """Configuration for the AI Second Brain."""
 
+    # --- LLM Provider Selection ---
+    model_provider: str = Field(
+        default="auto",
+        description=(
+            "Primary LLM provider: auto, anthropic, ollama-local, ollama-cloud, "
+            "openai, groq. 'auto' infers from available API keys."
+        ),
+    )
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "Model name override for the selected provider. "
+            "If not set, uses provider-specific default "
+            "(e.g., claude-sonnet-4-5, llama3.1:8b, gpt-4o)."
+        ),
+    )
+    model_fallback_chain: str = Field(
+        default="",
+        description=(
+            "Comma-separated fallback providers tried if primary fails. "
+            "Example: 'ollama-local,openai'. Empty = fail-fast (no fallback)."
+        ),
+    )
+
     # LLM providers
     anthropic_api_key: str | None = Field(
         default=None, description="Anthropic API key (None = skip, use Ollama)",
         repr=False,
     )
     openai_api_key: str | None = Field(
-        default=None, description="OpenAI API key for Mem0 embeddings",
+        default=None, description="OpenAI API key for Mem0 embeddings and/or LLM",
         repr=False,
+    )
+    openai_model_name: str = Field(
+        default="gpt-4o",
+        description="Default OpenAI model name when using OpenAI as LLM provider",
+    )
+    groq_api_key: str | None = Field(
+        default=None, description="Groq API key for fast inference",
+        repr=False,
+    )
+    groq_model_name: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Default Groq model name",
     )
 
     # Voyage AI
@@ -342,5 +378,54 @@ class BrainConfig(BaseSettings):
                 f"{self.mcp_transport!r}"
             )
         return self
+
+    @model_validator(mode="after")
+    def _resolve_model_provider(self) -> "BrainConfig":
+        """Resolve 'auto' provider and validate provider name.
+
+        Backward compatibility: when model_provider='auto', infer from
+        available API keys (Anthropic > Ollama > OpenAI).
+        """
+        valid_providers = (
+            "auto", "anthropic", "ollama-local", "ollama-cloud",
+            "openai", "groq",
+        )
+        if self.model_provider not in valid_providers:
+            raise ValueError(
+                f"model_provider must be one of {valid_providers} — "
+                f"got: {self.model_provider!r}"
+            )
+
+        if self.model_provider == "auto":
+            # Infer from available keys (backward compat)
+            if self.anthropic_api_key or self.use_subscription:
+                object.__setattr__(self, "model_provider", "anthropic")
+            elif self.ollama_api_key:
+                object.__setattr__(self, "model_provider", "ollama-cloud")
+            else:
+                # Default to ollama-local as final fallback
+                object.__setattr__(self, "model_provider", "ollama-local")
+            logger.debug("Auto-detected model_provider: %s", self.model_provider)
+
+        # If model_name not set, derive from legacy fields
+        if not self.model_name:
+            if self.model_provider == "anthropic":
+                derived = self.primary_model.replace("anthropic:", "")
+                object.__setattr__(self, "model_name", derived)
+            elif self.model_provider in ("ollama-local", "ollama-cloud"):
+                object.__setattr__(self, "model_name", self.ollama_model)
+            elif self.model_provider == "openai":
+                object.__setattr__(self, "model_name", self.openai_model_name)
+            elif self.model_provider == "groq":
+                object.__setattr__(self, "model_name", self.groq_model_name)
+
+        return self
+
+    @property
+    def fallback_chain_list(self) -> list[str]:
+        """Parse MODEL_FALLBACK_CHAIN into a list of provider names."""
+        if not self.model_fallback_chain:
+            return []
+        return [p.strip() for p in self.model_fallback_chain.split(",") if p.strip()]
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
