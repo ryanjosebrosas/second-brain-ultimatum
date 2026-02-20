@@ -14,6 +14,12 @@ cd backend
 python -m second_brain.mcp_server    # Start MCP server (for Claude Code)
 ```
 
+### Run REST API
+```bash
+cd backend
+uvicorn second_brain.api.main:app --reload   # Start FastAPI dev server
+```
+
 ### CLI
 ```bash
 brain --help                         # Show CLI commands
@@ -24,7 +30,7 @@ brain health                         # Check brain health
 ### Tests
 ```bash
 cd backend
-pytest                               # All tests (~781)
+pytest                               # All tests (~1290)
 pytest tests/test_agents.py          # Single file
 pytest -k "test_recall"              # Filter by name
 pytest -x                            # Stop on first failure
@@ -42,8 +48,8 @@ cp backend/.env.example backend/.env
 ### Database Migrations
 ```bash
 # Apply migrations via Supabase dashboard or CLI
-# Migrations in: backend/supabase/migrations/ (001–014, numbered)
-# New migrations: create backend/supabase/migrations/015_description.sql
+# Migrations in: backend/supabase/migrations/ (001–020, numbered)
+# New migrations: create backend/supabase/migrations/021_description.sql
 ```
 
 ### Reingest Knowledge Graph

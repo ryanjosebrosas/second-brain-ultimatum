@@ -49,10 +49,10 @@ class YourResult(BaseModel):
 Add to the appropriate service class in `backend/src/second_brain/services/storage.py` or `memory.py`:
 ```python
 async def get_something(self, filter: str | None = None) -> list[dict]:
-    query = self.client.table("table_name").select("*")
+    query = self._client.table("table_name").select("*")
     if filter:
         query = query.eq("column", filter)
-    result = query.execute()
+    result = await asyncio.to_thread(query.execute)
     return result.data or []
 ```
 

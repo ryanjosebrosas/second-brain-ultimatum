@@ -1,6 +1,6 @@
 ## Backend Architecture
 
-**Pattern**: MCP Server → Agent Layer → Service Layer → Storage
+**Pattern**: MCP Server / REST API → Agent Layer → Service Layer → Storage
 
 ```
 backend/
@@ -21,6 +21,16 @@ backend/
       ollama.py            # Ollama local + cloud providers
       openai.py            # OpenAI GPT provider
       groq.py              # Groq fast inference provider
+    api/
+      main.py              # FastAPI app entry point
+      deps.py              # API dependency injection
+      routers/
+        agents.py          # Agent invocation endpoints
+        graph.py           # Knowledge graph endpoints
+        health.py          # Health check endpoints
+        memory.py          # Memory CRUD endpoints
+        projects.py        # Project lifecycle endpoints
+        settings.py        # Settings management endpoints
     agents/
       recall.py            # Semantic memory search
       ask.py               # General Q&A with brain context
@@ -42,13 +52,14 @@ backend/
       embeddings.py        # Voyage AI / OpenAI embedding generation
       voyage.py            # Voyage AI reranking
       graphiti.py          # Knowledge graph (optional)
+      graphiti_memory.py   # Graphiti-backed memory provider (fallback)
       health.py            # Brain metrics + growth milestones
       retry.py             # Tenacity retry helpers
       search_result.py     # Search result data structures
       abstract.py          # Abstract base classes for pluggable services
       __init__.py
   docs/                    # Operational runbooks and integration guides
-  supabase/migrations/     # Numbered SQL migrations (001–019)
+  supabase/migrations/     # Numbered SQL migrations (001–020)
   tests/                   # One test file per source module
   scripts/                 # Utility scripts (e.g., reingest_graph.py)
   .env                     # Secrets (gitignored)
@@ -58,5 +69,6 @@ backend/
 
 **Data Flow**:
 MCP tool call → `mcp_server.py` validates input → calls agent with `BrainDeps` → agent uses service layer → Mem0 / Supabase / Voyage → structured output returned → formatted as plain text string
+REST request → `api/routers/*.py` → same agent/service layer → JSON response
 
 **Key Constraint**: `schemas.py` must remain dependency-free (no imports from other app modules).

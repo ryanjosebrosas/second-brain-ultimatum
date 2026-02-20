@@ -7,6 +7,8 @@
 **Database**: Supabase (PostgreSQL + pgvector) — structured storage, vector search, RLS
 **Embeddings**: Voyage AI (`voyageai`) — primary; OpenAI fallback
 **Knowledge Graph**: Graphiti (`graphiti-core[anthropic,falkordb]`) — optional, feature-flagged
+**REST API**: FastAPI (`fastapi[standard]`) — HTTP API with routers for agents, memory, projects, graph, health, settings
+**HTTP Client**: httpx — async HTTP client
 **CLI**: Click — `brain` entrypoint maps to `second_brain.cli:cli`
 **Retries**: Tenacity — retry decorator for transient failures
 **Config**: Pydantic Settings (`pydantic-settings`) — `.env` loaded via `BrainConfig`
