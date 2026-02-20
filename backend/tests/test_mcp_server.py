@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, Relation, LearnResult, PatternExtract,
     CreateResult, DimensionScore, ReviewResult, ContentTypeConfig,
+    CoachSession, PMOResult, PriorityScore, EmailAction,
+    SpecialistAnswer, ClarityResult, ClarityFinding,
+    SynthesizerResult, SynthesizerTheme, TemplateBuilderResult, TemplateOpportunity,
 )
 from second_brain.services.health import HealthMetrics
 
@@ -1489,3 +1492,451 @@ class TestMultimodalMCPTools:
 
         result = await multimodal_vector_search(query="test")
         assert "unavailable" in result
+
+
+class TestOperationsMCPTools:
+    """Tests for the 9 previously untested operation/pipeline MCP tools."""
+
+    # --- advance_project (service-direct) ---
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_advance_project_success(self, mock_deps_fn):
+        from second_brain.mcp_server import advance_project
+
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_project = AsyncMock(
+            return_value={"id": "proj-1", "name": "My Project", "lifecycle_stage": "planning"}
+        )
+        mock_deps.storage_service.update_project_stage = AsyncMock(
+            return_value={"id": "proj-1", "lifecycle_stage": "executing"}
+        )
+        mock_deps_fn.return_value = mock_deps
+
+        result = await advance_project(project_id="proj-1")
+        assert "My Project" in result
+        assert "planning" in result
+        assert "executing" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_advance_project_empty_input(self, mock_deps_fn):
+        from second_brain.mcp_server import advance_project
+
+        result = await advance_project(project_id="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_advance_project_not_found(self, mock_deps_fn):
+        from second_brain.mcp_server import advance_project
+
+        mock_deps = _mock_deps()
+        mock_deps.storage_service.get_project = AsyncMock(return_value=None)
+        mock_deps_fn.return_value = mock_deps
+
+        result = await advance_project(project_id="nonexistent")
+        assert "not found" in result.lower()
+
+    # --- coaching_session ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_coaching_session_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import coaching_session
+
+        with patch("second_brain.agents.coach.coach_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = CoachSession(
+                session_type="morning",
+                next_action="Start with top priority",
+                coaching_notes="Stay focused today",
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await coaching_session(request="Help me plan today")
+            assert isinstance(result, str)
+            assert "morning" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_coaching_session_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import coaching_session
+
+        result = await coaching_session(request="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_coaching_session_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import coaching_session
+
+        with patch("second_brain.agents.coach.coach_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await coaching_session(request="test")
+            assert "timed out" in result.lower()
+
+    # --- prioritize_tasks ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_prioritize_tasks_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import prioritize_tasks
+
+        with patch("second_brain.agents.pmo.pmo_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = PMOResult(
+                coaching_message="Focus on high-impact tasks",
+                scored_tasks=[
+                    PriorityScore(task_name="Write tests", total_score=85.0, category="development"),
+                ],
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await prioritize_tasks(tasks="Write tests, Fix bugs")
+            assert isinstance(result, str)
+            assert "Write tests" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_prioritize_tasks_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import prioritize_tasks
+
+        result = await prioritize_tasks(tasks="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_prioritize_tasks_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import prioritize_tasks
+
+        with patch("second_brain.agents.pmo.pmo_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await prioritize_tasks(tasks="task1, task2")
+            assert "timed out" in result.lower()
+
+    # --- compose_email ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_compose_email_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import compose_email
+
+        with patch("second_brain.agents.email_agent.email_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = EmailAction(
+                action_type="draft",
+                subject="Follow-up on proposal",
+                body="Hi John, following up on our conversation...",
+                status="draft",
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await compose_email(request="Draft follow-up to John")
+            assert "Subject:" in result
+            assert "Follow-up" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_compose_email_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import compose_email
+
+        result = await compose_email(request="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_compose_email_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import compose_email
+
+        with patch("second_brain.agents.email_agent.email_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await compose_email(request="test email")
+            assert "timed out" in result.lower()
+
+    # --- ask_claude_specialist ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ask_claude_specialist_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask_claude_specialist
+
+        with patch("second_brain.agents.specialist.specialist_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = SpecialistAnswer(
+                answer="Use the Agent class with deps_type parameter.",
+                confidence_level="VERIFIED",
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await ask_claude_specialist(question="How to create a Pydantic AI agent?")
+            assert "VERIFIED" in result
+            assert "Agent class" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ask_claude_specialist_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask_claude_specialist
+
+        result = await ask_claude_specialist(question="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ask_claude_specialist_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import ask_claude_specialist
+
+        with patch("second_brain.agents.specialist.specialist_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await ask_claude_specialist(question="test question")
+            assert "timed out" in result.lower()
+
+    # --- run_brain_pipeline ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_run_brain_pipeline_with_steps(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import run_brain_pipeline
+
+        with patch("second_brain.agents.utils.run_pipeline") as mock_pipeline:
+            mock_pipeline.return_value = {"final": "Pipeline output result"}
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await run_brain_pipeline(request="Analyze my content", steps="recall,create")
+            assert "Pipeline output result" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_run_brain_pipeline_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import run_brain_pipeline
+
+        result = await run_brain_pipeline(request="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_run_brain_pipeline_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import run_brain_pipeline
+
+        with patch("second_brain.agents.chief_of_staff.chief_of_staff") as mock_cos:
+            mock_cos.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await run_brain_pipeline(request="test pipeline")
+            assert "timed out" in result.lower()
+
+    # --- analyze_clarity ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_analyze_clarity_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import analyze_clarity
+
+        with patch("second_brain.agents.clarity.clarity_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = ClarityResult(
+                overall_readability="HIGH",
+                critical_count=1,
+                findings=[
+                    ClarityFinding(
+                        severity="CRITICAL",
+                        location="Paragraph 1",
+                        issue="Run-on sentence",
+                        suggestion="Split into two sentences",
+                    ),
+                ],
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await analyze_clarity(content="Some content to analyze")
+            assert "HIGH" in result
+            assert "critical" in result.lower()
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_analyze_clarity_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import analyze_clarity
+
+        result = await analyze_clarity(content="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_analyze_clarity_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import analyze_clarity
+
+        with patch("second_brain.agents.clarity.clarity_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await analyze_clarity(content="test content")
+            assert "timed out" in result.lower()
+
+    # --- synthesize_feedback ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_synthesize_feedback_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import synthesize_feedback
+
+        with patch("second_brain.agents.synthesizer.synthesizer_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = SynthesizerResult(
+                total_themes_output=2,
+                implementation_hours=3.5,
+                themes=[
+                    SynthesizerTheme(
+                        priority="HIGH",
+                        title="Improve clarity",
+                        effort_minutes=90,
+                        action="Rewrite introduction",
+                    ),
+                ],
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await synthesize_feedback(findings="Review findings here")
+            assert "2 themes" in result
+            assert "3.5h" in result
+            assert "Improve clarity" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_synthesize_feedback_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import synthesize_feedback
+
+        result = await synthesize_feedback(findings="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_synthesize_feedback_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import synthesize_feedback
+
+        with patch("second_brain.agents.synthesizer.synthesizer_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await synthesize_feedback(findings="test")
+            assert "timed out" in result.lower()
+
+    # --- find_template_opportunities ---
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_find_template_opportunities_success(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import find_template_opportunities
+
+        with patch("second_brain.agents.template_builder.template_builder_agent") as mock_agent:
+            mock_result = MagicMock()
+            mock_result.output = TemplateBuilderResult(
+                templates_created=2,
+                opportunities=[
+                    TemplateOpportunity(
+                        name="Blog Post Template",
+                        when_to_use="For weekly blog content",
+                        source_deliverable="blog post about AI",
+                        structure="Introduction -> Body -> Conclusion",
+                    ),
+                ],
+            )
+            mock_agent.run = AsyncMock(return_value=mock_result)
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await find_template_opportunities(deliverable="A blog post about AI")
+            assert "2 template" in result
+            assert "Blog Post Template" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_find_template_opportunities_empty_input(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import find_template_opportunities
+
+        result = await find_template_opportunities(deliverable="")
+        assert "cannot be empty" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_find_template_opportunities_timeout(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import find_template_opportunities
+
+        with patch("second_brain.agents.template_builder.template_builder_agent") as mock_agent:
+            mock_agent.run = AsyncMock(side_effect=TimeoutError())
+            mock_deps_fn.return_value = _mock_deps()
+            mock_model_fn.return_value = MagicMock()
+
+            result = await find_template_opportunities(deliverable="test")
+            assert "timed out" in result.lower()
+
+
+class TestPerAgentModel:
+    """Smoke tests for per-agent model selection in MCP tools."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.recall_agent")
+    async def test_recall_passes_agent_name(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """recall tool calls _get_model('recall')."""
+        from second_brain.mcp_server import recall
+
+        mock_result = MagicMock()
+        mock_result.output = RecallResult(
+            query="test",
+            matches=[],
+            patterns=[],
+            summary="No matches.",
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        await recall(query="test")
+
+        mock_model_fn.assert_called_with("recall")
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_ask_passes_agent_name(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """ask tool calls _get_model('ask')."""
+        from second_brain.mcp_server import ask
+
+        mock_result = MagicMock()
+        mock_result.output = AskResult(
+            answer="Test answer.",
+            confidence="HIGH",
+            sources=[],
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        await ask(question="test?")
+
+        mock_model_fn.assert_called_with("ask")

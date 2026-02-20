@@ -1136,3 +1136,182 @@ class TestAgentEnhancements:
         result = tool_error("search_memory", ValueError("bad input"))
         assert "search_memory" in result
         assert "ValueError" in result
+
+
+class TestAgentFunctionalBehavior:
+    """Functional tests that invoke agent tool functions with mocked deps.
+
+    These tests go beyond structural checks — they call actual tool functions
+    with a mocked RunContext and verify correct service method calls.
+    """
+
+    @pytest.fixture
+    def mock_ctx(self, mock_deps):
+        """Create a mock RunContext with deps."""
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        return ctx
+
+    # --- recall_agent ---
+
+    async def test_recall_search_semantic_memory_calls_service(self, mock_ctx):
+        """search_semantic_memory calls memory_service.search."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_semantic_memory"]
+        mock_ctx.deps.memory_service.search = AsyncMock(return_value=[
+            {"memory": "test memory", "score": 0.9}
+        ])
+
+        result = await tool.function(mock_ctx, query="test query")
+
+        mock_ctx.deps.memory_service.search.assert_called_once()
+        assert isinstance(result, str)
+
+    async def test_recall_search_patterns_calls_storage(self, mock_ctx):
+        """search_patterns calls storage_service.get_patterns."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_patterns"]
+        mock_ctx.deps.memory_service.search_with_filters = AsyncMock(return_value=[])
+        mock_ctx.deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"name": "Hook First", "confidence": "HIGH", "use_count": 5,
+             "pattern_text": "Start with a hook"}
+        ])
+
+        result = await tool.function(mock_ctx, topic=None)
+
+        mock_ctx.deps.storage_service.get_patterns.assert_called_once()
+        assert isinstance(result, str)
+
+    async def test_recall_search_experiences_calls_storage(self, mock_ctx):
+        """search_experiences calls storage_service.get_experiences."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_experiences"]
+        mock_ctx.deps.storage_service.get_experiences = AsyncMock(return_value=[
+            {"name": "Blog post", "category": "writing", "review_score": 8.5}
+        ])
+
+        result = await tool.function(mock_ctx, category=None)
+
+        mock_ctx.deps.storage_service.get_experiences.assert_called_once()
+        assert isinstance(result, str)
+
+    # --- ask_agent ---
+
+    async def test_ask_load_brain_context_calls_storage(self, mock_ctx):
+        """load_brain_context calls storage_service.get_memory_content."""
+        from second_brain.agents.ask import ask_agent
+
+        tool = ask_agent._function_toolset.tools["load_brain_context"]
+        mock_ctx.deps.storage_service.get_memory_content = AsyncMock(return_value=[])
+
+        result = await tool.function(mock_ctx)
+
+        assert mock_ctx.deps.storage_service.get_memory_content.call_count >= 1
+        assert isinstance(result, str)
+
+    async def test_ask_find_relevant_patterns_calls_services(self, mock_ctx):
+        """find_relevant_patterns calls memory_service.search."""
+        from second_brain.agents.ask import ask_agent
+
+        tool = ask_agent._function_toolset.tools["find_relevant_patterns"]
+        mock_ctx.deps.memory_service.search = AsyncMock(return_value=[
+            {"memory": "hook pattern", "score": 0.8}
+        ])
+        mock_ctx.deps.memory_service.search_with_filters = AsyncMock(return_value=[])
+        mock_ctx.deps.storage_service.get_patterns = AsyncMock(return_value=[])
+        mock_ctx.deps.graphiti_service = None
+
+        result = await tool.function(mock_ctx, query="hooks")
+
+        mock_ctx.deps.memory_service.search.assert_called_once()
+        assert isinstance(result, str)
+
+    # --- learn_agent ---
+
+    async def test_learn_search_existing_patterns_calls_storage(self, mock_ctx):
+        """search_existing_patterns calls storage_service.get_patterns."""
+        from second_brain.agents.learn import learn_agent
+
+        tool = learn_agent._function_toolset.tools["search_existing_patterns"]
+        mock_ctx.deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"name": "Hook Pattern", "confidence": "HIGH", "use_count": 3}
+        ])
+
+        result = await tool.function(mock_ctx, query="hook")
+
+        mock_ctx.deps.storage_service.get_patterns.assert_called_once()
+        assert isinstance(result, str)
+
+    async def test_learn_add_to_memory_calls_memory_service(self, mock_ctx):
+        """add_to_memory calls memory_service.add."""
+        from second_brain.agents.learn import learn_agent
+
+        tool = learn_agent._function_toolset.tools["add_to_memory"]
+        mock_ctx.deps.memory_service.add = AsyncMock(return_value={"id": "mem-1"})
+
+        result = await tool.function(mock_ctx, content="New insight about hooks", category="learning")
+
+        mock_ctx.deps.memory_service.add.assert_called_once()
+        assert "Added to semantic memory" in result
+
+    # --- create_agent ---
+
+    async def test_create_load_voice_guide_calls_storage(self, mock_ctx):
+        """load_voice_guide calls storage_service.get_memory_content."""
+        from second_brain.agents.create import create_agent
+
+        tool = create_agent._function_toolset.tools["load_voice_guide"]
+        mock_ctx.deps.storage_service.get_memory_content = AsyncMock(return_value=[
+            {"content": "Keep it conversational", "subcategory": "tone"}
+        ])
+
+        result = await tool.function(mock_ctx)
+
+        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with("style-voice")
+        assert isinstance(result, str)
+
+    async def test_create_load_content_examples_calls_storage(self, mock_ctx):
+        """load_content_examples calls storage_service.get_examples."""
+        from second_brain.agents.create import create_agent
+
+        tool = create_agent._function_toolset.tools["load_content_examples"]
+        mock_ctx.deps.storage_service.get_examples = AsyncMock(return_value=[
+            {"title": "Great blog post", "content": "Example content here",
+             "content_type": "blog-post"}
+        ])
+
+        result = await tool.function(mock_ctx, content_type="blog-post")
+
+        mock_ctx.deps.storage_service.get_examples.assert_called_once_with(content_type="blog-post")
+        assert isinstance(result, str)
+
+    # --- review_agent ---
+
+    async def test_review_load_voice_reference_calls_storage(self, mock_ctx):
+        """load_voice_reference calls storage_service.get_memory_content."""
+        from second_brain.agents.review import review_agent
+
+        tool = review_agent._function_toolset.tools["load_voice_reference"]
+        mock_ctx.deps.storage_service.get_memory_content = AsyncMock(return_value=[
+            {"content": "Be direct and punchy", "subcategory": "style"}
+        ])
+
+        result = await tool.function(mock_ctx)
+
+        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with("style-voice")
+        assert isinstance(result, str)
+
+    async def test_review_load_example_benchmarks_calls_storage(self, mock_ctx):
+        """load_example_benchmarks calls storage_service.get_examples."""
+        from second_brain.agents.review import review_agent
+
+        tool = review_agent._function_toolset.tools["load_example_benchmarks"]
+        mock_ctx.deps.storage_service.get_examples = AsyncMock(return_value=[])
+
+        result = await tool.function(mock_ctx, content_type=None)
+
+        mock_ctx.deps.storage_service.get_examples.assert_called_once()
+        assert isinstance(result, str)

@@ -137,16 +137,19 @@ async def run_review_learn_pipeline(
     """
     from second_brain.agents.review import run_full_review
     from second_brain.agents.learn import learn_agent
+    from second_brain.models import get_agent_model
 
-    # Step 1: Review
+    # Step 1: Review (per-agent model resolution)
+    review_model = get_agent_model("review", deps.config) if deps else model
     review_result = await run_full_review(
         content=content,
         content_type=content_type,
         deps=deps,
-        model=model,
+        model=review_model,
     )
 
-    # Step 2: Learn from review
+    # Step 2: Learn from review (per-agent model resolution)
+    learn_model = get_agent_model("learn", deps.config) if deps else model
     strengths = "\n".join(review_result.top_strengths or [])
     issues = "\n".join(review_result.critical_issues or [])
     overall_score = review_result.overall_score
@@ -161,7 +164,7 @@ async def run_review_learn_pipeline(
         f"Extract patterns from what worked well (strengths) and note what to avoid (issues)."
     )
 
-    learn_result = await learn_agent.run(learn_prompt, deps=deps, model=model)
+    learn_result = await learn_agent.run(learn_prompt, deps=deps, model=learn_model)
 
     return {
         "review": review_result,
@@ -380,6 +383,10 @@ async def run_pipeline(
         logger.info("Pipeline step %d/%d: %s (%s)", i + 1, len(steps), step_name, description)
 
         try:
+            # Per-step model resolution
+            from second_brain.models import get_agent_model
+            step_model = get_agent_model(step_name, deps.config) if deps else model
+
             # Special handling for review — uses run_full_review()
             if step_name == "review":
                 from second_brain.agents.review import run_full_review
@@ -390,7 +397,7 @@ async def run_pipeline(
                 review_result = await run_full_review(
                     content=content_to_review,
                     deps=deps,
-                    model=model,
+                    model=step_model,
                     content_type=content_type,
                 )
                 results[step_name] = review_result
@@ -405,8 +412,8 @@ async def run_pipeline(
 
             # Standard agent execution
             kwargs = {"deps": deps, "usage_limits": limits}
-            if model is not None:
-                kwargs["model"] = model
+            if step_model is not None:
+                kwargs["model"] = step_model
 
             result = await agent.run(current_context, **kwargs)
             results[step_name] = result.output

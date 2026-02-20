@@ -241,6 +241,7 @@ class TestPatternRegistry:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[
@@ -255,6 +256,7 @@ class TestPatternRegistry:
         result = await service.get_pattern_registry()
         assert len(result) == 1
         assert result[0]["name"] == "Hook Pattern"
+        mock_table.eq.assert_any_call("user_id", "ryan")
 
     @patch("second_brain.services.storage.create_client")
     async def test_update_pattern_failures_increment(self, mock_create, brain_config):
@@ -320,6 +322,7 @@ class TestPatternRegistry:
         mock_client = MagicMock()
         mock_table = MagicMock()
         mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
         mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(data=[])
         mock_client.table.return_value = mock_table

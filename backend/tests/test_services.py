@@ -890,7 +890,8 @@ class TestStorageReinforcement:
         assert result["confidence"] == "MEDIUM"
         mock_client.rpc.assert_called_once_with(
             "reinforce_pattern",
-            {"p_pattern_id": "uuid-1", "p_new_evidence": []},
+            {"p_pattern_id": "uuid-1", "p_new_evidence": [],
+             "p_user_id": mock_config.brain_user_id},
         )
 
     @patch("second_brain.services.storage.create_client")
@@ -927,7 +928,8 @@ class TestStorageReinforcement:
         assert result["evidence"] == ["e1", "e2"]
         mock_client.rpc.assert_called_once_with(
             "reinforce_pattern",
-            {"p_pattern_id": "uuid-1", "p_new_evidence": ["e2"]},
+            {"p_pattern_id": "uuid-1", "p_new_evidence": ["e2"],
+             "p_user_id": mock_config.brain_user_id},
         )
 
     @patch("second_brain.services.storage.create_client")
@@ -971,7 +973,8 @@ class TestStorageReinforcement:
         # Verify None evidence is converted to empty list
         mock_client.rpc.assert_called_once_with(
             "reinforce_pattern",
-            {"p_pattern_id": "uuid-1", "p_new_evidence": ["new"]},
+            {"p_pattern_id": "uuid-1", "p_new_evidence": ["new"],
+             "p_user_id": mock_config.brain_user_id},
         )
 
     @patch("second_brain.services.storage.create_client")
@@ -1930,6 +1933,122 @@ class TestStorageServiceUserIsolation:
         call_data = mock_table.insert.call_args[0][0]
         assert call_data["user_id"] == mock_config.brain_user_id
 
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_setup_status_filters_by_user_id(self, mock_create, mock_config):
+        """get_setup_status filters all 3 queries by user_id."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[], count=0)
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.get_setup_status()
+
+        # user_id filter should be applied for memory_content, patterns, and examples
+        eq_calls = [c[0] for c in mock_table.eq.call_args_list]
+        user_id_calls = [c for c in eq_calls if c == ("user_id", mock_config.brain_user_id)]
+        assert len(user_id_calls) >= 3, f"Expected >= 3 user_id filters, got {len(user_id_calls)}"
+        assert isinstance(result, dict)
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_get_pattern_registry_filters_by_user_id(self, mock_create, mock_config):
+        """get_pattern_registry filters by user_id."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.order.return_value = mock_table
+        mock_table.execute.return_value = MagicMock(data=[])
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.get_pattern_registry()
+
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project_artifact_verifies_ownership(self, mock_create, mock_config):
+        """delete_project_artifact verifies ownership via parent project."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+        mock_table.delete.return_value = mock_table
+
+        call_count = 0
+        def execute_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First call: artifact lookup
+                return MagicMock(data=[{"id": "art-1", "project_id": "proj-1"}])
+            elif call_count == 2:
+                # Second call: project ownership check
+                return MagicMock(data=[{"id": "proj-1"}])
+            else:
+                # Third call: actual delete
+                return MagicMock(data=[{"id": "art-1"}])
+
+        mock_table.execute = execute_side_effect
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_project_artifact("art-1")
+
+        assert result is True
+        mock_table.eq.assert_any_call("user_id", mock_config.brain_user_id)
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_delete_project_artifact_denied_for_other_user(self, mock_create, mock_config):
+        """delete_project_artifact returns False when project belongs to another user."""
+        mock_client = MagicMock()
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_table
+        mock_table.eq.return_value = mock_table
+
+        call_count = 0
+        def execute_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Artifact found
+                return MagicMock(data=[{"id": "art-1", "project_id": "proj-1"}])
+            else:
+                # Project ownership check fails (different user)
+                return MagicMock(data=[])
+
+        mock_table.execute = execute_side_effect
+        mock_client.table.return_value = mock_table
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        result = await service.delete_project_artifact("art-1")
+
+        assert result is False
+
+    @patch("second_brain.services.storage.create_client")
+    async def test_reinforce_pattern_passes_user_id_to_rpc(self, mock_create, mock_config):
+        """reinforce_pattern passes user_id in the RPC call."""
+        mock_client = MagicMock()
+        mock_rpc = MagicMock()
+        mock_rpc.execute.return_value = MagicMock(
+            data=[{"id": "uuid-1", "name": "Test", "use_count": 2,
+                   "confidence": "MEDIUM", "evidence": []}]
+        )
+        mock_client.rpc.return_value = mock_rpc
+        mock_create.return_value = mock_client
+
+        service = StorageService(mock_config)
+        await service.reinforce_pattern("uuid-1")
+
+        rpc_call_params = mock_client.rpc.call_args[0][1]
+        assert rpc_call_params["p_user_id"] == mock_config.brain_user_id
+
 
 class TestMemoryServiceAbstraction:
     """Tests for MemoryServiceBase ABC and StubMemoryService."""
@@ -2065,6 +2184,7 @@ class TestStorageBulkOperations:
         return BrainConfig(
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
+            brain_user_id="ryan",
             brain_data_path=tmp_path,
             batch_upsert_chunk_size=500,
             service_timeout_seconds=15,

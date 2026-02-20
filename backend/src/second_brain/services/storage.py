@@ -163,7 +163,11 @@ class StorageService:
             result = await asyncio.to_thread(
                 self._client.rpc(
                     "reinforce_pattern",
-                    {"p_pattern_id": pattern_id, "p_new_evidence": new_evidence or []}
+                    {
+                        "p_pattern_id": pattern_id,
+                        "p_new_evidence": new_evidence or [],
+                        "p_user_id": self.user_id,
+                    }
                 ).execute
             )
             if not result.data:
@@ -904,6 +908,9 @@ class StorageService:
     async def delete_project_artifact(self, artifact_id: str) -> bool:
         """Delete a single project artifact by ID.
 
+        Verifies ownership via the parent project's user_id before deleting,
+        since project_artifacts has no user_id column.
+
         Args:
             artifact_id: UUID of the artifact to delete
 
@@ -911,6 +918,27 @@ class StorageService:
             True if found and deleted, False otherwise.
         """
         try:
+            # Fetch artifact to get project_id
+            artifact = await asyncio.to_thread(
+                self._client.table("project_artifacts")
+                .select("id, project_id")
+                .eq("id", artifact_id)
+                .execute
+            )
+            if not artifact.data:
+                return False
+            project_id = artifact.data[0]["project_id"]
+            # Verify project ownership
+            project = await asyncio.to_thread(
+                self._client.table("projects")
+                .select("id")
+                .eq("id", project_id)
+                .eq("user_id", self.user_id)
+                .execute
+            )
+            if not project.data:
+                return False
+            # Now safe to delete
             result = await asyncio.to_thread(
                 self._client.table("project_artifacts")
                 .delete()
@@ -958,6 +986,7 @@ class StorageService:
                 self._client.table("patterns")
                 .select("name, topic, confidence, use_count, date_added, date_updated, "
                         "consecutive_failures, applicable_content_types")
+                .eq("user_id", self.user_id)
                 .order("confidence", desc=True)
                 .order("use_count", desc=True)
                 .execute
@@ -1083,6 +1112,7 @@ class StorageService:
             result = await asyncio.to_thread(
                 self._client.table("memory_content")
                 .select("category, subcategory")
+                .eq("user_id", self.user_id)
                 .execute
             )
             entries = result.data if result.data else []
@@ -1091,12 +1121,18 @@ class StorageService:
             missing = sorted(all_categories - populated_categories)
 
             pattern_result = await asyncio.to_thread(
-                self._client.table("patterns").select("id", count="exact").execute
+                self._client.table("patterns")
+                .select("id", count="exact")
+                .eq("user_id", self.user_id)
+                .execute
             )
             has_patterns = bool(pattern_result.count and pattern_result.count > 0)
 
             example_result = await asyncio.to_thread(
-                self._client.table("examples").select("id", count="exact").execute
+                self._client.table("examples")
+                .select("id", count="exact")
+                .eq("user_id", self.user_id)
+                .execute
             )
             has_examples = bool(example_result.count and example_result.count > 0)
 

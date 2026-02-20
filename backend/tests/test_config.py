@@ -22,6 +22,8 @@ _ENV_VARS = [
     "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
     "MEMORY_PROVIDER",
     "MCP_TRANSPORT", "MCP_HOST", "MCP_PORT",
+    "MODEL_PROVIDER", "MODEL_NAME", "MODEL_FALLBACK_CHAIN",
+    "AGENT_MODEL_OVERRIDES",
 ]
 
 
@@ -49,7 +51,7 @@ class TestBrainConfigDefaults:
         assert config.ollama_model == "llama3.1:8b"
         assert config.mem0_api_key is None
         assert config.graph_provider == "none"
-        assert config.brain_user_id == "ryan"
+        assert config.brain_user_id == ""
         assert config.primary_model == "anthropic:claude-sonnet-4-5"
         assert config.fallback_model == "ollama:llama3.1:8b"
         assert config.memory_search_limit == 10
@@ -818,3 +820,69 @@ class TestMcpTransportConfig:
                 mcp_port=70000,
                 _env_file=None,
             )
+
+
+class TestAgentModelOverrides:
+    """Tests for AGENT_MODEL_OVERRIDES config field and validator."""
+
+    def test_default_empty_dict(self, tmp_path):
+        """Default agent_model_overrides is an empty dict."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.agent_model_overrides == {}
+
+    def test_valid_overrides_accepted(self, tmp_path):
+        """Known agent names with valid model strings are accepted."""
+        overrides = {"recall": "llama3.1:8b", "create": "anthropic:claude-sonnet-4-5"}
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            agent_model_overrides=overrides,
+            _env_file=None,
+        )
+        assert config.agent_model_overrides == overrides
+
+    def test_empty_model_string_raises(self, tmp_path):
+        """Empty model string in overrides raises ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                agent_model_overrides={"recall": ""},
+                _env_file=None,
+            )
+
+    def test_unknown_agent_warns(self, tmp_path, caplog):
+        """Unknown agent names produce a warning but don't raise."""
+        import logging
+        with caplog.at_level(logging.WARNING):
+            config = BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                agent_model_overrides={"nonexistent_agent": "llama3.1:8b"},
+                _env_file=None,
+            )
+        assert config.agent_model_overrides == {"nonexistent_agent": "llama3.1:8b"}
+        assert "Unknown agent name" in caplog.text
+
+    def test_env_json_parsing(self, tmp_path, monkeypatch):
+        """AGENT_MODEL_OVERRIDES env var parses JSON string."""
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv(
+            "AGENT_MODEL_OVERRIDES",
+            '{"recall": "llama3.1:8b", "create": "anthropic:claude-sonnet-4-5"}'
+        )
+        config = BrainConfig(_env_file=None)
+        assert config.agent_model_overrides == {
+            "recall": "llama3.1:8b",
+            "create": "anthropic:claude-sonnet-4-5",
+        }

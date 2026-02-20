@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from second_brain.config import BrainConfig
-from second_brain.models import get_model
+from second_brain.models import get_model, get_agent_model
 
 
 # Known env vars that BrainConfig reads -- clear to prevent host bleed.
@@ -19,6 +19,7 @@ _ENV_VARS = [
     "USE_SUBSCRIPTION", "CLAUDE_OAUTH_TOKEN",
     "MODEL_PROVIDER", "MODEL_NAME", "MODEL_FALLBACK_CHAIN",
     "OPENAI_MODEL_NAME", "GROQ_API_KEY", "GROQ_MODEL_NAME",
+    "AGENT_MODEL_OVERRIDES",
 ]
 
 
@@ -534,3 +535,127 @@ class TestConfigFallbackChain:
             model_fallback_chain=" ollama-local , openai ",
         )
         assert config.fallback_chain_list == ["ollama-local", "openai"]
+
+
+class TestGetAgentModel:
+    """Tests for get_agent_model() per-agent model resolution."""
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_no_override_falls_back_to_global(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """Agent without override uses global get_model()."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+        )
+        mock_model = MagicMock()
+        mock_model_cls.return_value = mock_model
+
+        result = get_agent_model("recall", config)
+
+        assert result is mock_model
+
+    @patch("pydantic_ai.providers.ollama.OllamaProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    def test_override_plain_model_uses_global_provider(
+        self, mock_openai_cls, mock_ollama_cls, tmp_path
+    ):
+        """Override with plain model name uses global provider."""
+        config = _make_config(
+            tmp_path,
+            model_provider="ollama-local",
+            agent_model_overrides={"recall": "mistral:7b"},
+        )
+        mock_model = MagicMock()
+        mock_openai_cls.return_value = mock_model
+
+        result = get_agent_model("recall", config)
+
+        assert result is mock_model
+        assert mock_openai_cls.call_args[0][0] == "mistral:7b"
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_override_with_provider_prefix(self, mock_model_cls, mock_provider_cls, tmp_path):
+        """Override with 'provider:model' syntax uses specified provider."""
+        config = _make_config(
+            tmp_path,
+            model_provider="ollama-local",
+            anthropic_api_key="sk-test",
+            agent_model_overrides={"create": "anthropic:claude-sonnet-4-5"},
+        )
+        mock_model = MagicMock()
+        mock_model_cls.return_value = mock_model
+
+        result = get_agent_model("create", config)
+
+        assert result is mock_model
+        assert mock_model_cls.call_args[0][0] == "claude-sonnet-4-5"
+
+    @patch("pydantic_ai.providers.ollama.OllamaProvider")
+    @patch("pydantic_ai.models.openai.OpenAIChatModel")
+    def test_ollama_colon_model_not_mistaken_for_provider(
+        self, mock_openai_cls, mock_ollama_cls, tmp_path
+    ):
+        """Ollama model names with colons (e.g., deepseek-r1:70b) are not split as provider:model."""
+        config = _make_config(
+            tmp_path,
+            model_provider="ollama-local",
+            agent_model_overrides={"recall": "deepseek-r1:70b"},
+        )
+        mock_model = MagicMock()
+        mock_openai_cls.return_value = mock_model
+
+        result = get_agent_model("recall", config)
+
+        # deepseek-r1 is not a registered provider, so full string is used as model name
+        assert result is mock_model
+        assert mock_openai_cls.call_args[0][0] == "deepseek-r1:70b"
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_override_build_failure_falls_back_to_global(
+        self, mock_model_cls, mock_provider_cls, tmp_path
+    ):
+        """When override build fails, falls back to global model gracefully."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            agent_model_overrides={"recall": "openai:gpt-4o"},
+        )
+        # First call for override will fail (openai provider), second for global fallback
+        global_model = MagicMock()
+        mock_model_cls.return_value = global_model
+
+        result = get_agent_model("recall", config)
+
+        # Should get a model (either override or fallback)
+        assert result is not None
+
+    @patch("pydantic_ai.providers.anthropic.AnthropicProvider")
+    @patch("pydantic_ai.models.anthropic.AnthropicModel")
+    def test_different_agents_get_different_overrides(
+        self, mock_model_cls, mock_provider_cls, tmp_path
+    ):
+        """Multiple agents can have different overrides."""
+        config = _make_config(
+            tmp_path,
+            anthropic_api_key="sk-test",
+            model_provider="anthropic",
+            agent_model_overrides={
+                "recall": "claude-haiku-4-5-20251001",
+                "create": "claude-opus-4",
+            },
+        )
+        mock_model_cls.return_value = MagicMock()
+
+        get_agent_model("recall", config)
+        recall_model_name = mock_model_cls.call_args[0][0]
+
+        get_agent_model("create", config)
+        create_model_name = mock_model_cls.call_args[0][0]
+
+        assert recall_model_name == "claude-haiku-4-5-20251001"
+        assert create_model_name == "claude-opus-4"

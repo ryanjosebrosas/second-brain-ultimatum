@@ -66,12 +66,13 @@ async def health_check(request: Request) -> JSONResponse:
 # Lazy-init deps (created on first tool call) with circuit breaker
 _deps: BrainDeps | None = None
 _model = None
+_agent_models: dict = {}  # Per-agent model cache
 _deps_failed: bool = False
 _deps_error: str = ""
 
 
 def _get_deps() -> BrainDeps:
-    global _deps, _model, _deps_failed, _deps_error
+    global _deps, _model, _deps_failed, _deps_error, _agent_models
     if _deps_failed:
         raise RuntimeError(
             f"Second Brain initialization failed: {_deps_error}. "
@@ -81,6 +82,7 @@ def _get_deps() -> BrainDeps:
         try:
             _deps = create_deps()
             _model = get_model(_deps.config)
+            _agent_models = {}
         except Exception as e:
             _deps_failed = True
             _deps_error = str(e)
@@ -98,12 +100,13 @@ def init_deps() -> None:
 
     See also: service_mcp.py:init_deps() for the same pattern.
     """
-    global _deps, _model, _deps_failed, _deps_error
+    global _deps, _model, _deps_failed, _deps_error, _agent_models
     if _deps is not None:
         return  # Already initialized
     try:
         _deps = create_deps()
         _model = get_model(_deps.config)
+        _agent_models = {}
         logger.warning("Dependencies initialized successfully")
     except Exception as e:
         _deps_failed = True
@@ -111,9 +114,21 @@ def init_deps() -> None:
         logger.error("Failed to initialize deps: %s", e)
 
 
-def _get_model() -> "Model | None":
+def _get_model(agent_name: str | None = None) -> "Model | None":
+    """Get model for a specific agent, or the global default.
+
+    Caches per-agent models to avoid rebuilding on every tool call.
+    """
     _get_deps()  # ensure initialized
-    return _model
+
+    if agent_name is None:
+        return _model
+
+    if agent_name not in _agent_models:
+        from second_brain.models import get_agent_model
+        _agent_models[agent_name] = get_agent_model(agent_name, _deps.config)
+
+    return _agent_models[agent_name]
 
 
 @server.tool()
@@ -130,7 +145,7 @@ async def recall(query: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("recall")
     timeout = deps.config.api_timeout_seconds
     try:
         async with asyncio.timeout(timeout):
@@ -179,7 +194,7 @@ async def ask(question: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("ask")
     timeout = deps.config.api_timeout_seconds
     try:
         async with asyncio.timeout(timeout):
@@ -223,7 +238,7 @@ async def learn(content: str, category: str = "general") -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("learn")
     timeout = deps.config.api_timeout_seconds
     try:
         async with asyncio.timeout(timeout):
@@ -586,7 +601,7 @@ async def create_content(
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("create")
     registry = deps.get_content_type_registry()
 
     type_config = await registry.get(content_type)
@@ -701,7 +716,7 @@ async def review_content(content: str, content_type: str | None = None) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("review")
     timeout = deps.config.api_timeout_seconds * deps.config.mcp_review_timeout_multiplier
     try:
         async with asyncio.timeout(timeout):
@@ -890,7 +905,7 @@ async def consolidate_brain(min_cluster_size: int = 3) -> str:
         min_cluster_size: Minimum memories needed to form a pattern cluster (default: 3)
     """
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("learn")
     timeout = deps.config.api_timeout_seconds
     try:
         async with asyncio.timeout(timeout):
@@ -1611,7 +1626,7 @@ async def coaching_session(request: str, session_type: str = "morning") -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("coach")
     from second_brain.agents.coach import coach_agent
     prompt = f"Session type: {session_type}\n\n{request}"
     timeout = deps.config.api_timeout_seconds
@@ -1639,7 +1654,7 @@ async def prioritize_tasks(tasks: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("pmo")
     from second_brain.agents.pmo import pmo_agent
     timeout = deps.config.api_timeout_seconds
     try:
@@ -1666,7 +1681,7 @@ async def compose_email(request: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("email")
     from second_brain.agents.email_agent import email_agent
     timeout = deps.config.api_timeout_seconds
     try:
@@ -1690,7 +1705,7 @@ async def ask_claude_specialist(question: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("specialist")
     from second_brain.agents.specialist import specialist_agent
     timeout = deps.config.api_timeout_seconds
     try:
@@ -1720,7 +1735,7 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("chief_of_staff")
     from second_brain.agents.utils import run_pipeline
 
     if not steps:
@@ -1758,7 +1773,7 @@ async def analyze_clarity(content: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("clarity")
     from second_brain.agents.clarity import clarity_agent
     timeout = deps.config.api_timeout_seconds
     try:
@@ -1781,7 +1796,7 @@ async def synthesize_feedback(findings: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("synthesizer")
     from second_brain.agents.synthesizer import synthesizer_agent
     timeout = deps.config.api_timeout_seconds
     try:
@@ -1804,7 +1819,7 @@ async def find_template_opportunities(deliverable: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
-    model = _get_model()
+    model = _get_model("template_builder")
     from second_brain.agents.template_builder import template_builder_agent
     timeout = deps.config.api_timeout_seconds
     try:

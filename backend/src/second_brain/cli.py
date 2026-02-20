@@ -11,7 +11,7 @@ if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from second_brain.deps import BrainDeps, create_deps
-from second_brain.models import get_model
+from second_brain.models import get_model, get_agent_model
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def recall(query: str):
     from second_brain.agents.recall import recall_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("recall", deps.config)
 
     async def run():
         result = await recall_agent.run(
@@ -87,7 +87,7 @@ def ask(question: str):
     from second_brain.agents.ask import ask_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("ask", deps.config)
 
     async def run():
         result = await ask_agent.run(
@@ -126,7 +126,7 @@ def learn(content: str, category: str):
     from second_brain.agents.learn import learn_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("learn", deps.config)
 
     async def run():
         result = await learn_agent.run(
@@ -183,7 +183,7 @@ def create(prompt: str, content_type: str, mode: str | None):
     from second_brain.agents.create import create_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("create", deps.config)
     registry = deps.get_content_type_registry()
 
     async def run():
@@ -233,7 +233,7 @@ def review(content: str, content_type: str | None):
     from second_brain.agents.review import run_full_review
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("review", deps.config)
 
     async def run():
         result = await run_full_review(content, deps, model, content_type)
@@ -443,7 +443,7 @@ def consolidate(min_cluster: int):
     from second_brain.agents.learn import learn_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("learn", deps.config)
 
     async def run():
         result = await learn_agent.run(
@@ -809,7 +809,7 @@ def route(request: str, execute: bool):
     from second_brain.agents.chief_of_staff import chief_of_staff
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("chief_of_staff", deps.config)
 
     async def run():
         # Step 1: Get routing decision
@@ -859,7 +859,7 @@ def clarity(content: str):
     from second_brain.agents.clarity import clarity_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("clarity", deps.config)
 
     async def run():
         result = await clarity_agent.run(content, deps=deps, model=model)
@@ -880,7 +880,7 @@ def synthesize(findings: str):
     from second_brain.agents.synthesizer import synthesizer_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("synthesizer", deps.config)
 
     async def run():
         result = await synthesizer_agent.run(findings, deps=deps, model=model)
@@ -900,7 +900,7 @@ def find_templates(deliverable: str):
     from second_brain.agents.template_builder import template_builder_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("template_builder", deps.config)
 
     async def run():
         result = await template_builder_agent.run(deliverable, deps=deps, model=model)
@@ -922,7 +922,7 @@ def coach(request: str, session_type: str):
     from second_brain.agents.coach import coach_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("coach", deps.config)
     prompt = f"Session type: {session_type}\n\n{request}"
 
     async def run():
@@ -948,7 +948,7 @@ def prioritize(tasks: str):
     from second_brain.agents.pmo import pmo_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("pmo", deps.config)
 
     async def run():
         result = await pmo_agent.run(tasks, deps=deps, model=model)
@@ -970,7 +970,7 @@ def email(request: str):
     from second_brain.agents.email_agent import email_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("email", deps.config)
 
     async def run():
         result = await email_agent.run(request, deps=deps, model=model)
@@ -991,7 +991,7 @@ def ask_specialist(question: str):
     from second_brain.agents.specialist import specialist_agent
 
     deps = create_deps()
-    model = get_model(deps.config)
+    model = get_agent_model("specialist", deps.config)
 
     async def run():
         result = await specialist_agent.run(question, deps=deps, model=model)

@@ -82,7 +82,7 @@ class TestCLIBasic:
 class TestRecallCommand:
     """Test recall command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.recall.recall_agent")
     def test_recall_success(self, mock_agent, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -97,7 +97,7 @@ class TestRecallCommand:
         assert result.exit_code == 0
         assert "Recall" in result.output
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.recall.recall_agent")
     def test_recall_with_populated_output(self, mock_agent, mock_model, runner, mock_create_deps):
         """recall command formats matches, patterns, and relations."""
@@ -136,7 +136,7 @@ class TestRecallCommand:
 class TestAskCommand:
     """Test ask command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.ask.ask_agent")
     def test_ask_success(self, mock_agent, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -159,7 +159,7 @@ class TestAskCommand:
 class TestLearnCommand:
     """Test learn command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.learn.learn_agent")
     def test_learn_success(self, mock_agent, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -177,7 +177,7 @@ class TestLearnCommand:
         assert result.exit_code == 0
         assert "Learn" in result.output
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.learn.learn_agent")
     def test_learn_with_patterns_output(self, mock_agent, mock_model, runner, mock_create_deps):
         """learn command formats extracted patterns with details."""
@@ -215,7 +215,7 @@ class TestLearnCommand:
 class TestCreateCommand:
     """Test create command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     def test_create_unknown_type(self, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
         # registry.get returns None for unknown type
@@ -223,7 +223,7 @@ class TestCreateCommand:
         assert result.exit_code == 0
         assert "Unknown content type" in result.output
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.create.create_agent")
     def test_create_success(self, mock_agent, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -250,7 +250,7 @@ class TestCreateCommand:
         assert result.exit_code == 0
         assert "Draft" in result.output
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.create.create_agent")
     def test_create_with_mode_override(self, mock_agent, mock_model, runner, mock_create_deps):
         """create command passes --mode override to agent prompt."""
@@ -282,7 +282,7 @@ class TestCreateCommand:
 class TestReviewCommand:
     """Test review command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.review.run_full_review")
     def test_review_success(self, mock_review, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -299,7 +299,7 @@ class TestReviewCommand:
         assert result.exit_code == 0
         assert "Review" in result.output
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.review.run_full_review")
     def test_review_with_type_flag(self, mock_review, mock_model, runner, mock_create_deps):
         """review command passes --type flag to run_full_review."""
@@ -564,7 +564,7 @@ class TestGrowthCommand:
 class TestConsolidateCommand:
     """Test consolidate command."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.learn.learn_agent")
     def test_consolidate_success(self, mock_agent, mock_model, runner, mock_create_deps):
         mock_model.return_value = MagicMock()
@@ -647,7 +647,7 @@ class TestTypesRemoveCommand:
 class TestCLIAgentErrors:
     """Tests for CLI behavior when agents raise exceptions."""
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.recall.recall_agent")
     def test_recall_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
         """CLI shows traceback/error when recall agent fails."""
@@ -656,7 +656,7 @@ class TestCLIAgentErrors:
         result = runner.invoke(cli, ["recall", "test query"])
         assert result.exit_code != 0
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.ask.ask_agent")
     def test_ask_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
         """CLI shows traceback/error when ask agent fails."""
@@ -665,7 +665,7 @@ class TestCLIAgentErrors:
         result = runner.invoke(cli, ["ask", "test question"])
         assert result.exit_code != 0
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.create.create_agent")
     def test_create_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
         """CLI shows traceback/error when create agent fails."""
@@ -682,7 +682,7 @@ class TestCLIAgentErrors:
         result = runner.invoke(cli, ["create", "test", "--type", "linkedin"])
         assert result.exit_code != 0
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.review.run_full_review")
     def test_review_agent_error(self, mock_review, mock_model, runner, mock_create_deps):
         """CLI shows traceback/error when review fails."""
@@ -691,7 +691,7 @@ class TestCLIAgentErrors:
         result = runner.invoke(cli, ["review", "Test content"])
         assert result.exit_code != 0
 
-    @patch("second_brain.cli.get_model")
+    @patch("second_brain.cli.get_agent_model")
     @patch("second_brain.agents.learn.learn_agent")
     def test_learn_agent_error(self, mock_agent, mock_model, runner, mock_create_deps):
         """CLI shows traceback/error when learn agent fails."""

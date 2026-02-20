@@ -49,3 +49,44 @@ def get_model(config: BrainConfig) -> Model:
         "Set MODEL_PROVIDER and ensure the required API key/service is available. "
         "Supported providers: anthropic, ollama-local, ollama-cloud, openai, groq."
     )
+
+
+def get_agent_model(agent_name: str, config: BrainConfig) -> Model:
+    """Get the LLM model for a specific agent, respecting per-agent overrides.
+
+    Checks config.agent_model_overrides for an agent-specific model string.
+    If found, parses 'provider:model' syntax or uses global provider with
+    the override as model name. Falls back to get_model(config) if no override.
+    """
+    override = config.agent_model_overrides.get(agent_name)
+    if not override:
+        return get_model(config)
+
+    from second_brain.providers import get_provider_class, PROVIDER_REGISTRY
+
+    # Parse provider:model syntax
+    provider_name = config.model_provider
+    model_name = override
+
+    if ":" in override:
+        prefix, rest = override.split(":", 1)
+        if prefix in PROVIDER_REGISTRY:
+            provider_name = prefix
+            model_name = rest
+
+    try:
+        provider_cls = get_provider_class(provider_name)
+        provider = provider_cls.from_config(config)
+        provider.validate_config()
+        model = provider.build_model(model_name)
+        logger.info(
+            "Agent %r using model override: %s (provider: %s)",
+            agent_name, model_name, provider_name,
+        )
+        return model
+    except Exception as e:
+        logger.warning(
+            "Agent %r model override failed (%s), falling back to global: %s",
+            agent_name, override, e,
+        )
+        return get_model(config)
