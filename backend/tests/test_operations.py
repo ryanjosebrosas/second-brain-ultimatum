@@ -233,7 +233,7 @@ class TestSpecialistValidator:
 
 class TestRegistryCompleteness:
     def test_all_operations_agents_in_registry(self):
-        from second_brain.agents.utils import get_agent_registry
+        from second_brain.agents.registry import get_agent_registry
         registry = get_agent_registry()
         for name in ["coach", "pmo", "email", "specialist"]:
             assert name in registry, f"'{name}' missing from registry"
@@ -241,7 +241,7 @@ class TestRegistryCompleteness:
         assert len(registry) >= 12
 
     def test_registry_descriptions_present(self):
-        from second_brain.agents.utils import get_agent_registry
+        from second_brain.agents.registry import get_agent_registry
         registry = get_agent_registry()
         for name, (agent, desc) in registry.items():
             assert desc, f"'{name}' has empty description"

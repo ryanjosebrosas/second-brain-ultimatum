@@ -6,7 +6,8 @@ from second_brain.agents.learn import learn_agent
 from second_brain.agents.create import create_agent
 from second_brain.agents.review import review_agent, run_full_review
 from second_brain.agents.chief_of_staff import chief_of_staff
-from second_brain.agents.utils import get_agent_registry, run_pipeline
+from second_brain.agents.registry import get_agent_registry
+from second_brain.agents.utils import run_pipeline
 from second_brain.agents.clarity import clarity_agent
 from second_brain.agents.synthesizer import synthesizer_agent
 from second_brain.agents.template_builder import template_builder_agent

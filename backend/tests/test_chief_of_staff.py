@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pydantic_ai import ModelRetry
 
 from second_brain.agents.chief_of_staff import chief_of_staff
-from second_brain.agents.utils import get_agent_registry, run_pipeline
+from second_brain.agents.registry import get_agent_registry
+from second_brain.agents.utils import run_pipeline
 from second_brain.schemas import RoutingDecision
 from second_brain.config import BrainConfig
 from second_brain.deps import BrainDeps

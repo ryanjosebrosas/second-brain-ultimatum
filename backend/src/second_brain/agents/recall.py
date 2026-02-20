@@ -70,38 +70,51 @@ async def search_semantic_memory(
         oversample = ctx.deps.config.retrieval_oversample_factor
         search_limit = ctx.deps.config.memory_search_limit * oversample
 
-        # Build parallel searches
-        mem0_coro = ctx.deps.memory_service.search(expanded, limit=search_limit)
-        hybrid_coro = None
-
-        embedding = None
+        # Phase 1: embed + mem0 in parallel
+        embed_coro = None
         if ctx.deps.embedding_service:
-            try:
-                embedding = await ctx.deps.embedding_service.embed_query(expanded)
-            except Exception:
-                logger.debug("Embedding failed in search_semantic_memory, skipping hybrid search")
-        if embedding:
-            hybrid_coro = ctx.deps.storage_service.hybrid_search(
-                query_text=query,
-                query_embedding=embedding,
-                table="memory_content",
-                limit=search_limit,
-            )
+            embed_coro = ctx.deps.embedding_service.embed_query(expanded)
 
-        # Execute concurrently
-        if hybrid_coro:
-            mem0_result, hybrid_result = await asyncio.gather(
-                mem0_coro, hybrid_coro, return_exceptions=True,
+        mem0_coro = ctx.deps.memory_service.search(expanded, limit=search_limit)
+
+        if embed_coro:
+            embed_result, mem0_result = await asyncio.gather(
+                embed_coro, mem0_coro, return_exceptions=True,
             )
         else:
+            embed_result = None
             mem0_result = await mem0_coro
-            hybrid_result = None
+
+        # Resolve embed result (may be exception from gather)
+        embedding = None
+        if embed_result is not None and not isinstance(embed_result, BaseException):
+            embedding = embed_result
+        elif isinstance(embed_result, BaseException):
+            logger.debug("Embedding failed in search_semantic_memory, skipping hybrid search")
+
+        # Resolve mem0 result (may be exception from gather)
+        if isinstance(mem0_result, BaseException):
+            logger.warning("Mem0 search failed: %s", type(mem0_result).__name__)
+            mem0_result = None
+
+        # Phase 2: hybrid search (depends on embedding)
+        hybrid_result = None
+        if embedding:
+            try:
+                hybrid_result = await ctx.deps.storage_service.hybrid_search(
+                    query_text=query,
+                    query_embedding=embedding,
+                    table="memory_content",
+                    limit=search_limit,
+                )
+            except Exception:
+                logger.debug("Hybrid search failed in search_semantic_memory")
 
         # Collect results
         all_memories: list[dict] = []
-        if not isinstance(mem0_result, BaseException):
+        if mem0_result is not None:
             all_memories.extend(normalize_results(mem0_result.memories, source="mem0"))
-        if hybrid_result and not isinstance(hybrid_result, BaseException):
+        if hybrid_result:
             all_memories.extend(
                 normalize_results(hybrid_result, source="hybrid:memory_content",
                                   content_key="content", score_key="similarity")
@@ -111,7 +124,7 @@ async def search_semantic_memory(
         memories = await rerank_memories(ctx.deps, query, all_memories)
         relations = await search_with_graph_fallback(
             ctx.deps, query,
-            mem0_result.relations if not isinstance(mem0_result, BaseException) else [],
+            mem0_result.relations if mem0_result is not None else [],
         )
 
         if not memories and not relations:
@@ -139,55 +152,61 @@ async def search_patterns(
         query_text = topic or "patterns"
         expanded = expand_query(query_text)
 
-        # Build parallel searches
-        coros = {}
-
-        # Path A: Hybrid search (semantic + keyword via pgvector + FTS)
-        embedding = None
+        # Phase 1: embed + mem0 in parallel
+        embed_coro = None
         if ctx.deps.embedding_service:
-            try:
-                embedding = await ctx.deps.embedding_service.embed_query(expanded)
-            except Exception:
-                logger.debug("Embedding failed in search_patterns, skipping hybrid search")
-        if embedding:
-            coros["hybrid"] = ctx.deps.storage_service.hybrid_search(
-                query_text=query_text,
-                query_embedding=embedding,
-                table="patterns",
-                limit=ctx.deps.config.memory_search_limit,
-            )
+            embed_coro = ctx.deps.embedding_service.embed_query(expanded)
 
-        # Path B: Semantic memory search (Mem0 with pattern filter)
         filters = {"category": "pattern"}
         if topic:
             filters = {"AND": [{"category": "pattern"}, {"topic": topic}]}
-        coros["mem0"] = ctx.deps.memory_service.search_with_filters(
+        mem0_coro = ctx.deps.memory_service.search_with_filters(
             topic or "patterns",
             metadata_filters=filters,
             limit=10,
             enable_graph=True,
         )
 
-        # Execute in parallel
-        if len(coros) >= 2:
-            results = await asyncio.gather(
-                *coros.values(), return_exceptions=True,
+        if embed_coro:
+            embed_result, mem0_raw = await asyncio.gather(
+                embed_coro, mem0_coro, return_exceptions=True,
             )
-            result_map = dict(zip(coros.keys(), results))
         else:
-            result_map = {}
-            for key, coro in coros.items():
-                try:
-                    result_map[key] = await coro
-                except Exception as exc:
-                    result_map[key] = exc
+            embed_result = None
+            mem0_raw = await mem0_coro
+
+        # Resolve embed result
+        embedding = None
+        if embed_result is not None and not isinstance(embed_result, BaseException):
+            embedding = embed_result
+        elif isinstance(embed_result, BaseException):
+            logger.debug("Embedding failed in search_patterns, skipping hybrid search")
+
+        # Resolve mem0 result
+        if isinstance(mem0_raw, BaseException):
+            logger.debug("Mem0 pattern search failed: %s", type(mem0_raw).__name__)
+            mem0_raw = None
+
+        # Phase 2: hybrid search (depends on embedding)
+        hybrid_result = None
+        if embedding:
+            try:
+                hybrid_result = await ctx.deps.storage_service.hybrid_search(
+                    query_text=query_text,
+                    query_embedding=embedding,
+                    table="patterns",
+                    limit=ctx.deps.config.memory_search_limit,
+                )
+            except Exception:
+                logger.debug("Hybrid search failed in search_patterns")
+
+        result_map = {"hybrid": hybrid_result, "mem0": mem0_raw}
 
         # Collect all results for unified reranking
         all_pattern_results = []
 
         # Hybrid results (Supabase)
-        hybrid_result = result_map.get("hybrid")
-        if hybrid_result and not isinstance(hybrid_result, BaseException):
+        if hybrid_result:
             all_pattern_results.extend(
                 normalize_results(hybrid_result, source="hybrid",
                                   content_key="content", score_key="similarity")
@@ -195,14 +214,11 @@ async def search_patterns(
 
         # Semantic results (Mem0)
         semantic_relations = []
-        mem0_result = result_map.get("mem0")
-        if mem0_result and not isinstance(mem0_result, BaseException):
+        if mem0_raw is not None:
             all_pattern_results.extend(
-                normalize_results(mem0_result.memories, source="mem0")
+                normalize_results(mem0_raw.memories, source="mem0")
             )
-            semantic_relations = mem0_result.relations
-        elif isinstance(mem0_result, BaseException):
-            logger.debug("Semantic pattern search failed: %s", mem0_result)
+            semantic_relations = mem0_raw.relations
 
         # Deduplicate and rerank as a unified set
         all_pattern_results = deduplicate_results(all_pattern_results)

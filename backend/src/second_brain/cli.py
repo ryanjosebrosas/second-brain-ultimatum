@@ -886,7 +886,7 @@ def route(request: str, execute: bool):
             if final:
                 click.echo(f"\nPipeline result:\n{final}")
         else:
-            from second_brain.agents.utils import get_agent_registry
+            from second_brain.agents.registry import get_agent_registry
             registry = get_agent_registry()
             if routing.target_agent in registry:
                 agent, desc = registry[routing.target_agent]

@@ -435,14 +435,14 @@ class TestContentTypeEnrichment:
 
 class TestAgentRegistry:
     def test_all_content_pipeline_agents_in_registry(self):
-        from second_brain.agents.utils import get_agent_registry
+        from second_brain.agents.registry import get_agent_registry
         registry = get_agent_registry()
         assert "clarity" in registry
         assert "synthesizer" in registry
         assert "template_builder" in registry
 
     def test_registry_has_descriptions(self):
-        from second_brain.agents.utils import get_agent_registry
+        from second_brain.agents.registry import get_agent_registry
         registry = get_agent_registry()
         for key in ("clarity", "synthesizer", "template_builder"):
             agent, desc = registry[key]
@@ -450,6 +450,6 @@ class TestAgentRegistry:
             assert desc
 
     def test_essay_writer_removed_from_registry(self):
-        from second_brain.agents.utils import get_agent_registry
+        from second_brain.agents.registry import get_agent_registry
         registry = get_agent_registry()
         assert "essay_writer" not in registry

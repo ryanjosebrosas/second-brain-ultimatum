@@ -1,8 +1,11 @@
 """Shared utilities for Second Brain agents."""
 
 import asyncio
+import hashlib
 import logging
-from collections.abc import Callable
+import time as _time
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -31,7 +34,7 @@ def format_memories(memories: list[dict], limit: int | None = None) -> str:
     lines = []
     for m in items:
         content = m.get("memory", m.get("result", ""))
-        score = m.get("rerank_score", m.get("score", 0))
+        score = float(m.get("rerank_score", m.get("score", 0)) or 0)
         line = f"- [{score:.2f}] {content}"
         source = m.get("source", "")
         if source:
@@ -106,12 +109,13 @@ def expand_query(query: str, max_expansions: int = 3) -> str:
     Returns:
         Expanded query string. Returns original if no synonyms match.
     """
-    tokens = query.lower().split()
+    query_lower = query.lower()
+    tokens = query_lower.split()
     expansions: list[str] = []
     for token in tokens:
         if token in _QUERY_SYNONYMS:
             for syn in _QUERY_SYNONYMS[token]:
-                if syn.lower() not in query.lower():
+                if syn.lower() not in query_lower:
                     expansions.append(syn)
     if expansions:
         return query + " " + " ".join(expansions[:max_expansions])
@@ -139,8 +143,6 @@ def deduplicate_results(
     if not results:
         return results
 
-    import hashlib
-
     seen: set[str] = set()
     deduped: list[dict] = []
     for r in results:
@@ -148,7 +150,7 @@ def deduplicate_results(
         if not content:
             deduped.append(r)
             continue
-        content_hash = hashlib.md5(content.encode()).hexdigest()
+        content_hash = hashlib.sha256(content.encode(), usedforsecurity=False).hexdigest()
         if content_hash not in seen:
             seen.add(content_hash)
             deduped.append(r)
@@ -240,7 +242,7 @@ def normalize_results(
 
 
 async def parallel_search_gather(
-    searches: list[tuple[str, object]],
+    searches: list[tuple[str, Awaitable[Any]]],
     per_source_timeout: float | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Run multiple search coroutines in parallel with fault-tolerant error handling.
@@ -259,13 +261,10 @@ async def parallel_search_gather(
         - all_results: Flat list of normalized result dicts from all successful sources.
         - source_names: List of source names that contributed results.
     """
-
-    import time as _time
-
     source_names_input = [name for name, _ in searches]
     coros = []
     for _, coro in searches:
-        if per_source_timeout:
+        if per_source_timeout is not None:
             coros.append(asyncio.wait_for(coro, timeout=per_source_timeout))
         else:
             coros.append(coro)
@@ -369,7 +368,7 @@ async def deep_recall_search(
     deps: "BrainDeps",
     query: str,
     limit: int = 10,
-) -> dict:
+) -> dict[str, Any]:
     """Deep parallel recall — fans out to ALL search sources concurrently.
 
     Complex query path: runs Mem0 semantic + hybrid pgvector +
@@ -392,7 +391,7 @@ async def deep_recall_search(
     search_limit = limit * oversample
 
     # --- Build all search coroutines ---
-    searches: list[tuple[str, object]] = []
+    searches: list[tuple[str, Awaitable[Any]]] = []
 
     # 1. Mem0 semantic search
     searches.append(("mem0", deps.memory_service.search(expanded, limit=search_limit)))
@@ -575,53 +574,6 @@ async def rerank_memories(
         return memories
 
 
-async def run_review_learn_pipeline(
-    content: str,
-    content_type: str,
-    deps: "BrainDeps",
-    model: "Model | None",
-) -> dict[str, Any]:
-    """Run the review->learn pipeline: review content, then learn from the review results.
-
-    Returns dict with 'review' (ReviewResult) and 'learn' (LearnResult) keys.
-    """
-    from second_brain.agents.review import run_full_review
-    from second_brain.agents.learn import learn_agent
-    from second_brain.models import get_agent_model
-
-    # Step 1: Review (per-agent model resolution)
-    review_model = get_agent_model("review", deps.config)
-    review_result = await run_full_review(
-        content=content,
-        content_type=content_type,
-        deps=deps,
-        model=review_model,
-    )
-
-    # Step 2: Learn from review (per-agent model resolution)
-    learn_model = get_agent_model("learn", deps.config)
-    strengths = "\n".join(review_result.top_strengths or [])
-    issues = "\n".join(review_result.critical_issues or [])
-    overall_score = review_result.overall_score
-    summary = review_result.summary or ""
-
-    learn_prompt = (
-        f"Learn from this review of {content_type} content.\n"
-        f"Review score: {overall_score}/10\n"
-        f"Summary: {summary}\n"
-        f"Strengths:\n{strengths}\n"
-        f"Issues:\n{issues}\n\n"
-        f"Extract patterns from what worked well (strengths) and note what to avoid (issues)."
-    )
-
-    learn_result = await learn_agent.run(learn_prompt, deps=deps, model=learn_model)
-
-    return {
-        "review": review_result,
-        "learn": learn_result.output,
-    }
-
-
 def format_pattern_registry(patterns: list[dict[str, Any]], config: "BrainConfig | None" = None) -> str:
     """Format patterns as a registry table for display."""
     if not patterns:
@@ -632,7 +584,9 @@ def format_pattern_registry(patterns: list[dict[str, Any]], config: "BrainConfig
     lines = ["| Pattern | Topic | Confidence | Uses | Last Updated | Status |",
              "|---------|-------|------------|------|--------------|--------|"]
 
-    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(days=stale_days)
+    conf_counts: dict[str, int] = {}
 
     for p in patterns:
         name = p.get("name", "Unknown")
@@ -649,18 +603,15 @@ def format_pattern_registry(patterns: list[dict[str, Any]], config: "BrainConfig
         elif updated and updated != "-":
             try:
                 last = datetime.fromisoformat(updated.replace("Z", "+00:00")) if "T" in updated else datetime.strptime(updated, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                if datetime.now(timezone.utc) - last > timedelta(days=stale_days):
+                if last < stale_cutoff:
                     status = "Stale"
             except (ValueError, TypeError):
                 pass
 
+        conf_counts[conf] = conf_counts.get(conf, 0) + 1
         lines.append(f"| {name} | {topic} | {conf} | {uses} | {updated} | {status} |")
 
     lines.append(f"\nTotal: {len(patterns)} patterns")
-    conf_counts: dict[str, int] = {}
-    for p in patterns:
-        c = p.get("confidence", "LOW")
-        conf_counts[c] = conf_counts.get(c, 0) + 1
     dist = ", ".join(f"{k}: {v}" for k, v in sorted(conf_counts.items()))
     lines.append(f"Distribution: {dist}")
 
@@ -732,70 +683,6 @@ async def run_agent_with_retry(
     return last_result
 
 
-def get_agent_registry() -> dict:
-    """Get the agent registry mapping route names to agent instances.
-
-    Lazy-loaded to avoid circular imports. Each agent module is imported
-    only when the registry is first requested.
-
-    Returns:
-        Dict mapping AgentRoute string to (agent_instance, description) tuples.
-    """
-    from second_brain.agents.recall import recall_agent
-    from second_brain.agents.ask import ask_agent
-    from second_brain.agents.learn import learn_agent
-    from second_brain.agents.create import create_agent
-    from second_brain.agents.review import review_agent
-    from second_brain.agents.chief_of_staff import chief_of_staff  # noqa: F401
-
-    registry = {
-        "recall": (recall_agent, "Semantic memory search"),
-        "ask": (ask_agent, "Contextual Q&A with brain knowledge"),
-        "learn": (learn_agent, "Pattern extraction and learning"),
-        "create": (create_agent, "Content creation with voice and patterns"),
-        "review": (review_agent, "Single-dimension content review"),
-    }
-
-    # Lazily add new agents as they become available
-    try:
-        from second_brain.agents.clarity import clarity_agent
-        registry["clarity"] = (clarity_agent, "Content clarity analysis")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.synthesizer import synthesizer_agent
-        registry["synthesizer"] = (synthesizer_agent, "Feedback consolidation")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.template_builder import template_builder_agent
-        registry["template_builder"] = (template_builder_agent, "Template identification")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.coach import coach_agent
-        registry["coach"] = (coach_agent, "Daily accountability coaching")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.pmo import pmo_agent
-        registry["pmo"] = (pmo_agent, "Priority advisory")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.email_agent import email_agent
-        registry["email"] = (email_agent, "Email operations")
-    except ImportError:
-        pass
-    try:
-        from second_brain.agents.specialist import specialist_agent
-        registry["specialist"] = (specialist_agent, "Claude Code expertise")
-    except ImportError:
-        pass
-
-    return registry
-
-
 async def run_pipeline(
     steps: list[str],
     initial_prompt: str,
@@ -820,6 +707,7 @@ async def run_pipeline(
     """
     from pydantic_ai.usage import UsageLimits
 
+    from second_brain.agents.registry import get_agent_registry
     registry = get_agent_registry()
     limits = UsageLimits(request_limit=deps.config.pipeline_request_limit)
     results = {}
@@ -891,8 +779,9 @@ async def run_pipeline(
             logger.error("Pipeline step '%s' timed out after %ss", step_name, step_timeout)
             results[step_name] = {"error": f"Step timed out after {step_timeout}s"}
         except Exception as e:
-            logger.error("Pipeline step '%s' failed: %s", step_name, e)
-            results[step_name] = {"error": str(e)}
+            logger.error("Pipeline step '%s' failed: %s", step_name, type(e).__name__)
+            logger.debug("Pipeline step '%s' error detail: %s", step_name, e)
+            results[step_name] = {"error": f"Step failed: {type(e).__name__}"}
             # Continue pipeline — don't block remaining steps
 
     results["final"] = results.get(steps[-1], None) if steps else None

@@ -76,7 +76,8 @@ async def health_check(request: Request) -> JSONResponse:
     """
     if _deps_failed:
         return JSONResponse(
-            {"status": "unhealthy", "service": "second-brain", "error": _deps_error},
+            {"status": "unhealthy", "service": "second-brain",
+             "error": "Initialization failed. Check server logs."},
             status_code=503,
         )
     return JSONResponse({
@@ -234,28 +235,29 @@ async def quick_recall(query: str, limit: int = 10) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    limit = max(1, min(limit, 100))
 
     timeout = deps.config.api_timeout_seconds
+
+    from second_brain.agents.utils import (
+        classify_query_complexity,
+        expand_query,
+        deduplicate_results,
+        format_memories,
+        format_relations,
+        normalize_results,
+        rerank_memories,
+        search_with_graph_fallback,
+    )
 
     try:
         async with asyncio.timeout(timeout):
             # Auto-upgrade complex queries to deep recall
-            from second_brain.agents.utils import classify_query_complexity
             complexity = classify_query_complexity(query, deps.config.complex_query_word_threshold)
-            logger.info("quick_recall complexity=%s query=%r", complexity, query[:80])
+            logger.debug("quick_recall complexity=%s query_len=%d", complexity, len(query))
             if complexity == "complex":
                 logger.info("quick_recall routing to recall_deep for complex query")
                 return await recall_deep(query, limit=limit)
-
-            from second_brain.agents.utils import (
-                expand_query,
-                deduplicate_results,
-                format_memories,
-                format_relations,
-                normalize_results,
-                rerank_memories,
-                search_with_graph_fallback,
-            )
 
             # Step 1: Expand query with domain synonyms
             expanded = expand_query(query)
@@ -367,6 +369,7 @@ async def recall_deep(query: str, limit: int = 15) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    limit = max(1, min(limit, 100))
 
     timeout = deps.config.api_timeout_seconds
 

@@ -14,7 +14,12 @@ from second_brain.services.health import HealthMetrics
 
 
 def _mock_deps(**overrides):
-    """Create a MagicMock deps with proper config values for timeout tests."""
+    """Create a MagicMock deps with proper config values for timeout tests.
+
+    NOTE: This uses MagicMock (not real BrainDeps) because MCP tool tests
+    patch _get_deps to return this mock. Conftest's mock_deps fixture
+    returns a real BrainDeps instance — different purpose, don't merge.
+    """
     deps = MagicMock()
     deps.config.api_timeout_seconds = 30
     deps.config.mcp_review_timeout_multiplier = 2
@@ -22,6 +27,9 @@ def _mock_deps(**overrides):
     deps.config.complex_query_word_threshold = 8
     deps.config.retrieval_oversample_factor = 3
     deps.config.voyage_rerank_top_k = 10
+    deps.config.memory_search_limit = 10
+    deps.config.experience_limit = 10
+    deps.config.service_timeout_seconds = 10
     for k, v in overrides.items():
         setattr(deps, k, v)
     return deps
