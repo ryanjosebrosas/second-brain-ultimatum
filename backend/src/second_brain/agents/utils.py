@@ -177,6 +177,7 @@ async def rerank_memories(
     query: str,
     memories: list[dict],
     top_k: int | None = None,
+    instruction: str | None = None,
 ) -> list[dict]:
     """Rerank Mem0 search results using Voyage reranker.
 
@@ -205,7 +206,12 @@ async def rerank_memories(
         return memories
 
     try:
-        reranked = await deps.voyage_service.rerank(query, documents, top_k=top_k)
+        if instruction and hasattr(deps.voyage_service, "rerank_with_instructions"):
+            reranked = await deps.voyage_service.rerank_with_instructions(
+                query, documents, instruction=instruction, top_k=top_k,
+            )
+        else:
+            reranked = await deps.voyage_service.rerank(query, documents, top_k=top_k)
         # Rebuild memory dicts in reranked order
         result = []
         for r in reranked:

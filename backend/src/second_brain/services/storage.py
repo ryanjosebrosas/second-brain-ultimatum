@@ -762,6 +762,137 @@ class StorageService:
             logger.debug("vector_search error detail: %s", e)
             return []
 
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        table: str = "memory_content",
+        limit: int = 10,
+        full_text_weight: float | None = None,
+        semantic_weight: float | None = None,
+        rrf_k: int | None = None,
+        ef_search: int | None = None,
+    ) -> list[dict]:
+        """Hybrid search combining pgvector similarity + full-text keyword via RRF.
+
+        Uses Reciprocal Rank Fusion to merge vector (semantic) and keyword (full-text)
+        search results. Requires both query text and embedding. Falls back to vector-only
+        search if the table lacks a tsvector column.
+
+        Args:
+            query_text: Natural language query for full-text search arm.
+            query_embedding: Query embedding vector (1024 dimensions) for semantic arm.
+            table: Table to search. Must have both 'embedding' and 'fts' columns.
+            limit: Maximum results to return.
+            full_text_weight: Weight for keyword results. Defaults to config value.
+            semantic_weight: Weight for semantic results. Defaults to config value.
+            rrf_k: RRF smoothing constant. Defaults to config value.
+            ef_search: HNSW ef_search parameter. Defaults to config value.
+
+        Returns:
+            List of matching rows with similarity score and search_type ('hybrid', 'keyword', 'semantic').
+        """
+        valid_tables = {"patterns", "memory_content", "examples", "knowledge_repo"}
+        if table not in valid_tables:
+            raise ValueError(f"Invalid table '{table}'. Must be one of: {valid_tables}")
+
+        try:
+            result = await self._with_timeout(
+                asyncio.to_thread(
+                    self._client.rpc(
+                        "hybrid_search",
+                        {
+                            "query_text": query_text,
+                            "query_embedding": query_embedding,
+                            "match_table": table,
+                            "match_count": limit,
+                            "full_text_weight": full_text_weight or self.config.hybrid_search_keyword_weight,
+                            "semantic_weight": semantic_weight or self.config.hybrid_search_semantic_weight,
+                            "rrf_k": rrf_k or self.config.hybrid_search_rrf_k,
+                            "p_user_id": self.user_id,
+                            "p_ef_search": ef_search or self.config.hnsw_ef_search,
+                        }
+                    ).execute
+                )
+            )
+            return result.data if result.data else []
+        except TimeoutError:
+            logger.warning("hybrid_search timed out on %s after %ds", table, self._timeout)
+            return []
+        except Exception as e:
+            logger.warning("hybrid_search failed on %s: %s", table, type(e).__name__)
+            logger.debug("hybrid_search error detail: %s", e)
+            return []
+
+    async def search_patterns_semantic(
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        similarity_threshold: float | None = None,
+    ) -> list[dict]:
+        """Search patterns by vector similarity.
+
+        Semantic counterpart to get_patterns() which only does exact-match filters.
+        """
+        return await self.vector_search(
+            embedding=embedding,
+            table="patterns",
+            limit=limit,
+            similarity_threshold=similarity_threshold or self.config.similarity_threshold,
+        )
+
+    async def search_examples_semantic(
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        similarity_threshold: float | None = None,
+    ) -> list[dict]:
+        """Search examples by vector similarity.
+
+        Semantic counterpart to get_examples() which only does exact content_type filter.
+        """
+        return await self.vector_search(
+            embedding=embedding,
+            table="examples",
+            limit=limit,
+            similarity_threshold=similarity_threshold or self.config.similarity_threshold,
+        )
+
+    async def search_knowledge_semantic(
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        similarity_threshold: float | None = None,
+    ) -> list[dict]:
+        """Search knowledge repo by vector similarity.
+
+        Semantic counterpart to get_knowledge() which only does exact category filter.
+        """
+        return await self.vector_search(
+            embedding=embedding,
+            table="knowledge_repo",
+            limit=limit,
+            similarity_threshold=similarity_threshold or self.config.similarity_threshold,
+        )
+
+    async def search_experiences_semantic(
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        similarity_threshold: float | None = None,
+    ) -> list[dict]:
+        """Search experiences by vector similarity.
+
+        Semantic counterpart to get_experiences() which only does exact category filter.
+        Requires migration 020 (experiences embedding column).
+        """
+        return await self.vector_search(
+            embedding=embedding,
+            table="experiences",
+            limit=limit,
+            similarity_threshold=similarity_threshold or self.config.similarity_threshold,
+        )
+
     # --- Project Lifecycle ---
 
     async def create_project(self, project: dict) -> dict:

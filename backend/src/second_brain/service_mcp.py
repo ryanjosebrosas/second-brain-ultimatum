@@ -388,6 +388,48 @@ async def graph_search(query: str, limit: int = 10) -> str:
         return f"Graph search failed: {type(e).__name__}"
 
 
+# --- Vector Search Tools ---
+
+
+@service_server.tool()
+async def service_vector_search(
+    query: str,
+    table: str = "memory_content",
+    limit: int = 10,
+) -> str:
+    """Search using vector similarity (pgvector) in the SDK path.
+
+    Args:
+        query: Search query to embed and match against vectors.
+        table: Table to search (patterns, memory_content, examples, knowledge_repo, experiences).
+        limit: Maximum results.
+    """
+    deps = await _get_deps()
+    if not deps.embedding_service:
+        return "Vector search unavailable: embedding service not configured."
+    try:
+        embedding = await deps.embedding_service.embed_query(query)
+        results = await deps.storage_service.vector_search(
+            embedding=embedding, table=table, limit=limit,
+        )
+    except ValueError as e:
+        return str(e)
+    except Exception as e:
+        logger.warning("service_vector_search failed: %s", type(e).__name__)
+        return f"Vector search error: {type(e).__name__}"
+
+    if not results:
+        return f"No vector matches found in '{table}'."
+
+    formatted = [f"## Vector Search: {query}\n"]
+    for r in results:
+        sim = r.get("similarity", 0)
+        title = r.get("title", "Untitled")
+        content = r.get("content", "")[:200]
+        formatted.append(f"- [{sim:.3f}] **{title}**: {content}")
+    return "\n".join(formatted)
+
+
 # --- Config Helper ---
 
 

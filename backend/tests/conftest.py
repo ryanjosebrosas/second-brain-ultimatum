@@ -216,6 +216,12 @@ def mock_storage():
     storage.get_setup_status = AsyncMock(return_value={})
     # Vector search
     storage.vector_search = AsyncMock(return_value=[])
+    # Hybrid search + semantic search (sub-plan 01+02)
+    storage.hybrid_search = AsyncMock(return_value=[])
+    storage.search_patterns_semantic = AsyncMock(return_value=[])
+    storage.search_examples_semantic = AsyncMock(return_value=[])
+    storage.search_knowledge_semantic = AsyncMock(return_value=[])
+    storage.search_experiences_semantic = AsyncMock(return_value=[])
     return storage
 
 
@@ -240,6 +246,9 @@ def mock_voyage_service():
     service.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
     service.multimodal_embed = AsyncMock(return_value=[[0.1] * 1024])
     service.rerank = AsyncMock(return_value=[
+        {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
+    ])
+    service.rerank_with_instructions = AsyncMock(return_value=[
         {"index": 0, "document": "Test memory content", "relevance_score": 0.95},
     ])
     service.close = AsyncMock()

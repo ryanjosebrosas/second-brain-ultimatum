@@ -166,6 +166,34 @@ class VoyageService:
 
         return await async_retry(_call)
 
+    async def rerank_with_instructions(
+        self,
+        query: str,
+        documents: list[str],
+        instruction: str | None = None,
+        top_k: int | None = None,
+    ) -> list[dict]:
+        """Rerank with optional instruction prepended to query.
+
+        Uses rerank-2.5/2.5-lite instruction-following: prepend a contextual
+        instruction to guide ranking priorities (e.g., "Prioritize recent
+        patterns over older observations").
+
+        Args:
+            query: The search query.
+            documents: List of document strings to rerank.
+            instruction: Optional instruction to prepend. None = standard rerank.
+            top_k: Number of top results. None = use config default.
+
+        Returns:
+            Same format as rerank(): list of dicts with 'index', 'document', 'relevance_score'.
+        """
+        if instruction:
+            full_query = f"{instruction}\n\nQuery: {query}"
+        else:
+            full_query = query
+        return await self.rerank(full_query, documents, top_k=top_k)
+
     async def close(self) -> None:
         """Release Voyage client resources."""
         self._client = None

@@ -224,6 +224,10 @@ class MemoryService(MemoryServiceBase):
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if self._is_cloud:
             kwargs["filters"] = {"user_id": self.user_id}
+            kwargs["top_k"] = limit
+            kwargs["version"] = "v2"
+            if self.config.mem0_keyword_search:
+                kwargs["keyword_search"] = True
             if use_graph:
                 kwargs["enable_graph"] = True
         try:
@@ -285,6 +289,10 @@ class MemoryService(MemoryServiceBase):
                     ]
                 }
             kwargs["filters"] = base_filters
+            kwargs["top_k"] = limit
+            kwargs["version"] = "v2"
+            if self.config.mem0_keyword_search:
+                kwargs["keyword_search"] = True
             if use_graph:
                 kwargs["enable_graph"] = True
         else:
