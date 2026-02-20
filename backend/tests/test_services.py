@@ -2191,13 +2191,13 @@ class TestMemoryServiceResilience:
             supabase_key="test-key",
             brain_data_path=tmp_path,
             model_provider="anthropic",
-            service_timeout_seconds=5,
+            service_timeout_seconds=30,
             _env_file=None,
         )
 
     @patch("mem0.MemoryClient")
     async def test_idle_detection_triggers_reconnect(self, mock_mem0_cls, mock_config):
-        """After idle threshold, client should be re-instantiated."""
+        """After idle threshold, cloud client should be re-instantiated."""
         # Return different mock instances on successive calls
         client_1 = MagicMock(name="client-1")
         client_2 = MagicMock(name="client-2")
@@ -2208,9 +2208,12 @@ class TestMemoryServiceResilience:
 
         # Simulate idle period
         service._last_activity = time.monotonic() - 300  # 5 min ago
-        service._check_idle_reconnect()
+        # _is_cloud checks type().__name__ == "MemoryClient", which is False
+        # for MagicMock. Patch the property to make it think this is a cloud client.
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            service._check_idle_reconnect()
 
-        # Client should have been re-created (cloud client)
+        # Client should have been re-created
         assert service._client is client_2
 
     @patch("mem0.MemoryClient")
@@ -2220,7 +2223,8 @@ class TestMemoryServiceResilience:
         original_client = service._client
 
         service._last_activity = time.monotonic() - 10  # 10 sec ago
-        service._check_idle_reconnect()
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            service._check_idle_reconnect()
 
         assert service._client is original_client
 
@@ -2232,9 +2236,9 @@ class TestMemoryServiceResilience:
         service._client.add = MagicMock(
             side_effect=[ConnectionError("Network error"), {"id": "success"}]
         )
-        # Increase timeout to give retry enough room
-        service._timeout = 30
-        result = await service.add("test content")
+        # Patch _is_cloud so the retry decorator is applied
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            result = await service.add("test content")
         assert result.get("id") == "success"
         assert service._client.add.call_count == 2  # retried once
 
@@ -2245,6 +2249,6 @@ class TestMemoryServiceResilience:
         service._client.add = MagicMock(
             side_effect=ConnectionError("Persistent failure")
         )
-        service._timeout = 30
-        result = await service.add("test content")
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            result = await service.add("test content")
         assert result == {}
