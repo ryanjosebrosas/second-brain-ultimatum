@@ -600,6 +600,39 @@ class GraphitiService:
             return []
 
     @_GRAPHITI_RETRY
+    async def build_communities(self, group_id: str | None = None) -> list[dict]:
+        """Trigger community detection on the graph.
+
+        This is an expensive operation — call explicitly, not automatically.
+        Returns list of community dicts with uuid, name, summary.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return []
+        try:
+            if not hasattr(self._client, "build_communities_"):
+                logger.debug("build_communities_ not available on graphiti client")
+                return []
+            kwargs = {}
+            if group_id:
+                kwargs["group_ids"] = [group_id]
+            async with asyncio.timeout(self._timeout * 3):
+                await self._client.build_communities_(**kwargs)
+            # After building, search for all communities to return them
+            return await self.search_communities("", group_id=group_id)
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning(
+                "Graphiti build_communities timed out after %ds", self._timeout * 3
+            )
+            return []
+        except Exception as e:
+            logger.warning("Graphiti build_communities failed: %s", type(e).__name__)
+            logger.debug("Graphiti build_communities error detail: %s", e)
+            return []
+
+    @_GRAPHITI_RETRY
     async def advanced_search(
         self,
         query: str,
