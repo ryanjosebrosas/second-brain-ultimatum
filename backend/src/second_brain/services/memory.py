@@ -390,7 +390,10 @@ class MemoryService(MemoryServiceBase):
         """Get all memories for the user."""
         try:
             if self._is_cloud:
-                kwargs: dict = {"filters": {"AND": [{"user_id": self.user_id}]}}
+                kwargs: dict = {
+                    "version": "v2",
+                    "filters": {"AND": [{"user_id": self.user_id}]},
+                }
             else:
                 kwargs: dict = {"user_id": self.user_id}
             results = await asyncio.to_thread(self._client.get_all, **kwargs)
