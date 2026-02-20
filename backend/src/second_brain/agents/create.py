@@ -183,6 +183,7 @@ async def find_applicable_patterns(
     try:
         # Semantic search for general memories about the topic
         result = await ctx.deps.memory_service.search(topic)
+        general_relations = result.relations
         reranked_general = await rerank_memories(ctx.deps, topic, result.memories)
 
         # Semantic search for patterns (optionally filtered by content type)
@@ -256,8 +257,8 @@ async def find_applicable_patterns(
                 mem_lines.append(f"- {memory}")
             sections.append("\n".join(mem_lines))
 
-        # Merge all graph relations (Mem0 + Graphiti)
-        all_relations = pattern_relations + graphiti_relations
+        # Merge all graph relations (general + pattern + Graphiti)
+        all_relations = (general_relations or []) + pattern_relations + graphiti_relations
         rel_text = format_relations(all_relations)
         if rel_text:
             sections.append(rel_text)

@@ -101,7 +101,7 @@ async def search_patterns(
         # Always include Supabase patterns (source of truth)
         patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
 
-        if not patterns and not semantic_results:
+        if not patterns and not semantic_results and not semantic_relations:
             return "No patterns found in registry."
 
         formatted = []

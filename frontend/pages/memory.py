@@ -1,12 +1,21 @@
 """Memory Browser page — Search, filter, and browse brain memory."""
 
-import json
+import logging
+from typing import Any
 
 import streamlit as st
 
-from config import MEMORY_TABLES
+from config import MEMORY_TABLES, DELETE_TABLE_MAP
 from api_client import search_memory, semantic_search, vector_search, delete_item
 from components.copy_button import copyable_text
+
+logger = logging.getLogger(__name__)
+
+# Pre-computed from static MEMORY_TABLES config.
+_TABLE_KEYS: list[str] = list(MEMORY_TABLES.keys())
+_TABLE_LABELS: list[str] = [
+    f"{MEMORY_TABLES[k]['icon']} {MEMORY_TABLES[k]['name']}" for k in _TABLE_KEYS
+]
 
 st.title(":material/search: Memory Browser")
 st.caption("Search and browse your brain's memory stores")
@@ -22,19 +31,16 @@ st.divider()
 
 if search_mode == "Browse Tables":
     # --- Table selector ---
-    table_keys = list(MEMORY_TABLES.keys())
-    table_labels = [f"{MEMORY_TABLES[k]['icon']} {MEMORY_TABLES[k]['name']}" for k in table_keys]
-
-    selected_table_idx = st.selectbox(
+    selected_table_idx: int = st.selectbox(
         "Table",
-        range(len(table_keys)),
-        format_func=lambda i: table_labels[i],
-    )
-    table_key = table_keys[selected_table_idx]
-    table_config = MEMORY_TABLES[table_key]
+        range(len(_TABLE_KEYS)),
+        format_func=lambda i: _TABLE_LABELS[i],
+    ) or 0
+    table_key: str = _TABLE_KEYS[selected_table_idx]
+    table_config: dict[str, Any] = MEMORY_TABLES[table_key]
 
     # --- Filters ---
-    filter_params = {}
+    filter_params: dict[str, str] = {}
     if table_config["filters"]:
         cols = st.columns(len(table_config["filters"]))
         for i, (filter_name, filter_config) in enumerate(table_config["filters"].items()):
@@ -73,6 +79,7 @@ if search_mode == "Browse Tables":
                 count = data.get("count", len(results))
                 st.info(f"Found {count} results")
 
+                delete_table = DELETE_TABLE_MAP.get(table_key, table_key)
                 for i, item in enumerate(results):
                     # Build title from available fields
                     title = item.get("name") or item.get("title") or item.get("category", f"Item {i+1}")
@@ -93,8 +100,6 @@ if search_mode == "Browse Tables":
                         # Delete button
                         item_id = item.get("id")
                         if item_id:
-                            # Map table key to API delete table name
-                            delete_table = table_key.rstrip("s")  # patterns -> pattern, etc.
                             if st.button(
                                 "Delete",
                                 key=f"delete_{table_key}_{item_id}_{i}",
@@ -105,10 +110,12 @@ if search_mode == "Browse Tables":
                                     st.success("Deleted!")
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"Delete failed: {e}")
+                                    logger.error("Delete failed: %s", e)
+                                    st.error("Delete failed. Please try again.")
 
             except Exception as e:
-                st.error(f"Search failed: {e}")
+                logger.error("Search failed: %s", e)
+                st.error("Search failed. Please try again.")
 
 elif search_mode == "Semantic Search":
     st.markdown("Search Mem0 semantic memory using the Recall agent.")
@@ -135,7 +142,8 @@ elif search_mode == "Semantic Search":
                     if patterns:
                         st.markdown("**Related Patterns**: " + ", ".join(patterns))
                 except Exception as e:
-                    st.error(f"Semantic search failed: {e}")
+                    logger.error("Semantic search failed: %s", e)
+                    st.error("Semantic search failed. Please try again.")
 
 elif search_mode == "Vector Search":
     st.markdown("Search using pgvector similarity on Supabase tables.")
@@ -143,13 +151,13 @@ elif search_mode == "Vector Search":
 
     col1, col2 = st.columns(2)
     with col1:
-        table = st.selectbox(
+        table: str = st.selectbox(
             "Table",
             ["memory_content", "pattern_registry", "content_examples", "knowledge_repo"],
             key="vector_table",
-        )
+        ) or "memory_content"
     with col2:
-        limit = st.slider("Max results", 1, 50, 10, key="vector_limit")
+        limit: int = int(st.slider("Max results", 1, 50, 10, key="vector_limit"))
 
     if st.button("Search", type="primary", key="vector_search_btn"):
         if not query:
@@ -174,4 +182,5 @@ elif search_mode == "Vector Search":
                             if extras:
                                 st.json(extras)
                 except Exception as e:
-                    st.error(f"Vector search failed: {e}")
+                    logger.error("Vector search failed: %s", e)
+                    st.error("Vector search failed. Please try again.")

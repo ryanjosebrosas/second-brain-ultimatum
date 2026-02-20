@@ -352,6 +352,338 @@ class GraphitiService:
             return []
 
     @_GRAPHITI_RETRY
+    async def search_entities(
+        self, query: str, limit: int = 10, group_id: str | None = None
+    ) -> list[dict]:
+        """Search for entity nodes matching a query string.
+
+        Returns list of entity dicts with name, uuid, summary, labels.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return []
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                logger.warning("Graphiti search_entities: no driver available")
+                return []
+
+            # Try Entity label first (graphiti-core standard), fall back to EntityNode
+            for label in ("Entity", "EntityNode"):
+                try:
+                    if group_id:
+                        cypher = (
+                            f"MATCH (e:{label}) "
+                            "WHERE e.group_id = $gid AND (toLower(e.name) CONTAINS toLower($q) "
+                            "OR toLower(e.summary) CONTAINS toLower($q)) "
+                            "RETURN e.uuid AS uuid, e.name AS name, "
+                            "e.summary AS summary, e.labels AS labels, "
+                            "e.created_at AS created_at "
+                            "ORDER BY e.name LIMIT $lim"
+                        )
+                        params = {"gid": group_id, "q": query, "lim": limit}
+                    else:
+                        cypher = (
+                            f"MATCH (e:{label}) "
+                            "WHERE toLower(e.name) CONTAINS toLower($q) "
+                            "OR toLower(e.summary) CONTAINS toLower($q) "
+                            "RETURN e.uuid AS uuid, e.name AS name, "
+                            "e.summary AS summary, e.labels AS labels, "
+                            "e.created_at AS created_at "
+                            "ORDER BY e.name LIMIT $lim"
+                        )
+                        params = {"q": query, "lim": limit}
+                    async with asyncio.timeout(self._timeout):
+                        records, _, _ = await driver.execute_query(cypher, **params)
+                    if records:
+                        return [
+                            {
+                                "uuid": str(r["uuid"]) if r["uuid"] else "",
+                                "name": str(r["name"]) if r["name"] else "",
+                                "summary": str(r["summary"]) if r["summary"] else "",
+                                "labels": r["labels"] if r["labels"] else [],
+                                "created_at": str(r["created_at"]) if r["created_at"] else None,
+                            }
+                            for r in records
+                        ]
+                except Exception:
+                    continue  # Try next label
+            return []
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti search_entities timed out after %ds", self._timeout)
+            return []
+        except Exception as e:
+            logger.warning("Graphiti search_entities failed: %s", type(e).__name__)
+            logger.debug("Graphiti search_entities error detail: %s", e)
+            return []
+
+    @_GRAPHITI_RETRY
+    async def get_entity_context(
+        self, entity_uuid: str, limit: int = 20
+    ) -> dict:
+        """Get an entity's relationships and connected entities.
+
+        Returns dict with entity info and its relationships (incoming + outgoing).
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return {"entity": None, "relationships": []}
+        try:
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                return {"entity": None, "relationships": []}
+
+            # Get entity info + outgoing and incoming relationships
+            cypher = (
+                "MATCH (e {uuid: $uuid}) "
+                "OPTIONAL MATCH (e)-[r]->(t) "
+                "WITH e, collect(DISTINCT {type: type(r), fact: r.fact, "
+                "target_name: t.name, target_uuid: t.uuid, direction: 'outgoing'}) AS outgoing "
+                "OPTIONAL MATCH (s)-[r2]->(e) "
+                "RETURN e.uuid AS uuid, e.name AS name, e.summary AS summary, "
+                "outgoing, "
+                "collect(DISTINCT {type: type(r2), fact: r2.fact, "
+                "source_name: s.name, source_uuid: s.uuid, direction: 'incoming'}) AS incoming "
+                "LIMIT 1"
+            )
+            async with asyncio.timeout(self._timeout):
+                records, _, _ = await driver.execute_query(cypher, uuid=entity_uuid)
+
+            if not records:
+                return {"entity": None, "relationships": []}
+
+            r = records[0]
+            entity = {
+                "uuid": str(r["uuid"]) if r["uuid"] else "",
+                "name": str(r["name"]) if r["name"] else "",
+                "summary": str(r["summary"]) if r["summary"] else "",
+            }
+            relationships = []
+            for rel in (r.get("outgoing") or [])[:limit]:
+                if rel.get("target_name"):
+                    relationships.append({
+                        "direction": "outgoing",
+                        "type": str(rel.get("type", "RELATES_TO")),
+                        "fact": str(rel.get("fact", "")),
+                        "connected_entity": str(rel.get("target_name", "")),
+                        "connected_uuid": str(rel.get("target_uuid", "")),
+                    })
+            for rel in (r.get("incoming") or [])[:limit]:
+                if rel.get("source_name"):
+                    relationships.append({
+                        "direction": "incoming",
+                        "type": str(rel.get("type", "RELATES_TO")),
+                        "fact": str(rel.get("fact", "")),
+                        "connected_entity": str(rel.get("source_name", "")),
+                        "connected_uuid": str(rel.get("source_uuid", "")),
+                    })
+            return {"entity": entity, "relationships": relationships}
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti get_entity_context timed out after %ds", self._timeout)
+            return {"entity": None, "relationships": []}
+        except Exception as e:
+            logger.warning("Graphiti get_entity_context failed: %s", type(e).__name__)
+            logger.debug("Graphiti get_entity_context error detail: %s", e)
+            return {"entity": None, "relationships": []}
+
+    @_GRAPHITI_RETRY
+    async def traverse_neighbors(
+        self, entity_uuid: str, max_hops: int = 2, limit: int = 20
+    ) -> list[dict]:
+        """BFS traversal from a starting entity, up to max_hops away.
+
+        Returns list of relationship dicts showing the path from origin.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return []
+        try:
+            # Try graphiti-core's search_ with bfs_origin if available
+            if hasattr(self._client, "search_"):
+                try:
+                    from graphiti_core.search.search_config import SearchConfig
+                    config = SearchConfig(
+                        bfs_origin_node_uuids=[entity_uuid],
+                        limit=limit,
+                    )
+                    async with asyncio.timeout(self._timeout * 2):
+                        raw = await self._client.search_("", search_config=config)
+                    edges = getattr(raw, "edges", [])
+                    return [
+                        {
+                            "source": getattr(e, "source_node_name", "?"),
+                            "relationship": getattr(e, "fact", "?"),
+                            "target": getattr(e, "target_node_name", "?"),
+                        }
+                        for e in edges[:limit]
+                    ]
+                except (ImportError, AttributeError, TypeError):
+                    pass  # Fall through to Cypher fallback
+
+            # Cypher fallback: variable-length path
+            driver = getattr(self._client, "driver", None)
+            if driver is None:
+                return []
+            cypher = (
+                "MATCH (start {uuid: $uuid})-[r*1.." + str(min(max_hops, 5)) + "]->(end) "
+                "WITH start, end, r "
+                "UNWIND r AS rel "
+                "WITH startNode(rel) AS s, rel, endNode(rel) AS t "
+                "RETURN DISTINCT s.name AS source, type(rel) AS relationship, "
+                "t.name AS target, rel.fact AS fact "
+                "LIMIT $lim"
+            )
+            async with asyncio.timeout(self._timeout * 2):
+                records, _, _ = await driver.execute_query(
+                    cypher, uuid=entity_uuid, lim=limit
+                )
+            return [
+                {
+                    "source": str(r["source"]) if r["source"] else "?",
+                    "relationship": str(r.get("fact") or r.get("relationship", "?")),
+                    "target": str(r["target"]) if r["target"] else "?",
+                }
+                for r in records
+            ]
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti traverse_neighbors timed out after %ds", self._timeout * 2)
+            return []
+        except Exception as e:
+            logger.warning("Graphiti traverse_neighbors failed: %s", type(e).__name__)
+            logger.debug("Graphiti traverse_neighbors error detail: %s", e)
+            return []
+
+    @_GRAPHITI_RETRY
+    async def search_communities(
+        self, query: str, limit: int = 5, group_id: str | None = None
+    ) -> list[dict]:
+        """Search community summaries via graphiti-core search_ API.
+
+        Communities are automatically detected clusters of related entities.
+        Returns list of community dicts with name, summary, uuid.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return []
+        try:
+            if not hasattr(self._client, "search_"):
+                logger.debug("search_ not available, communities search unavailable")
+                return []
+            kwargs = {"num_results": limit}
+            if group_id:
+                kwargs["group_ids"] = [group_id]
+            async with asyncio.timeout(self._timeout):
+                raw = await self._client.search_(query, **kwargs)
+            communities = getattr(raw, "communities", [])
+            return [
+                {
+                    "uuid": str(getattr(c, "uuid", "")),
+                    "name": str(getattr(c, "name", "")),
+                    "summary": str(getattr(c, "summary", "")),
+                }
+                for c in communities[:limit]
+            ]
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti search_communities timed out after %ds", self._timeout)
+            return []
+        except Exception as e:
+            logger.warning("Graphiti search_communities failed: %s", type(e).__name__)
+            logger.debug("Graphiti search_communities error detail: %s", e)
+            return []
+
+    @_GRAPHITI_RETRY
+    async def advanced_search(
+        self,
+        query: str,
+        limit: int = 10,
+        group_id: str | None = None,
+        node_labels: list[str] | None = None,
+        edge_types: list[str] | None = None,
+        created_after: str | None = None,
+        created_before: str | None = None,
+    ) -> dict:
+        """Advanced search with type and temporal filters.
+
+        Returns dict with edges, nodes, and communities from the search.
+        """
+        await self._ensure_init()
+        if not self._initialized:
+            return {"edges": [], "nodes": [], "communities": []}
+        try:
+            if not hasattr(self._client, "search_"):
+                # Fall back to basic search
+                edges = await self.search(query, limit=limit, group_id=group_id)
+                return {"edges": edges, "nodes": [], "communities": []}
+
+            kwargs = {"num_results": limit}
+            if group_id:
+                kwargs["group_ids"] = [group_id]
+
+            # Build search filters if any filter params provided
+            if node_labels or edge_types or created_after or created_before:
+                try:
+                    from graphiti_core.search.search_config import SearchFilters
+                    filter_kwargs = {}
+                    if node_labels:
+                        filter_kwargs["node_labels"] = node_labels
+                    if edge_types:
+                        filter_kwargs["edge_types"] = edge_types
+                    if created_after:
+                        filter_kwargs["created_at_start"] = datetime.fromisoformat(created_after)
+                    if created_before:
+                        filter_kwargs["created_at_end"] = datetime.fromisoformat(created_before)
+                    kwargs["search_filters"] = SearchFilters(**filter_kwargs)
+                except (ImportError, TypeError) as e:
+                    logger.debug("SearchFilters not available: %s", e)
+
+            async with asyncio.timeout(self._timeout):
+                raw = await self._client.search_(query, **kwargs)
+
+            edges = [
+                {
+                    "source": getattr(e, "source_node_name", "?"),
+                    "relationship": getattr(e, "fact", "?"),
+                    "target": getattr(e, "target_node_name", "?"),
+                    "uuid": str(getattr(e, "uuid", "")),
+                }
+                for e in getattr(raw, "edges", [])[:limit]
+            ]
+            nodes = [
+                {
+                    "uuid": str(getattr(n, "uuid", "")),
+                    "name": str(getattr(n, "name", "")),
+                    "summary": str(getattr(n, "summary", "")),
+                }
+                for n in getattr(raw, "nodes", [])[:limit]
+            ]
+            communities = [
+                {
+                    "uuid": str(getattr(c, "uuid", "")),
+                    "name": str(getattr(c, "name", "")),
+                    "summary": str(getattr(c, "summary", "")),
+                }
+                for c in getattr(raw, "communities", [])[:limit]
+            ]
+            return {"edges": edges, "nodes": nodes, "communities": communities}
+        except (ConnectionError, OSError):
+            raise
+        except TimeoutError:
+            logger.warning("Graphiti advanced_search timed out after %ds", self._timeout)
+            return {"edges": [], "nodes": [], "communities": []}
+        except Exception as e:
+            logger.warning("Graphiti advanced_search failed: %s", type(e).__name__)
+            logger.debug("Graphiti advanced_search error detail: %s", e)
+            return {"edges": [], "nodes": [], "communities": []}
+
+    @_GRAPHITI_RETRY
     async def remove_episode(self, episode_uuid: str) -> bool:
         """Delete an episode node by UUID via Cypher query. Returns True on success."""
         await self._ensure_init()

@@ -896,6 +896,221 @@ async def graph_health() -> str:
 
 
 @server.tool()
+async def graph_entity_search(query: str, limit: int = 10) -> str:
+    """Search for entities (people, concepts, topics) in the knowledge graph.
+
+    Args:
+        query: Entity name or description to search for
+        limit: Maximum results (default: 10)
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Entity search unavailable — Graphiti not configured."
+    try:
+        async with asyncio.timeout(deps.config.api_timeout_seconds):
+            entities = await deps.graphiti_service.search_entities(
+                query, limit=limit
+            )
+        if not entities:
+            return "No entities found matching query."
+        formatted = ["## Entities Found"]
+        for e in entities:
+            name = e.get("name", "?")
+            summary = e.get("summary", "")
+            labels = ", ".join(e.get("labels", [])) if e.get("labels") else ""
+            line = f"- **{name}**"
+            if labels:
+                line += f" [{labels}]"
+            if summary:
+                line += f": {summary}"
+            formatted.append(line)
+        return "\n".join(formatted)
+    except TimeoutError:
+        return f"Entity search timed out after {deps.config.api_timeout_seconds}s."
+    except Exception as e:
+        logger.warning("graph_entity_search failed: %s", type(e).__name__)
+        return f"Entity search failed: {type(e).__name__}"
+
+
+@server.tool()
+async def graph_entity_context(entity_uuid: str) -> str:
+    """Get all relationships for a specific entity by UUID.
+
+    Shows incoming and outgoing connections to understand an entity's role.
+
+    Args:
+        entity_uuid: UUID of the entity to explore
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Entity context unavailable — Graphiti not configured."
+    try:
+        async with asyncio.timeout(deps.config.api_timeout_seconds):
+            ctx = await deps.graphiti_service.get_entity_context(entity_uuid)
+        entity = ctx.get("entity")
+        if not entity:
+            return f"Entity {entity_uuid} not found."
+        rels = ctx.get("relationships", [])
+        formatted = [f"## {entity.get('name', '?')}"]
+        if entity.get("summary"):
+            formatted.append(f"_{entity['summary']}_\n")
+        if not rels:
+            formatted.append("No relationships found.")
+        else:
+            outgoing = [r for r in rels if r.get("direction") == "outgoing"]
+            incoming = [r for r in rels if r.get("direction") == "incoming"]
+            if outgoing:
+                formatted.append("### Outgoing")
+                for r in outgoing:
+                    fact = r.get("fact", r.get("type", "?"))
+                    formatted.append(f"- → {r.get('connected_entity', '?')}: {fact}")
+            if incoming:
+                formatted.append("### Incoming")
+                for r in incoming:
+                    fact = r.get("fact", r.get("type", "?"))
+                    formatted.append(f"- ← {r.get('connected_entity', '?')}: {fact}")
+        return "\n".join(formatted)
+    except TimeoutError:
+        return f"Entity context timed out after {deps.config.api_timeout_seconds}s."
+    except Exception as e:
+        logger.warning("graph_entity_context failed: %s", type(e).__name__)
+        return f"Entity context failed: {type(e).__name__}"
+
+
+@server.tool()
+async def graph_traverse(entity_uuid: str, max_hops: int = 2, limit: int = 20) -> str:
+    """Traverse the knowledge graph from a starting entity.
+
+    Multi-hop BFS traversal to discover connected entities and relationships.
+
+    Args:
+        entity_uuid: UUID of the starting entity
+        max_hops: Maximum traversal depth (default: 2, max: 5)
+        limit: Maximum relationships to return (default: 20)
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Graph traversal unavailable — Graphiti not configured."
+    max_hops = min(max_hops, 5)
+    try:
+        async with asyncio.timeout(deps.config.api_timeout_seconds * 2):
+            rels = await deps.graphiti_service.traverse_neighbors(
+                entity_uuid, max_hops=max_hops, limit=limit
+            )
+        if not rels:
+            return "No connections found from this entity."
+        formatted = [f"## Graph Traversal (max {max_hops} hops)"]
+        for r in rels:
+            src = r.get("source", "?")
+            rel = r.get("relationship", "?")
+            tgt = r.get("target", "?")
+            formatted.append(f"- {src} --[{rel}]--> {tgt}")
+        return "\n".join(formatted)
+    except TimeoutError:
+        return "Graph traversal timed out."
+    except Exception as e:
+        logger.warning("graph_traverse failed: %s", type(e).__name__)
+        return f"Graph traversal failed: {type(e).__name__}"
+
+
+@server.tool()
+async def graph_communities(query: str = "", limit: int = 5) -> str:
+    """Search for communities (clusters of related entities) in the knowledge graph.
+
+    Communities are automatically detected groups of closely related entities.
+
+    Args:
+        query: Optional search query to filter communities
+        limit: Maximum results (default: 5)
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Community search unavailable — Graphiti not configured."
+    try:
+        async with asyncio.timeout(deps.config.api_timeout_seconds):
+            communities = await deps.graphiti_service.search_communities(
+                query or "community", limit=limit
+            )
+        if not communities:
+            return "No communities found."
+        formatted = ["## Knowledge Communities"]
+        for c in communities:
+            name = c.get("name", "?")
+            summary = c.get("summary", "")
+            formatted.append(f"- **{name}**")
+            if summary:
+                formatted.append(f"  {summary}")
+        return "\n".join(formatted)
+    except TimeoutError:
+        return "Community search timed out."
+    except Exception as e:
+        logger.warning("graph_communities failed: %s", type(e).__name__)
+        return f"Community search failed: {type(e).__name__}"
+
+
+@server.tool()
+async def graph_advanced_search(
+    query: str,
+    limit: int = 10,
+    node_labels: str = "",
+    edge_types: str = "",
+    created_after: str = "",
+    created_before: str = "",
+) -> str:
+    """Advanced graph search with type and temporal filters.
+
+    Args:
+        query: Search query
+        limit: Maximum results (default: 10)
+        node_labels: Comma-separated node label filters (e.g., "Person,Organization")
+        edge_types: Comma-separated edge type filters (e.g., "WORKS_AT,KNOWS")
+        created_after: ISO date filter (e.g., "2024-01-01")
+        created_before: ISO date filter (e.g., "2024-12-31")
+    """
+    deps = _get_deps()
+    if not deps.graphiti_service:
+        return "Advanced search unavailable — Graphiti not configured."
+    try:
+        labels = [l.strip() for l in node_labels.split(",") if l.strip()] or None
+        types = [t.strip() for t in edge_types.split(",") if t.strip()] or None
+        async with asyncio.timeout(deps.config.api_timeout_seconds):
+            result = await deps.graphiti_service.advanced_search(
+                query,
+                limit=limit,
+                node_labels=labels,
+                edge_types=types,
+                created_after=created_after or None,
+                created_before=created_before or None,
+            )
+        edges = result.get("edges", [])
+        nodes = result.get("nodes", [])
+        communities = result.get("communities", [])
+        if not edges and not nodes and not communities:
+            return "No results found for advanced search."
+        formatted = []
+        if edges:
+            formatted.append("## Relationships")
+            for e in edges:
+                formatted.append(
+                    f"- {e.get('source', '?')} --[{e.get('relationship', '?')}]--> {e.get('target', '?')}"
+                )
+        if nodes:
+            formatted.append("\n## Entities")
+            for n in nodes:
+                formatted.append(f"- **{n.get('name', '?')}**: {n.get('summary', '')}")
+        if communities:
+            formatted.append("\n## Communities")
+            for c in communities:
+                formatted.append(f"- **{c.get('name', '?')}**: {c.get('summary', '')}")
+        return "\n".join(formatted)
+    except TimeoutError:
+        return "Advanced search timed out."
+    except Exception as e:
+        logger.warning("graph_advanced_search failed: %s", type(e).__name__)
+        return f"Advanced search failed: {type(e).__name__}"
+
+
+@server.tool()
 async def consolidate_brain(min_cluster_size: int = 3) -> str:
     """Consolidate accumulated memories into patterns. Reviews recent Mem0
     memories, identifies recurring themes, and promotes them to structured

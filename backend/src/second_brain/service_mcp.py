@@ -82,7 +82,7 @@ async def search_memory(query: str, limit: int = 10) -> str:
     deps = await _get_deps()
     try:
         result = await deps.memory_service.search(query, limit=limit)
-        if not result.memories:
+        if not result.memories and not result.relations:
             return "No semantic matches found."
         formatted = []
         for r in result.memories:
@@ -134,13 +134,21 @@ async def search_memory_with_filters(
         result = await deps.memory_service.search_with_filters(
             query, metadata_filters=filters, limit=limit, enable_graph=True
         )
-        if not result.memories:
+        if not result.memories and not result.relations:
             return "No filtered matches found."
         formatted = []
-        for m in result.memories:
-            memory = m.get("memory", m.get("result", ""))
-            score = m.get("score", 0)
-            formatted.append(f"- [{score:.2f}] {memory}")
+        if result.memories:
+            for m in result.memories:
+                memory = m.get("memory", m.get("result", ""))
+                score = m.get("score", 0)
+                formatted.append(f"- [{score:.2f}] {memory}")
+        if result.relations:
+            formatted.append("\nGraph Relationships:")
+            for rel in result.relations:
+                src = rel.get("source", "?")
+                relationship = rel.get("relationship", "?")
+                tgt = rel.get("target", "?")
+                formatted.append(f"- {src} --[{relationship}]--> {tgt}")
         return "\n".join(formatted)
     except Exception as e:
         logger.warning("search_memory_with_filters failed: %s", type(e).__name__)

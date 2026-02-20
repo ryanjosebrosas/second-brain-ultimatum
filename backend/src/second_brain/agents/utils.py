@@ -50,6 +50,26 @@ def format_relations(relations: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_search_result(
+    memories: list[dict],
+    relations: list[dict],
+    memory_limit: int | None = None,
+) -> str:
+    """Format both memories and relations from a SearchResult.
+
+    Convenience wrapper around format_memories + format_relations for dual-path agents.
+    Returns combined formatted string. Either field can be empty.
+    """
+    parts = []
+    mem_text = format_memories(memories, limit=memory_limit)
+    if mem_text:
+        parts.append(mem_text)
+    rel_text = format_relations(relations)
+    if rel_text:
+        parts.append(rel_text)
+    return "\n".join(parts) if parts else ""
+
+
 async def search_with_graph_fallback(
     deps: "BrainDeps",
     query: str,

@@ -95,6 +95,7 @@ async def find_relevant_patterns(
 
         # Semantic pattern search (filtered to patterns)
         pattern_memories = []
+        pattern_relations = []
         try:
             pattern_result = await ctx.deps.memory_service.search_with_filters(
                 query,
@@ -102,13 +103,15 @@ async def find_relevant_patterns(
                 limit=10,
             )
             pattern_memories = pattern_result.memories
+            pattern_relations = pattern_result.relations
         except Exception:
             logger.debug("Semantic pattern search failed in ask_agent")
 
         pattern_memories = await rerank_memories(ctx.deps, query, pattern_memories)
 
-        # Collect graph relations
-        relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
+        # Collect graph relations (general + pattern + graphiti fallback)
+        base_relations = (result.relations or []) + (pattern_relations or [])
+        relations = await search_with_graph_fallback(ctx.deps, query, base_relations)
 
         sources = []
         formatted = ["## Semantic Memory Matches"]

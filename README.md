@@ -1,10 +1,38 @@
 # Second Brain
 
-**A persistent AI memory layer — exposed as an MCP server for Claude Code.**
-
-Your AI forgets everything between sessions. Second Brain fixes that. 13 Pydantic AI agents backed by Mem0 semantic memory, Supabase/pgvector, and Voyage AI embeddings give Claude persistent recall of your decisions, patterns, voice, and priorities. Text, images, PDFs, video — all searchable in one shared vector space.
+**Persistent AI memory — your agents remember everything.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Tests: 1158 passing](https://img.shields.io/badge/tests-1158_passing-brightgreen.svg)](#tests)
+
+Your AI forgets everything between sessions. Second Brain fixes that. 13 Pydantic AI agents give Claude (or any MCP client) persistent recall of your decisions, patterns, voice, and priorities — backed by Mem0 semantic memory, Supabase/pgvector, and Voyage AI embeddings. Text, images, PDFs, video — all searchable in one shared vector space.
+
+Three ways in: MCP server for Claude Code, REST API for custom frontends, CLI for scripts. Ships with a Streamlit dashboard out of the box.
+
+---
+
+## Table of Contents
+
+- [Why This Exists](#why-this-exists)
+- [Quickstart](#quickstart)
+- [Architecture](#architecture)
+- [The 13 Agents](#the-13-agents)
+- [Frontend Dashboard](#frontend-dashboard)
+- [REST API](#rest-api)
+- [Service Layer](#service-layer)
+- [Pluggable Memory Providers](#pluggable-memory-providers)
+- [Multimodal Support](#multimodal-support)
+- [Multi-User Support](#multi-user-support)
+- [Data Flow](#data-flow)
+- [Setup](#setup)
+- [Docker](#docker)
+- [MCP Integration](#mcp-integration)
+- [CLI](#cli)
+- [Tests](#tests)
+- [Tech Stack](#tech-stack)
+- [By the Numbers](#by-the-numbers)
+- [License](#license)
 
 ---
 
@@ -16,58 +44,90 @@ Every AI session starts from scratch. You re-explain your architecture, re-descr
 
 ---
 
+## Quickstart
+
+Get running in 3 steps:
+
+### 1. Install
+
+```bash
+cd backend
+cp .env.example .env   # Add: MEM0_API_KEY, SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY
+pip install -e ".[dev]"
+```
+
+### 2. Apply database migrations
+
+Run all 19 migrations in `backend/supabase/migrations/` via the Supabase dashboard or CLI.
+
+### 3. Connect to Claude Code
+
+```bash
+claude mcp add second-brain -- python -m second_brain.mcp_server --cwd /path/to/backend
+```
+
+Or add to `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "second-brain": {
+      "command": "python",
+      "args": ["-m", "second_brain.mcp_server"],
+      "cwd": "/path/to/repo/backend"
+    }
+  }
+}
+```
+
+That's it. All 13 agents are now available as MCP tools. Try:
+
+```
+Recall everything I know about authentication patterns.
+Learn this: [paste your architecture decisions]
+Coach me — what should I focus on today?
+```
+
+---
+
 ## Architecture
 
 ```mermaid
 graph TD
-    CC["Claude Code"] -->|"MCP tool call"| MCP["mcp_server.py<br/>FastMCP — input validation + timeout"]
-    MCP --> COS["chief_of_staff<br/>Routes to the right agent"]
+    CC["Claude Code<br/><i>any MCP client</i>"] -->|"MCP tool call"| MCP["mcp_server.py<br/>FastMCP"]
+    ST["Streamlit Frontend"] -->|"HTTP"| API["FastAPI<br/>45+ endpoints"]
+    CLI["CLI<br/><code>brain</code> command"] --> AGENTS
 
-    COS --> RECALL["recall<br/>Semantic memory search"]
-    COS --> ASK["ask<br/>Q&A with brain context"]
-    COS --> LEARN["learn<br/>Pattern extraction + storage"]
-    COS --> CREATE["create<br/>Content generation"]
-    COS --> REVIEW["review<br/>Content scoring"]
-    COS --> COACH["coach<br/>Daily accountability"]
-    COS --> PMO["pmo<br/>Task prioritization"]
-    COS --> EMAIL["email_agent<br/>Email composition"]
-    COS --> SPEC["specialist<br/>Claude Code / Pydantic AI Q&A"]
-    COS --> CLARITY["clarity<br/>Readability analysis"]
-    COS --> SYNTH["synthesizer<br/>Feedback consolidation"]
-    COS --> TB["template_builder<br/>Template detection"]
+    MCP --> AGENTS["Agent Layer<br/>13 Pydantic AI agents"]
+    API --> AGENTS
 
-    RECALL --> SVC["Service Layer"]
-    ASK --> SVC
-    LEARN --> SVC
-    CREATE --> SVC
-    REVIEW --> SVC
+    AGENTS --> SVC["Service Layer"]
 
     SVC --> MEM0["Mem0<br/>Semantic memory"]
     SVC --> SB["Supabase<br/>PostgreSQL + pgvector"]
     SVC --> VAI["Voyage AI<br/>Embeddings + reranking"]
-    SVC --> GR["Graphiti<br/>Knowledge graph (optional)"]
+    SVC --> GR["Graphiti<br/>Knowledge graph<br/><i>optional</i>"]
 
     style CC fill:#2c3e50,color:#fff
+    style ST fill:#2c3e50,color:#fff
+    style CLI fill:#2c3e50,color:#fff
     style MCP fill:#8e44ad,color:#fff
-    style COS fill:#8e44ad,color:#fff
-    style RECALL fill:#4a90d9,color:#fff
-    style ASK fill:#4a90d9,color:#fff
-    style LEARN fill:#27ae60,color:#fff
-    style CREATE fill:#27ae60,color:#fff
-    style REVIEW fill:#e67e22,color:#fff
-    style COACH fill:#e67e22,color:#fff
-    style PMO fill:#e67e22,color:#fff
-    style EMAIL fill:#e67e22,color:#fff
-    style SPEC fill:#7b68ee,color:#fff
-    style CLARITY fill:#7b68ee,color:#fff
-    style SYNTH fill:#7b68ee,color:#fff
-    style TB fill:#7b68ee,color:#fff
+    style API fill:#8e44ad,color:#fff
+    style AGENTS fill:#4a90d9,color:#fff
     style SVC fill:#34495e,color:#fff
     style MEM0 fill:#e74c3c,color:#fff
     style SB fill:#e74c3c,color:#fff
     style VAI fill:#e74c3c,color:#fff
     style GR fill:#95a5a6,color:#fff
 ```
+
+Three interfaces, one brain:
+
+| Interface | Transport | Use Case |
+|-----------|-----------|----------|
+| **MCP Server** | stdio or HTTP | Claude Code, Cursor, Windsurf — any MCP client |
+| **REST API** | HTTP (FastAPI) | Custom frontends, integrations, automation |
+| **CLI** | Terminal | Scripts, health checks, migrations |
 
 ---
 
@@ -92,12 +152,14 @@ graph LR
 
 | Agent | What It Does |
 |-------|-------------|
-| `recall` | Semantic search across stored memory — surfaces past decisions, patterns, and notes by meaning, not keywords |
+| `recall` | Semantic search across stored memory — surfaces past decisions, patterns, and notes by meaning |
 | `ask` | Answers questions using full brain context — connects stored knowledge to new questions |
-| `learn` | Extracts patterns and insights from anything you feed it (notes, code, articles) and stores them |
+| `learn` | Extracts patterns and insights from anything you feed it and stores them |
 | `learn_image` | Stores images to Mem0 with multimodal Voyage AI embeddings for cross-modal search |
 | `learn_document` | Ingests PDFs, MDX, and TXT documents into semantic memory |
 | `learn_video` | Generates multimodal video embeddings via Voyage AI with text context stored to memory |
+
+> **Note**: `learn_image`, `learn_document`, and `learn_video` are MCP tools on the learn agent — not separate agents. They share the learn agent's pattern extraction pipeline with modality-specific ingestion.
 
 ### Content — Generate and score content in your voice
 
@@ -119,11 +181,11 @@ graph LR
 
 | Agent | What It Does |
 |-------|-------------|
-| `create` | Generates content in your authentic voice — pre-loads your voice guide and past examples so drafts match your style from the first attempt |
-| `review` | Scores content across multiple dimensions: clarity, structure, impact, tone — returns dimension-by-dimension scores with actionable feedback |
-| `clarity` | Readability analysis — flags passive voice, jargon, complex sentences, and structural issues |
+| `create` | Generates content in your authentic voice — pre-loads your voice guide and past examples |
+| `review` | Scores content across dimensions: clarity, structure, impact, tone — with actionable feedback |
+| `clarity` | Readability analysis — flags passive voice, jargon, complex sentences |
 | `synthesizer` | Consolidates feedback from multiple sources into a single prioritized action list |
-| `template_builder` | Detects when you're repeating a pattern and proposes a reusable template |
+| `template_builder` | Detects repeating patterns and proposes reusable templates |
 
 ### Operations — Manage priorities and communications
 
@@ -146,15 +208,68 @@ graph LR
 
 | Agent | What It Does |
 |-------|-------------|
-| `coach` | Daily accountability coaching — surfaces top priorities, checks progress, prompts reflection |
-| `pmo` | PMO-style task prioritization — manages competing projects, deadlines, and resource constraints |
-| `email_agent` | Composes emails matched to your voice and recipient relationship context |
+| `coach` | Daily accountability — surfaces top priorities, checks progress, prompts reflection |
+| `pmo` | PMO-style task prioritization — manages competing projects and deadlines |
+| `email_agent` | Composes emails matched to your voice and recipient context |
 
 ### Specialist
 
 | Agent | What It Does |
 |-------|-------------|
 | `specialist` | Deep Q&A on Claude Code, Pydantic AI, and the Second Brain system itself |
+
+---
+
+## Frontend Dashboard
+
+A Streamlit web UI for interacting with your brain without Claude Code.
+
+```bash
+# Start the full stack
+docker compose up -d
+
+# Or run standalone
+cd frontend && streamlit run app.py
+```
+
+### Pages
+
+| Page | What It Does |
+|------|-------------|
+| **Chat** | Talk to any of the 13 agents with per-agent response formatting and chat history |
+| **Memory** | Browse Supabase tables, semantic search via Mem0, pgvector similarity search |
+| **Dashboard** | Health metrics, growth trends, quality scores, brain level milestones |
+| **Content** | Create and review content with voice-aware generation |
+| **Projects** | Project lifecycle management — create, advance stages, attach artifacts |
+| **Graph** | Knowledge graph explorer with interactive force-directed visualization |
+| **Settings** | Live config viewer, active provider status, service health |
+
+The frontend connects to the REST API — no direct database access. All secrets stay in the backend.
+
+---
+
+## REST API
+
+45+ endpoints powering the frontend and available for custom integrations. Built with FastAPI, auto-documented at `/docs`.
+
+### Endpoint Groups
+
+| Group | Prefix | Endpoints | Purpose |
+|-------|--------|-----------|---------|
+| **Agents** | `/api/*` | 13 POST | One endpoint per agent — same interface as MCP tools |
+| **Memory** | `/api/search/*`, `/api/ingest/*` | 12 | Search, browse, and ingest across all memory stores |
+| **Health** | `/api/health/*` | 6 GET | Metrics, growth, milestones, quality, setup status |
+| **Projects** | `/api/projects/*` | 8 | Full project lifecycle CRUD + artifacts |
+| **Graph** | `/api/graph/*` | 4 | Knowledge graph search, episodes, health |
+| **Settings** | `/api/settings/*` | 2 GET | Config and provider status (secrets redacted) |
+
+```bash
+# Start the API server
+cd backend && uvicorn second_brain.api.main:create_app --factory --port 8001
+
+# Or via Docker (starts both MCP + API)
+docker compose up -d backend
+```
 
 ---
 
@@ -227,12 +342,6 @@ All three providers implement the same 14-method interface. Agents never know wh
 
 ---
 
-## Multi-User Support
-
-Each instance is scoped to a single user via the `BRAIN_USER_ID` environment variable. All reads and writes in `storage.py` are filtered by this value, so multiple instances can share one Supabase deployment without data leaking between users. Existing single-user setups work unchanged — the default value is `ryan`.
-
----
-
 ## Multimodal Support
 
 Store and search across multiple content types — not just text.
@@ -247,6 +356,12 @@ Store and search across multiple content types — not just text.
 All multimodal embeddings use `voyage-multimodal-3.5` (1024 dimensions) — the same vector space as text. Images, documents, and video are searchable alongside text memories using the same pgvector infrastructure. No separate migration needed.
 
 The Graphiti memory provider falls back to text-only mode for multimodal content — non-text blocks are skipped with a debug log.
+
+---
+
+## Multi-User Support
+
+Each instance is scoped to a single user via the `BRAIN_USER_ID` environment variable. All reads and writes in `storage.py` are filtered by this value, so multiple instances can share one Supabase deployment without data leaking between users. Existing single-user setups work unchanged — the default value is `ryan`.
 
 ---
 
@@ -312,43 +427,9 @@ graph TD
 
 ---
 
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Language | Python 3.11+ (Docker: 3.12) |
-| Agent framework | Pydantic AI (`pydantic-ai[anthropic]`) |
-| MCP server | FastMCP |
-| Semantic memory | Mem0 (`mem0ai`) |
-| Database | Supabase (PostgreSQL + pgvector) |
-| Embeddings | Voyage AI `voyage-multimodal-3.5` (primary), OpenAI (text fallback) |
-| Image processing | Pillow — decodes base64 images for Voyage multimodal embeddings |
-| Knowledge graph | Graphiti + FalkorDB (optional, feature-flagged) |
-| LLM providers | Provider registry — Anthropic, OpenAI, Groq, Ollama with fallback chains |
-| CLI | Click (`brain` entrypoint) |
-| Retries | Tenacity (exponential backoff) |
-| Config | Pydantic Settings (`.env` via `BrainConfig`) |
-| Testing | pytest + pytest-asyncio (`asyncio_mode = "auto"`) |
-
----
-
 ## Setup
 
-### 1. Python Version
-
-**Requires Python 3.11-3.13.** Python 3.14+ is not supported (`voyageai` requires `<3.14`).
-
-```powershell
-# Windows (PowerShell)
-py -3.13 -m venv .venv
-.venv\Scripts\Activate.ps1
-
-# macOS / Linux
-python3.13 -m venv .venv
-source .venv/bin/activate
-```
-
-### 2. Environment
+### 1. Environment
 
 ```bash
 cd backend
@@ -367,7 +448,7 @@ MEMORY_PROVIDER=mem0        # mem0 (default), graphiti, or none
 BRAIN_USER_ID=ryan          # Optional — isolates data per user (default: ryan)
 ```
 
-### LLM Backend
+### 2. LLM Backend
 
 Agents use a **provider registry** for flexible LLM selection with automatic fallback chains:
 
@@ -379,6 +460,9 @@ MODEL_FALLBACK_CHAIN=ollama-local  # Optional comma-separated fallback providers
 
 `MODEL_PROVIDER=auto` (default) infers from available API keys: Anthropic > Ollama Cloud > Ollama Local. Existing `.env` files with just `ANTHROPIC_API_KEY` work unchanged.
 
+<details>
+<summary>All LLM provider configurations</summary>
+
 | Provider | `MODEL_PROVIDER=` | Env Vars Required | Default Model |
 |----------|-------------------|-------------------|---------------|
 | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5` |
@@ -386,6 +470,8 @@ MODEL_FALLBACK_CHAIN=ollama-local  # Optional comma-separated fallback providers
 | Ollama Cloud | `ollama-cloud` | `OLLAMA_BASE_URL`, `OLLAMA_API_KEY` | `llama3.1:8b` |
 | OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
 | Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+
+</details>
 
 **Claude Subscription setup** (recommended if you have Claude Pro/Max):
 
@@ -424,47 +510,41 @@ pip install -e ".[dev,ollama]"        # + Ollama local model support
 
 ### 4. Database Migrations
 
-Apply migrations in order via the Supabase dashboard or CLI. All 19 migrations are in `backend/supabase/migrations/`, numbered `001` through `019`.
+Apply all 19 migrations in `backend/supabase/migrations/` via the Supabase dashboard or CLI, in order.
 
-```
-001_initial_schema.sql            — Core tables
-002_examples_knowledge.sql        — Examples and knowledge tables
-003_pattern_constraints.sql       — Pattern uniqueness constraints
-004_content_types.sql             — Content type registry
-005_growth_tracking_tables.sql    — Growth and milestone tracking
-006_rls_policies.sql              — Row Level Security policies
-007_foreign_keys_indexes.sql      — Foreign keys and indexes
-008_data_constraints.sql          — Data validation constraints
-009_reinforce_pattern_rpc.sql     — Pattern reinforcement RPC
-010_vector_search_rpc.sql         — pgvector similarity search RPC
-011_voyage_dimensions.sql         — Voyage AI embedding dimensions
-012_projects_lifecycle.sql        — Project lifecycle tables
-013_quality_trending.sql          — Quality score trending
-014_content_type_instructions.sql — Content type prompt instructions
-015_user_id_isolation.sql         — Multi-user data isolation
-016_hnsw_indexes.sql              — HNSW vector indexes for fast similarity search
-017_rls_hardening.sql             — Strengthened Row Level Security policies
-018_vector_search_hnsw.sql        — Vector search RPC with HNSW ef_search tuning
-019_reinforce_pattern_user_id.sql — User-scoped pattern reinforcement
-```
+<details>
+<summary>Full migration list (001–019)</summary>
+
+| # | Migration | Purpose |
+|---|-----------|---------|
+| 001 | `initial_schema.sql` | Core tables |
+| 002 | `examples_knowledge.sql` | Examples and knowledge tables |
+| 003 | `pattern_constraints.sql` | Pattern uniqueness constraints |
+| 004 | `content_types.sql` | Content type registry |
+| 005 | `growth_tracking_tables.sql` | Growth and milestone tracking |
+| 006 | `rls_policies.sql` | Row Level Security policies |
+| 007 | `foreign_keys_indexes.sql` | Foreign keys and indexes |
+| 008 | `data_constraints.sql` | Data validation constraints |
+| 009 | `reinforce_pattern_rpc.sql` | Pattern reinforcement RPC |
+| 010 | `vector_search_rpc.sql` | pgvector similarity search RPC |
+| 011 | `voyage_dimensions.sql` | Voyage AI embedding dimensions |
+| 012 | `projects_lifecycle.sql` | Project lifecycle tables |
+| 013 | `quality_trending.sql` | Quality score trending |
+| 014 | `content_type_instructions.sql` | Content type prompt instructions |
+| 015 | `user_id_isolation.sql` | Multi-user data isolation |
+| 016 | `hnsw_indexes.sql` | HNSW vector indexes for fast similarity search |
+| 017 | `rls_hardening.sql` | Strengthened Row Level Security policies |
+| 018 | `vector_search_hnsw.sql` | Vector search RPC with HNSW ef_search tuning |
+| 019 | `reinforce_pattern_user_id.sql` | User-scoped pattern reinforcement |
+
+</details>
 
 ### 5. Start the MCP Server
-
-**Local (stdio — default):**
 
 ```bash
 cd backend
 python -m second_brain.mcp_server
 ```
-
-**Docker (HTTP transport):**
-
-```bash
-cd backend
-docker compose up -d
-```
-
-The container starts with `MCP_TRANSPORT=http` on port 8000, includes a `/health` endpoint, and restarts automatically on failure.
 
 All 13 agents are now available as MCP tools inside Claude Code.
 
@@ -472,15 +552,26 @@ All 13 agents are now available as MCP tools inside Claude Code.
 
 ## Docker
 
-### Build & Run
+### Full Stack (Backend + Frontend)
 
 ```bash
-cd backend
-docker build -t second-brain-mcp .
-docker compose up -d
+docker compose up -d          # Start everything
+docker compose up -d backend  # Backend only (MCP + API)
+docker compose up -d frontend # Frontend only
+docker compose logs -f        # View logs
+docker compose down           # Stop everything
 ```
 
-Multi-stage Dockerfile uses uv for fast dependency installation, runs on `python:3.12-slim` as a non-root user, and includes a deep health check that probes `/health` every 30 seconds — returning HTTP 503 when dependency initialization fails.
+| Service | Port | Purpose |
+|---------|------|---------|
+| `backend` | 8000 | MCP server (HTTP transport) |
+| `backend` | 8001 | REST API (FastAPI) |
+| `frontend` | 8501 | Streamlit dashboard |
+
+Both containers run as non-root users. Backend uses a multi-stage uv build for fast, reproducible installs. Frontend starts only after backend health check passes.
+
+<details>
+<summary>Transport configuration and health checks</summary>
 
 ### Transport Configuration
 
@@ -512,13 +603,15 @@ curl http://localhost:8000/health
 
 Docker's `restart: unless-stopped` policy handles automatic recovery when the health check fails.
 
+</details>
+
 ---
 
 ## MCP Integration
 
 ### Local (stdio)
 
-Add to your Claude Code MCP config (`.mcp.json` or `claude_desktop_config.json`):
+Add to your MCP config (`.mcp.json` or `claude_desktop_config.json`):
 
 ```json
 {
@@ -531,6 +624,8 @@ Add to your Claude Code MCP config (`.mcp.json` or `claude_desktop_config.json`)
   }
 }
 ```
+
+Works with Claude Code, Cursor, Windsurf, and any other MCP-compatible client.
 
 ### Docker (HTTP) — Claude Code
 
@@ -568,7 +663,7 @@ Claude Desktop requires the `mcp-remote` proxy to connect to HTTP MCP servers:
 
 ### Usage Examples
 
-Once connected, call any agent from Claude Code:
+Once connected, call any agent naturally:
 
 ```
 Use the second brain to recall everything I know about Supabase RLS.
@@ -582,20 +677,16 @@ Review this draft and score it across all dimensions.
 Coach me — what should I be focused on today?
 ```
 
-Manage projects and knowledge directly:
+Manage projects and knowledge:
 
 ```
 List all my active projects.
 
 Update project "auth-system" — mark it as shipped.
 
-Search my stored experiences for anything related to Supabase migrations.
-
 Search patterns — find everything I've learned about rate limiting.
 
 Ingest this example into my brain: [paste code or content]
-
-Add an artifact to project "second-brain" — link to this PR.
 ```
 
 Multimodal content:
@@ -605,9 +696,17 @@ Learn this image — it's my app's architecture diagram: [image URL]
 
 Learn this PDF — it's the Supabase RLS guide: [PDF URL]
 
-Learn this video — it's a demo of the new onboarding flow: [video URL]
-
 Search across all my stored content (text + images) for "authentication flow".
+```
+
+Frontend and API:
+
+```
+Show me my brain dashboard — health, growth, and quality.
+
+Search my memories for anything about React hooks.
+
+What's the status of the auth-system project?
 ```
 
 ---
@@ -624,28 +723,65 @@ brain migrate        # Run data migration
 
 ---
 
-## Code Structure
+## Tests
+
+```bash
+cd backend
+pytest                              # All tests (1158+)
+pytest tests/test_agents.py         # Single file
+pytest -k "test_recall"             # Filter by name
+pytest -x                           # Stop on first failure
+```
+
+25 test files. One per source module. All async tests run without `@pytest.mark.asyncio` — `asyncio_mode = "auto"`.
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Language | Python 3.11+ (Docker: 3.12) |
+| Agent framework | Pydantic AI (`pydantic-ai[anthropic]`) |
+| MCP server | FastMCP |
+| REST API | FastAPI |
+| Frontend | Streamlit |
+| Semantic memory | Mem0 (`mem0ai`) |
+| Database | Supabase (PostgreSQL + pgvector) |
+| Embeddings | Voyage AI `voyage-multimodal-3.5` (primary), OpenAI (text fallback) |
+| Knowledge graph | Graphiti + FalkorDB (optional, feature-flagged) |
+| LLM providers | Provider registry — Anthropic, OpenAI, Groq, Ollama with fallback chains |
+| CLI | Click (`brain` entrypoint) |
+| Testing | pytest + pytest-asyncio (`asyncio_mode = "auto"`) |
+
+---
+
+## By the Numbers
+
+| Component | Count |
+|-----------|-------|
+| Pydantic AI agents | 13 |
+| MCP tools | 42 |
+| REST API endpoints | 45+ |
+| Frontend pages | 7 |
+| Service modules | 10 |
+| LLM providers | 5 (Anthropic, OpenAI, Groq, Ollama local, Ollama cloud) |
+| Database migrations | 19 |
+| Test files | 25 |
+| Tests passing | 1158+ |
+
+<details>
+<summary>Full code structure</summary>
 
 ```
 backend/
 ├── src/second_brain/
-│   ├── mcp_server.py          # Public surface: @server.tool() functions
+│   ├── mcp_server.py          # MCP tool surface (42 tools)
 │   ├── service_mcp.py         # Supplemental service routing
-│   ├── deps.py                # BrainDeps dataclass + create_deps() factory
-│   ├── config.py              # BrainConfig (Pydantic Settings, loads .env)
-│   ├── schemas.py             # All Pydantic output models (no internal imports)
-│   ├── models.py              # AI model selection + provider fallback chains
-│   ├── models_sdk.py          # Claude SDK model support (subscription auth)
-│   ├── auth.py                # Authentication helpers
-│   ├── migrate.py             # Data migration utilities
-│   ├── cli.py                 # Click CLI ("brain" command)
-│   ├── providers/
-│   │   ├── __init__.py        # BaseProvider ABC + provider registry
-│   │   ├── anthropic.py       # Anthropic Claude (API key + subscription)
-│   │   ├── ollama.py          # Ollama local + cloud providers
-│   │   ├── openai.py          # OpenAI GPT provider
-│   │   └── groq.py            # Groq fast inference provider
-│   ├── agents/
+│   ├── api/
+│   │   ├── main.py            # FastAPI app factory
+│   │   └── routers/           # 6 router modules (agents, memory, health, projects, graph, settings)
+│   ├── agents/                # 13 Pydantic AI agents
 │   │   ├── chief_of_staff.py  # Routing orchestrator
 │   │   ├── recall.py          # Semantic memory search
 │   │   ├── ask.py             # Q&A with brain context
@@ -660,57 +796,51 @@ backend/
 │   │   ├── synthesizer.py     # Feedback consolidation
 │   │   ├── template_builder.py# Template opportunity detection
 │   │   └── utils.py           # Shared: tool_error(), run_pipeline(), format_*()
-│   └── services/
-│       ├── memory.py          # Mem0 semantic memory wrapper
-│       ├── storage.py         # Supabase CRUD + ContentTypeRegistry
-│       ├── embeddings.py      # Voyage AI / OpenAI embedding generation
-│       ├── voyage.py          # Voyage AI reranking
-│       ├── graphiti.py        # Knowledge graph (optional)
-│       ├── graphiti_memory.py # Graphiti-backed MemoryServiceBase adapter
-│       ├── health.py          # Brain metrics + growth milestones
-│       ├── retry.py           # Tenacity retry helpers
-│       ├── search_result.py   # Search result data structures
-│       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
+│   ├── services/              # 10 service modules
+│   │   ├── memory.py          # Mem0 semantic memory wrapper
+│   │   ├── storage.py         # Supabase CRUD + ContentTypeRegistry
+│   │   ├── embeddings.py      # Voyage AI / OpenAI embedding generation
+│   │   ├── voyage.py          # Voyage AI reranking
+│   │   ├── graphiti.py        # Knowledge graph (optional)
+│   │   ├── graphiti_memory.py # Graphiti-backed MemoryServiceBase adapter
+│   │   ├── health.py          # Brain metrics + growth milestones
+│   │   ├── retry.py           # Tenacity retry helpers
+│   │   ├── search_result.py   # Search result data structures
+│   │   └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
+│   ├── providers/             # 4 LLM provider adapters
+│   │   ├── __init__.py        # BaseProvider ABC + provider registry
+│   │   ├── anthropic.py       # Anthropic Claude (API key + subscription)
+│   │   ├── ollama.py          # Ollama local + cloud providers
+│   │   ├── openai.py          # OpenAI GPT provider
+│   │   └── groq.py            # Groq fast inference provider
+│   ├── schemas.py             # All Pydantic models (no internal imports)
+│   ├── config.py              # BrainConfig (Pydantic Settings)
+│   ├── deps.py                # BrainDeps + create_deps() factory
+│   ├── models.py              # Provider registry + fallback chains
+│   ├── models_sdk.py          # Claude SDK model support (subscription auth)
+│   ├── auth.py                # Authentication helpers
+│   ├── migrate.py             # Data migration utilities
+│   └── cli.py                 # Click CLI ("brain" command)
 ├── supabase/migrations/       # 19 SQL migrations (001–019)
-├── tests/                     # 1060+ tests across 24 files
+├── tests/                     # 25 test files, 1158+ tests
 ├── docs/                      # Operational runbooks and integration guides
 ├── scripts/                   # Utility scripts
 ├── Dockerfile                 # Multi-stage uv build (Python 3.12)
-├── docker-compose.yml         # Docker compose (HTTP transport)
-├── .env.example               # Documented env var template
-├── uv.lock                    # Lockfile for reproducible Docker builds
 └── pyproject.toml             # Dependencies + pytest config
+
+frontend/
+├── app.py                     # Streamlit multi-page app
+├── pages/                     # 7 pages (chat, memory, dashboard, content, projects, graph, settings)
+├── components/                # Reusable UI components
+├── api_client.py              # HTTP client for REST API
+├── config.py                  # Frontend configuration
+├── Dockerfile                 # Python 3.12-slim
+└── requirements.txt           # Frontend dependencies
+
+docker-compose.yml             # Root: full-stack orchestration (backend + frontend)
 ```
 
----
-
-## Tests
-
-```bash
-cd backend
-pytest                              # All tests (1060+)
-pytest tests/test_agents.py         # Single file
-pytest -k "test_recall"             # Filter by name
-pytest -x                           # Stop on first failure
-pytest -v                           # Verbose output
-```
-
-One test file per source module. All async tests run without `@pytest.mark.asyncio` — `asyncio_mode = "auto"` in `pyproject.toml`.
-
----
-
-## By the Numbers
-
-| Component | Count |
-|-----------|-------|
-| Pydantic AI agents | 13 |
-| MCP tools | 42 |
-| Service modules | 11 |
-| LLM providers | 5 |
-| Database migrations | 19 |
-| Test files | 24 |
-| Tests | 1060+ |
-| Python version | 3.11+ |
+</details>
 
 ---
 
