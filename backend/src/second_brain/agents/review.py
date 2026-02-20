@@ -283,22 +283,22 @@ async def run_full_review(
 
     # Track pattern failures for confidence downgrade
     try:
+        patterns = await deps.storage_service.get_patterns()
+        tasks = []
         if overall_score < deps.config.confidence_downgrade_threshold:
-            # Find patterns that were expected to apply
-            patterns = await deps.storage_service.get_patterns()
             for p in patterns:
                 applicable_types = p.get("applicable_content_types") or []
                 if not applicable_types or content_type in applicable_types:
                     if p.get("confidence") != "LOW":
-                        await deps.storage_service.update_pattern_failures(p["id"])
+                        tasks.append(deps.storage_service.update_pattern_failures(p["id"]))
         else:
-            # Reset consecutive failures for applicable patterns on good review
-            patterns = await deps.storage_service.get_patterns()
             for p in patterns:
                 if p.get("consecutive_failures", 0) > 0:
                     applicable_types = p.get("applicable_content_types") or []
                     if not applicable_types or content_type in applicable_types:
-                        await deps.storage_service.update_pattern_failures(p["id"], reset=True)
+                        tasks.append(deps.storage_service.update_pattern_failures(p["id"], reset=True))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     except Exception:
         logger.debug("Pattern failure tracking failed (non-critical)")
 

@@ -1271,31 +1271,33 @@ class StorageService:
         all_categories = {"company", "customers", "audience", "style-voice",
                           "values-beliefs", "personal"}
         try:
-            result = await asyncio.to_thread(
-                self._client.table("memory_content")
-                .select("category, subcategory")
-                .eq("user_id", self.user_id)
-                .execute
+            result, pattern_result, example_result = await asyncio.gather(
+                asyncio.to_thread(
+                    self._client.table("memory_content")
+                    .select("category, subcategory")
+                    .eq("user_id", self.user_id)
+                    .execute
+                ),
+                asyncio.to_thread(
+                    self._client.table("patterns")
+                    .select("id", count="exact")
+                    .eq("user_id", self.user_id)
+                    .execute
+                ),
+                asyncio.to_thread(
+                    self._client.table("examples")
+                    .select("id", count="exact")
+                    .eq("user_id", self.user_id)
+                    .execute
+                ),
             )
             entries = result.data if result.data else []
             populated_categories = set(e["category"] for e in entries if e.get("category"))
 
             missing = sorted(all_categories - populated_categories)
 
-            pattern_result = await asyncio.to_thread(
-                self._client.table("patterns")
-                .select("id", count="exact")
-                .eq("user_id", self.user_id)
-                .execute
-            )
             has_patterns = bool(pattern_result.count and pattern_result.count > 0)
 
-            example_result = await asyncio.to_thread(
-                self._client.table("examples")
-                .select("id", count="exact")
-                .eq("user_id", self.user_id)
-                .execute
-            )
             has_examples = bool(example_result.count and example_result.count > 0)
 
             return {
@@ -1332,6 +1334,7 @@ class ContentTypeRegistry:
         self._ttl = ttl
         self._cache: dict[str, ContentTypeConfig] | None = None
         self._cache_time: float = 0.0
+        self._refresh_lock = asyncio.Lock()
 
     def _is_stale(self) -> bool:
         return self._cache is None or (time.time() - self._cache_time) > self._ttl
@@ -1346,22 +1349,26 @@ class ContentTypeRegistry:
         if not self._is_stale() and self._cache is not None:
             return self._cache
 
-        try:
-            rows = await self._storage.get_content_types()
-            if rows:
-                self._cache = {
-                    row["slug"]: content_type_from_row(row)
-                    for row in rows
-                }
-                self._cache_time = time.time()
+        async with self._refresh_lock:
+            # Double-check after acquiring lock (another coroutine may have refreshed)
+            if not self._is_stale() and self._cache is not None:
                 return self._cache
-        except Exception:
-            logger.warning("Failed to load content types from DB, using defaults")
+            try:
+                rows = await self._storage.get_content_types()
+                if rows:
+                    self._cache = {
+                        row["slug"]: content_type_from_row(row)
+                        for row in rows
+                    }
+                    self._cache_time = time.time()
+                    return self._cache
+            except Exception:
+                logger.warning("Failed to load content types from DB, using defaults")
 
-        # Fallback to hardcoded defaults
-        self._cache = dict(DEFAULT_CONTENT_TYPES)
-        self._cache_time = time.time()
-        return self._cache
+            # Fallback to hardcoded defaults
+            self._cache = dict(DEFAULT_CONTENT_TYPES)
+            self._cache_time = time.time()
+            return self._cache
 
     async def get(self, slug: str) -> ContentTypeConfig | None:
         """Get a single content type by slug."""

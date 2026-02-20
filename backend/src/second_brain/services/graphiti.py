@@ -240,17 +240,22 @@ class GraphitiService:
             logger.debug("Graphiti not available, skipping batch add")
             return 0
 
-        added = 0
-        for ep in episodes:
-            try:
-                await self.add_episode(
-                    content=ep["content"],
-                    metadata=ep.get("metadata"),
-                )
-                added += 1
-            except Exception as e:
-                logger.debug("Batch episode failed: %s", e)
-        return added
+        sem = asyncio.Semaphore(3)  # Limit concurrent LLM/DB calls
+
+        async def _add_one(ep: dict) -> bool:
+            async with sem:
+                try:
+                    await self.add_episode(
+                        content=ep["content"],
+                        metadata=ep.get("metadata"),
+                    )
+                    return True
+                except Exception as e:
+                    logger.debug("Batch episode failed: %s", e)
+                    return False
+
+        results = await asyncio.gather(*[_add_one(ep) for ep in episodes])
+        return sum(1 for r in results if r)
 
     async def add_episodes_chunked(
         self,

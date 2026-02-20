@@ -1,5 +1,6 @@
 """Brain health metrics computation."""
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -47,19 +48,24 @@ class HealthService:
         """Compute current health metrics from all services."""
         errors: list[str] = []
 
-        try:
-            patterns = await deps.storage_service.get_patterns()
-        except Exception as e:
-            logger.warning("Health: patterns unavailable: %s", type(e).__name__)
+        patterns_r, experiences_r, memory_count_r = await asyncio.gather(
+            deps.storage_service.get_patterns(),
+            deps.storage_service.get_experiences(),
+            deps.memory_service.get_memory_count(),
+            return_exceptions=True,
+        )
+        if isinstance(patterns_r, Exception):
+            logger.warning("Health: patterns unavailable: %s", type(patterns_r).__name__)
             patterns = []
-            errors.append(f"patterns: {type(e).__name__}")
-
-        try:
-            experiences = await deps.storage_service.get_experiences()
-        except Exception as e:
-            logger.warning("Health: experiences unavailable: %s", type(e).__name__)
+            errors.append(f"patterns: {type(patterns_r).__name__}")
+        else:
+            patterns = patterns_r
+        if isinstance(experiences_r, Exception):
+            logger.warning("Health: experiences unavailable: %s", type(experiences_r).__name__)
             experiences = []
-            errors.append(f"experiences: {type(e).__name__}")
+            errors.append(f"experiences: {type(experiences_r).__name__}")
+        else:
+            experiences = experiences_r
 
         total = len(patterns)
         high = len([p for p in patterns if p.get("confidence") == "HIGH"])
@@ -71,11 +77,11 @@ class HealthService:
             t = p.get("topic", "uncategorized")
             topics[t] = topics.get(t, 0) + 1
 
-        try:
-            memory_count: int | str = await deps.memory_service.get_memory_count()
-        except Exception as e:
-            memory_count = "unavailable"
-            errors.append(f"memory_count: {type(e).__name__}")
+        if isinstance(memory_count_r, Exception):
+            memory_count: int | str = "unavailable"
+            errors.append(f"memory_count: {type(memory_count_r).__name__}")
+        else:
+            memory_count = memory_count_r
 
         latest = patterns[0].get("date_updated", "unknown") if patterns else "none"
         graph = deps.config.graph_provider or "disabled"
@@ -109,26 +115,38 @@ class HealthService:
             errors=errors,
         )
 
-    async def compute_growth(self, deps: "BrainDeps", days: int = 30) -> HealthMetrics:
+    async def compute_growth(self, deps: "BrainDeps", days: int = 30, metrics: "HealthMetrics | None" = None) -> HealthMetrics:
         """Compute health metrics enhanced with growth tracking data."""
-        # Start with base metrics
-        metrics = await self.compute(deps)
+        # Start with base metrics (reuse if pre-computed)
+        if metrics is None:
+            metrics = await self.compute(deps)
 
-        # Get growth event counts
-        try:
-            counts = await deps.storage_service.get_growth_event_counts(days=days)
+        # Parallelize the 3 independent fetches
+        counts_r, reviews_r, patterns_r = await asyncio.gather(
+            deps.storage_service.get_growth_event_counts(days=days),
+            deps.storage_service.get_review_history(limit=20),
+            deps.storage_service.get_patterns(),
+            return_exceptions=True,
+        )
+
+        # Growth event counts
+        if isinstance(counts_r, Exception):
+            logger.debug("Growth event counts unavailable: %s", type(counts_r).__name__)
+            metrics.errors.append(f"growth_events: {type(counts_r).__name__}")
+        else:
+            counts = counts_r
             metrics.growth_events_total = sum(counts.values())
             metrics.patterns_created_period = counts.get("pattern_created", 0)
             metrics.patterns_reinforced_period = counts.get("pattern_reinforced", 0)
             metrics.confidence_upgrades_period = counts.get("confidence_upgraded", 0)
             metrics.experiences_recorded_period = counts.get("experience_recorded", 0)
-        except Exception as e:
-            logger.debug("Growth event counts unavailable: %s", type(e).__name__)
-            metrics.errors.append(f"growth_events: {type(e).__name__}")
 
-        # Get review score trending
-        try:
-            reviews = await deps.storage_service.get_review_history(limit=20)
+        # Review score trending
+        if isinstance(reviews_r, Exception):
+            logger.debug("Review history unavailable: %s", type(reviews_r).__name__)
+            metrics.errors.append(f"review_history: {type(reviews_r).__name__}")
+        else:
+            reviews = reviews_r
             metrics.reviews_completed_period = len(reviews)
             if reviews:
                 scores = [r["overall_score"] for r in reviews if "overall_score" in r]
@@ -143,23 +161,19 @@ class HealthService:
                             metrics.review_score_trend = "improving"
                         elif recent_avg < older_avg - 0.5:
                             metrics.review_score_trend = "declining"
-        except Exception as e:
-            logger.debug("Review history unavailable: %s", type(e).__name__)
-            metrics.errors.append(f"review_history: {type(e).__name__}")
 
         # Detect stale patterns (not reinforced in 30+ days)
-        try:
-            patterns = await deps.storage_service.get_patterns()
+        if isinstance(patterns_r, Exception):
+            logger.debug("Stale pattern detection failed: %s", type(patterns_r).__name__)
+            metrics.errors.append(f"stale_patterns: {type(patterns_r).__name__}")
+        else:
             from datetime import date, timedelta
             cutoff = str(date.today() - timedelta(days=30))
             stale = [
-                p["name"] for p in patterns
+                p["name"] for p in patterns_r
                 if p.get("date_updated", "") < cutoff and p.get("confidence") != "HIGH"
             ]
             metrics.stale_patterns = stale[:10]  # cap at 10
-        except Exception as e:
-            logger.debug("Stale pattern detection failed: %s", type(e).__name__)
-            metrics.errors.append(f"stale_patterns: {type(e).__name__}")
 
         return metrics
 
@@ -170,9 +184,9 @@ class HealthService:
             BrainMilestone,
         )
 
-        # Get current metrics
+        # Get current metrics (pass pre-computed to avoid double compute)
         metrics = await self.compute(deps)
-        growth = await self.compute_growth(deps)
+        growth = await self.compute_growth(deps, metrics=metrics)
 
         # Compute milestone completion
         milestones = []

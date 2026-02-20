@@ -1,5 +1,6 @@
 """LearnAgent — extract patterns, insights, and experiences from raw text."""
 
+import asyncio
 import logging
 from datetime import date
 
@@ -150,62 +151,56 @@ async def store_pattern(
         }
         try:
             await ctx.deps.storage_service.insert_pattern(pattern_data)
-            # Record growth event (non-critical)
-            try:
-                await ctx.deps.storage_service.add_growth_event({
-                    "event_type": "pattern_created",
+            # Non-critical side-effects — gather all at once
+            side_effects = []
+            side_effects.append(ctx.deps.storage_service.add_growth_event({
+                "event_type": "pattern_created",
+                "pattern_name": name,
+                "pattern_topic": topic,
+                "details": {
+                    "confidence": confidence,
+                    "evidence_count": len(evidence or []),
+                },
+            }))
+            mem0_content = f"Pattern: {name} — {pattern_text}"
+            if context:
+                mem0_content += f". Context: {context}"
+            if applicable_content_types:
+                mem0_content += f". Applies to: {', '.join(applicable_content_types)}"
+            side_effects.append(ctx.deps.memory_service.add_with_metadata(
+                content=mem0_content,
+                metadata={
+                    "category": "pattern",
                     "pattern_name": name,
-                    "pattern_topic": topic,
-                    "details": {
-                        "confidence": confidence,
-                        "evidence_count": len(evidence or []),
-                    },
-                })
-            except Exception:
-                logger.debug("Failed to record growth event for pattern '%s'", name)
-            # Dual-write: sync pattern to Mem0 for semantic discovery (non-critical)
-            try:
-                mem0_content = f"Pattern: {name} — {pattern_text}"
+                    "topic": topic,
+                    "confidence": confidence,
+                    "applicable_content_types": applicable_content_types,
+                },
+                enable_graph=True,
+            ))
+            if ctx.deps.graphiti_service:
+                graphiti_content = (
+                    f"New pattern discovered: {name}. "
+                    f"Topic: {topic}. "
+                    f"Pattern: {pattern_text}"
+                )
                 if context:
-                    mem0_content += f". Context: {context}"
-                if applicable_content_types:
-                    mem0_content += f". Applies to: {', '.join(applicable_content_types)}"
-                await ctx.deps.memory_service.add_with_metadata(
-                    content=mem0_content,
+                    graphiti_content += f". Context: {context}"
+                if evidence:
+                    graphiti_content += f". Evidence: {'; '.join(evidence[:3])}"
+                side_effects.append(ctx.deps.graphiti_service.add_episode(
+                    graphiti_content,
                     metadata={
+                        "source": "learn_agent",
                         "category": "pattern",
                         "pattern_name": name,
                         "topic": topic,
-                        "confidence": confidence,
-                        "applicable_content_types": applicable_content_types,
                     },
-                    enable_graph=True,
-                )
-            except Exception:
-                logger.debug("Failed to sync pattern '%s' to Mem0 (non-critical)", name)
-            # Dual-write: add episode to Graphiti for entity extraction (non-critical)
-            if ctx.deps.graphiti_service:
-                try:
-                    graphiti_content = (
-                        f"New pattern discovered: {name}. "
-                        f"Topic: {topic}. "
-                        f"Pattern: {pattern_text}"
-                    )
-                    if context:
-                        graphiti_content += f". Context: {context}"
-                    if evidence:
-                        graphiti_content += f". Evidence: {'; '.join(evidence[:3])}"
-                    await ctx.deps.graphiti_service.add_episode(
-                        graphiti_content,
-                        metadata={
-                            "source": "learn_agent",
-                            "category": "pattern",
-                            "pattern_name": name,
-                            "topic": topic,
-                        },
-                    )
-                except Exception:
-                    logger.debug("Failed to sync pattern '%s' to Graphiti (non-critical)", name)
+                ))
+            results = await asyncio.gather(*side_effects, return_exceptions=True)
+            for i, r in enumerate(results):
+                if isinstance(r, Exception):
+                    logger.debug("Non-critical write %d failed in store_pattern: %s", i, r)
         except Exception as e:
             logger.exception("Failed to insert pattern '%s'", name)
             return f"Error storing pattern '{name}': {e}"
@@ -248,80 +243,73 @@ async def reinforce_existing_pattern(
         except ValueError as e:
             logger.exception("Failed to reinforce pattern '%s'", pattern_name)
             return f"Error reinforcing pattern '{pattern_name}': {e}"
-        # Record growth event (non-critical)
-        try:
-            old_confidence = pattern.get("confidence", "LOW")
-            new_confidence = updated.get("confidence", old_confidence)
-            await ctx.deps.storage_service.add_growth_event({
-                "event_type": "pattern_reinforced",
+        # Non-critical side-effects — gather all at once
+        old_confidence = pattern.get("confidence", "LOW")
+        new_confidence = updated.get("confidence", old_confidence)
+        side_effects = []
+        side_effects.append(ctx.deps.storage_service.add_growth_event({
+            "event_type": "pattern_reinforced",
+            "pattern_name": pattern_name,
+            "pattern_topic": pattern.get("topic", ""),
+            "details": {
+                "new_use_count": updated.get("use_count", 0),
+                "old_confidence": old_confidence,
+                "new_confidence": new_confidence,
+            },
+        }))
+        if new_confidence != old_confidence:
+            side_effects.append(ctx.deps.storage_service.add_growth_event({
+                "event_type": "confidence_upgraded",
                 "pattern_name": pattern_name,
                 "pattern_topic": pattern.get("topic", ""),
                 "details": {
-                    "new_use_count": updated.get("use_count", 0),
-                    "old_confidence": old_confidence,
-                    "new_confidence": new_confidence,
-                },
-            })
-            # Record confidence transition if confidence changed
-            if new_confidence != old_confidence:
-                await ctx.deps.storage_service.add_growth_event({
-                    "event_type": "confidence_upgraded",
-                    "pattern_name": pattern_name,
-                    "pattern_topic": pattern.get("topic", ""),
-                    "details": {
-                        "from": old_confidence,
-                        "to": new_confidence,
-                        "use_count": updated.get("use_count", 0),
-                    },
-                })
-                await ctx.deps.storage_service.add_confidence_transition({
-                    "pattern_name": pattern_name,
-                    "pattern_topic": pattern.get("topic", ""),
-                    "from_confidence": old_confidence,
-                    "to_confidence": new_confidence,
+                    "from": old_confidence,
+                    "to": new_confidence,
                     "use_count": updated.get("use_count", 0),
-                    "reason": f"Reinforced to use_count {updated.get('use_count', 0)}",
-                })
-        except Exception:
-            logger.debug("Failed to record growth/confidence events for '%s'", pattern_name)
-        # Dual-write: update pattern in Mem0 with new confidence (non-critical)
-        try:
-            mem0_content = (
-                f"Pattern reinforced: {pattern_name} — "
-                f"now at use_count {updated.get('use_count', 0)}, "
-                f"confidence {updated.get('confidence', 'LOW')}"
+                },
+            }))
+            side_effects.append(ctx.deps.storage_service.add_confidence_transition({
+                "pattern_name": pattern_name,
+                "pattern_topic": pattern.get("topic", ""),
+                "from_confidence": old_confidence,
+                "to_confidence": new_confidence,
+                "use_count": updated.get("use_count", 0),
+                "reason": f"Reinforced to use_count {updated.get('use_count', 0)}",
+            }))
+        mem0_content = (
+            f"Pattern reinforced: {pattern_name} — "
+            f"now at use_count {updated.get('use_count', 0)}, "
+            f"confidence {updated.get('confidence', 'LOW')}"
+        )
+        side_effects.append(ctx.deps.memory_service.add_with_metadata(
+            content=mem0_content,
+            metadata={
+                "category": "pattern_reinforcement",
+                "pattern_name": pattern_name,
+                "topic": pattern.get("topic", ""),
+                "confidence": updated.get("confidence", "LOW"),
+            },
+        ))
+        if ctx.deps.graphiti_service:
+            graphiti_content = (
+                f"Pattern reinforced: {pattern_name}. "
+                f"New use_count: {updated.get('use_count', 0)}. "
+                f"Confidence: {updated.get('confidence', 'LOW')}"
             )
-            await ctx.deps.memory_service.add_with_metadata(
-                content=mem0_content,
+            if new_evidence:
+                graphiti_content += f". New evidence: {'; '.join(new_evidence[:3])}"
+            side_effects.append(ctx.deps.graphiti_service.add_episode(
+                graphiti_content,
                 metadata={
+                    "source": "learn_agent",
                     "category": "pattern_reinforcement",
                     "pattern_name": pattern_name,
-                    "topic": pattern.get("topic", ""),
-                    "confidence": updated.get("confidence", "LOW"),
                 },
-            )
-        except Exception:
-            logger.debug("Failed to sync reinforcement for '%s' to Mem0 (non-critical)", pattern_name)
-        # Dual-write: add reinforcement episode to Graphiti (non-critical)
-        if ctx.deps.graphiti_service:
-            try:
-                graphiti_content = (
-                    f"Pattern reinforced: {pattern_name}. "
-                    f"New use_count: {updated.get('use_count', 0)}. "
-                    f"Confidence: {updated.get('confidence', 'LOW')}"
-                )
-                if new_evidence:
-                    graphiti_content += f". New evidence: {'; '.join(new_evidence[:3])}"
-                await ctx.deps.graphiti_service.add_episode(
-                    graphiti_content,
-                    metadata={
-                        "source": "learn_agent",
-                        "category": "pattern_reinforcement",
-                        "pattern_name": pattern_name,
-                    },
-                )
-            except Exception:
-                logger.debug("Failed to sync reinforcement '%s' to Graphiti (non-critical)", pattern_name)
+            ))
+        results = await asyncio.gather(*side_effects, return_exceptions=True)
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                logger.debug("Non-critical write %d failed in reinforce_existing_pattern: %s", i, r)
         return (
             f"Reinforced pattern '{pattern_name}' → "
             f"use_count: {updated['use_count']}, confidence: {updated['confidence']}"
@@ -564,19 +552,22 @@ async def tag_graduated_memories(
         pattern_name: Name of the pattern they graduated into.
     """
     try:
-        tagged = 0
-        for memory_id in memory_ids:
+        async def _tag_one(mid: str) -> bool:
             try:
                 await ctx.deps.memory_service.update_memory(
-                    memory_id=memory_id,
+                    memory_id=mid,
                     metadata={
                         "category": "graduated",
                         "graduated_to_pattern": pattern_name,
                     },
                 )
-                tagged += 1
+                return True
             except Exception as e:
-                logger.debug("Failed to tag memory %s as graduated: %s", memory_id, e)
+                logger.debug("Failed to tag memory %s as graduated: %s", mid, e)
+                return False
+
+        results = await asyncio.gather(*[_tag_one(mid) for mid in memory_ids])
+        tagged = sum(1 for r in results if r)
 
         return f"Tagged {tagged}/{len(memory_ids)} memories as graduated to pattern '{pattern_name}'."
     except Exception as e:

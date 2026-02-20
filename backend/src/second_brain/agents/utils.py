@@ -283,6 +283,8 @@ def format_pattern_registry(patterns: list[dict], config=None) -> str:
     lines = ["| Pattern | Topic | Confidence | Uses | Last Updated | Status |",
              "|---------|-------|------------|------|--------------|--------|"]
 
+    from datetime import datetime, timedelta, timezone
+
     for p in patterns:
         name = p.get("name", "Unknown")
         topic = p.get("topic", "-")
@@ -297,7 +299,6 @@ def format_pattern_registry(patterns: list[dict], config=None) -> str:
             status = "At Risk"
         elif updated and updated != "-":
             try:
-                from datetime import datetime, timedelta, timezone
                 last = datetime.fromisoformat(updated.replace("Z", "+00:00")) if "T" in updated else datetime.strptime(updated, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) - last > timedelta(days=stale_days):
                     status = "Stale"
