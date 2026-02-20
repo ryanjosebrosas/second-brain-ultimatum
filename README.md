@@ -314,7 +314,7 @@ graph TD
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Python 3.11+ |
+| Language | Python 3.11+ (Docker: 3.12) |
 | Agent framework | Pydantic AI (`pydantic-ai[anthropic]`) |
 | MCP server | FastMCP |
 | Semantic memory | Mem0 (`mem0ai`) |
@@ -331,7 +331,23 @@ graph TD
 
 ## Setup
 
-### 1. Environment
+### 1. Python Version
+
+**Requires Python 3.11–3.13.** Python 3.14+ is not supported (`voyageai` requires `<3.14`).
+
+If you have multiple Python versions installed, create a venv with the correct one:
+
+```powershell
+# Windows (PowerShell)
+py -3.13 -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+python3.13 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2. Environment
 
 ```bash
 cd backend
@@ -341,17 +357,45 @@ cp .env.example .env
 Edit `.env`:
 
 ```bash
-ANTHROPIC_API_KEY=...       # Required — powers all agents
 MEM0_API_KEY=...            # Required — semantic memory store
 SUPABASE_URL=...            # Required — structured storage + vector search
 SUPABASE_KEY=...            # Required — Supabase service role key
-VOYAGE_API_KEY=...          # Optional — falls back to OpenAI embeddings
-GRAPHITI_ENABLED=false      # Set true to enable knowledge graph (needs FalkorDB)
-MEMORY_PROVIDER=mem0        # mem0 (default), graphiti, or none (stub for testing)
+OPENAI_API_KEY=...          # Required — Mem0 internal embeddings (text-embedding-3-small)
+VOYAGE_API_KEY=...          # Optional — primary embeddings + reranking (falls back to OpenAI)
+GRAPH_PROVIDER=mem0         # mem0 (default), graphiti, or none
 BRAIN_USER_ID=ryan          # Optional — isolates data per user (default: ryan)
 ```
 
-### 2. Install
+### LLM Backend (choose one)
+
+The agents need an LLM to think. You have three options:
+
+| Option | Env Vars | Cost | Quality |
+|--------|---------|------|---------|
+| **Anthropic API** | `ANTHROPIC_API_KEY=sk-ant-...` | Pay per token | Best |
+| **Claude Subscription** | `USE_SUBSCRIPTION=true` | Included in Claude Pro/Max | Best (same models) |
+| **Ollama Cloud** | `OLLAMA_BASE_URL=https://...` + `OLLAMA_API_KEY=...` + `OLLAMA_MODEL=...` | Varies | Good |
+
+**Claude Subscription setup** (recommended if you have Claude Pro/Max):
+
+1. Install Claude CLI: `npm install -g @anthropic-ai/claude-code`
+2. Authenticate: run `claude` and complete the login flow
+3. Set `USE_SUBSCRIPTION=true` in `.env`
+4. No `ANTHROPIC_API_KEY` needed — the system reads your OAuth token from the credential store automatically
+
+The subscription auth works with any MCP client (Claude Code, Cursor, Windsurf, etc.) — the OAuth token is stored on your machine, not tied to the editor.
+
+**Ollama Cloud setup** (for non-Anthropic models):
+
+```bash
+OLLAMA_BASE_URL=https://your-ollama-endpoint.com
+OLLAMA_API_KEY=your-api-key
+OLLAMA_MODEL=gpt-oss:120b-cloud
+```
+
+Any OpenAI-compatible API endpoint works here (Ollama, Together AI, OpenRouter, etc.).
+
+### 3. Install
 
 ```bash
 cd backend
@@ -366,7 +410,7 @@ pip install -e ".[dev,subscription]"  # + Claude Agent SDK (subscription auth)
 pip install -e ".[dev,ollama]"        # + Ollama local model support
 ```
 
-### 3. Database Migrations
+### 4. Database Migrations
 
 Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations are in `backend/supabase/migrations/`, numbered `001` through `015`.
 
@@ -388,7 +432,7 @@ Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations a
 015_user_id_isolation.sql         — Multi-user data isolation (user_id column + indexes)
 ```
 
-### 4. Start the MCP Server
+### 5. Start the MCP Server
 
 **Local (stdio — default):**
 
@@ -420,7 +464,7 @@ docker build -t second-brain-mcp .
 docker compose up -d
 ```
 
-The multi-stage Dockerfile uses `python:3.11-slim`, runs as a non-root user, and includes a health check that probes `/health` every 30 seconds.
+The multi-stage Dockerfile uses uv for fast dependency installation (10-100x faster than pip), runs on `python:3.12-slim` as a non-root user, and includes a deep health check that probes `/health` every 30 seconds — returning HTTP 503 when dependency initialization fails.
 
 ### Transport Configuration
 
@@ -430,7 +474,8 @@ The server supports three transport modes, configured via the `MCP_TRANSPORT` en
 |-----------|-----------------|----------|
 | **stdio** | `stdio` (default) | Local development — Claude Code spawns as subprocess |
 | **HTTP** | `http` | Docker / network — single `/mcp` endpoint, stateless |
-| **SSE** | `sse` | Legacy — Server-Sent Events (deprecated by MCP spec) |
+| **Streamable HTTP** | `streamable-http` | Alias for `http` (same behavior in FastMCP 2.x) |
+| **SSE** | `sse` | Legacy — Server-Sent Events (deprecated by MCP spec 2025-03-26) |
 
 Additional env vars for HTTP/SSE mode:
 
@@ -441,12 +486,15 @@ MCP_PORT=8000       # Port (default: 8000, range: 1024-65535)
 
 ### Health Check
 
-When running in HTTP/SSE mode, a health endpoint is available:
+When running in HTTP/SSE mode, a deep health endpoint is available:
 
 ```bash
 curl http://localhost:8000/health
-# {"status": "healthy", "service": "second-brain"}
+# Healthy: {"status": "healthy", "service": "second-brain", "initialized": true}
+# Unhealthy (503): {"status": "unhealthy", "service": "second-brain", "error": "..."}
 ```
+
+The health check returns HTTP 503 when dependency initialization fails (circuit breaker tripped). Docker's `restart: unless-stopped` policy handles automatic recovery.
 
 ---
 
@@ -604,12 +652,13 @@ backend/
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~926 tests (one file per module)
+├── tests/                     # ~998 tests (one file per module)
 ├── scripts/                   # Utility scripts
-├── Dockerfile                 # Multi-stage production image
-├── docker-compose.yml         # Local dev compose (HTTP transport)
+├── Dockerfile                 # Multi-stage uv build (Python 3.12)
+├── docker-compose.yml         # Docker compose (HTTP transport, named network)
 ├── .dockerignore              # Docker build context exclusions
 ├── .env.example               # Documented env var template
+├── uv.lock                    # Lockfile for reproducible Docker builds
 └── pyproject.toml             # Dependencies + pytest config
 ```
 
@@ -619,7 +668,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~926)
+pytest                              # All tests (~998)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -639,7 +688,7 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Service layer modules | 9 |
 | Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~926 |
+| Tests | ~998 |
 | Python version | 3.11+ |
 
 ---

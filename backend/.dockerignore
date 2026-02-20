@@ -21,4 +21,5 @@ README.md
 tests/
 scripts/
 supabase/
+docs/
 .dockerignore

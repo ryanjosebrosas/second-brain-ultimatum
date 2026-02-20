@@ -262,7 +262,7 @@ class BrainConfig(BaseSettings):
     # --- MCP transport / Docker ---
     mcp_transport: str = Field(
         default="stdio",
-        description="MCP transport mode: stdio (local, default) | sse (legacy) | http (Docker/network)",
+        description="MCP transport mode: stdio (local, default) | sse (legacy) | http (Docker/network) | streamable-http (alias for http)",
     )
     mcp_host: str = Field(
         default="0.0.0.0",
@@ -371,7 +371,7 @@ class BrainConfig(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_mcp_transport(self) -> "BrainConfig":
-        valid = ("stdio", "sse", "http")
+        valid = ("stdio", "sse", "http", "streamable-http")
         if self.mcp_transport not in valid:
             raise ValueError(
                 f"mcp_transport must be one of {valid} — got: "

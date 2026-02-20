@@ -45,8 +45,22 @@ server = FastMCP("Second Brain")
 
 @server.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> JSONResponse:
-    """Health check endpoint for Docker HEALTHCHECK and monitoring."""
-    return JSONResponse({"status": "healthy", "service": "second-brain"})
+    """Health check endpoint for Docker HEALTHCHECK and monitoring.
+
+    Returns:
+        200: Server is healthy and deps initialized (or not yet attempted)
+        503: Dep initialization failed permanently (circuit breaker tripped)
+    """
+    if _deps_failed:
+        return JSONResponse(
+            {"status": "unhealthy", "service": "second-brain", "error": _deps_error},
+            status_code=503,
+        )
+    return JSONResponse({
+        "status": "healthy",
+        "service": "second-brain",
+        "initialized": _deps is not None,
+    })
 
 
 # Lazy-init deps (created on first tool call) with circuit breaker
@@ -73,6 +87,28 @@ def _get_deps() -> BrainDeps:
             logger.error("Failed to initialize deps: %s", e)
             raise RuntimeError(f"Second Brain initialization failed: {e}") from e
     return _deps
+
+
+def init_deps() -> None:
+    """Initialize BrainDeps eagerly, BEFORE server.run() starts the event loop.
+
+    Mem0's MemoryClient constructor makes synchronous HTTP calls that deadlock
+    when called inside FastMCP's async event loop. Initializing deps before
+    the event loop starts avoids this entirely.
+
+    See also: service_mcp.py:init_deps() for the same pattern.
+    """
+    global _deps, _model, _deps_failed, _deps_error
+    if _deps is not None:
+        return  # Already initialized
+    try:
+        _deps = create_deps()
+        _model = get_model(_deps.config)
+        logger.warning("Dependencies initialized successfully")
+    except Exception as e:
+        _deps_failed = True
+        _deps_error = str(e)
+        logger.error("Failed to initialize deps: %s", e)
 
 
 def _get_model() -> "Model | None":
@@ -1742,7 +1778,16 @@ if __name__ == "__main__":
         format="%(levelname)s: %(message)s",
     )
 
+    # Read transport config from env (BrainConfig validates on first tool call)
     _transport = _os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    # Normalize streamable-http → http (FastMCP 2.x treats them identically)
+    if _transport == "streamable-http":
+        _transport = "http"
+
+    # Eager dep initialization — avoids Mem0 deadlock inside async event loop.
+    # See service_mcp.py:init_deps() for rationale.
+    if _transport in ("http", "sse"):
+        init_deps()
 
     try:
         if _transport in ("http", "sse"):
