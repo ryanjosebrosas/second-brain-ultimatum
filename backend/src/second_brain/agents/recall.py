@@ -50,21 +50,24 @@ recall_agent = Agent(
 
 @recall_agent.output_validator
 async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> RecallResult:
-    """Retry if recall returned nothing — but accept graceful degradation."""
-    # If the agent signaled a backend error, accept the empty result
+    """Validate recall output — accept empty results gracefully.
+
+    The agent instructions already encourage trying multiple strategies.
+    We only retry if the agent didn't even attempt to search (no search_sources).
+    This prevents death spirals when all backends are down.
+    """
+    # Backend error signaled — accept as-is
     if output.error:
         return output
-    # Only retry if no error was signaled AND no results found
+    # Agent searched but found nothing — that's a valid result
     if not output.matches and not output.patterns and not output.relations:
+        if output.search_sources:
+            # Agent tried but found nothing — accept
+            return output
+        # Agent didn't search at all — nudge it once (soft retry)
         raise ModelRetry(
-            "No results found. Try alternative search strategies:\n"
-            "1. Broaden the search query (use fewer, more general terms)\n"
-            "2. Search patterns by topic instead of semantic memory\n"
-            "3. Search experiences for related past work\n"
-            "4. Check examples for similar content types\n"
-            "You have multiple search tools — use a different one.\n\n"
-            "If ALL search tools returned 'unavailable' errors, set the error field "
-            "to describe what happened and return empty results."
+            "You haven't searched yet. Use the search tools to find results.\n"
+            "If search tools return errors, set the error field and return."
         )
     return output
 

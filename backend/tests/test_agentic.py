@@ -84,13 +84,13 @@ class TestAskValidator:
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
-    async def test_no_context_triggers_retry(self):
-        """Ask validator should retry when no context was referenced."""
+    async def test_no_context_passes_gracefully(self):
+        """Ask validator accepts answers without context (graceful degradation)."""
         output = AskResult(answer="A" * 100)  # long enough but no context
         ctx = MagicMock()
         validators = ask_agent._output_validators
-        with pytest.raises(ModelRetry):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        assert result.answer == "A" * 100
 
     @pytest.mark.asyncio
     async def test_good_answer_passes(self):

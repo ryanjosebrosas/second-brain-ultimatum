@@ -2560,7 +2560,7 @@ class TestMem0FilterConstruction:
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_flattens_nested_and(self, mock_mem0_cls, cloud_config):
-        """Compound AND metadata_filters should be flattened, not double-nested."""
+        """Compound AND metadata_filters should be flattened and metadata-wrapped."""
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": [], "relations": []}
         mock_mem0_cls.return_value = mock_client
@@ -2574,17 +2574,17 @@ class TestMem0FilterConstruction:
         _, kwargs = call_kwargs
         assert "user_id" not in kwargs
         filters = kwargs["filters"]
-        # Should be flattened: {"AND": [user_id, category, topic]} not nested AND inside AND
+        # Should be flattened: {"AND": [user_id, wrapped_category, wrapped_topic]}
         assert "AND" in filters
         conditions = filters["AND"]
         assert {"user_id": "ryan"} in conditions
-        assert {"category": "pattern"} in conditions
-        assert {"topic": "X"} in conditions
-        assert len(conditions) == 3  # user_id + category + topic
+        assert {"metadata": {"category": "pattern"}} in conditions
+        assert {"metadata": {"topic": "X"}} in conditions
+        assert len(conditions) == 3  # user_id + wrapped category + wrapped topic
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_bare_dict(self, mock_mem0_cls, cloud_config):
-        """Simple metadata_filters like {"category": "pattern"} should wrap in AND."""
+        """Simple metadata_filters like {"category": "pattern"} should wrap in AND with metadata."""
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": [], "relations": []}
         mock_mem0_cls.return_value = mock_client
@@ -2600,7 +2600,7 @@ class TestMem0FilterConstruction:
         assert "AND" in filters
         conditions = filters["AND"]
         assert {"user_id": "ryan"} in conditions
-        assert {"category": "pattern"} in conditions
+        assert {"metadata": {"category": "pattern"}} in conditions
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_no_metadata(self, mock_mem0_cls, cloud_config):
@@ -2658,3 +2658,28 @@ class TestMem0FilterConstruction:
         _, kwargs = call_kwargs
         assert kwargs.get("user_id") == "ryan"
         assert "filters" not in kwargs
+
+
+class TestWrapMetadataFilter:
+    """Tests for _wrap_metadata_filter v2 API helper."""
+
+    def test_builtin_key_passthrough(self):
+        from second_brain.services.memory import _wrap_metadata_filter
+        assert _wrap_metadata_filter({"user_id": "ryan"}) == {"user_id": "ryan"}
+
+    def test_custom_key_wrapped(self):
+        from second_brain.services.memory import _wrap_metadata_filter
+        assert _wrap_metadata_filter({"category": "pattern"}) == {"metadata": {"category": "pattern"}}
+
+    def test_nested_and_recursion(self):
+        from second_brain.services.memory import _wrap_metadata_filter
+        result = _wrap_metadata_filter({"AND": [{"category": "pattern"}, {"user_id": "ryan"}]})
+        assert result == {"AND": [{"metadata": {"category": "pattern"}}, {"user_id": "ryan"}]}
+
+    def test_empty_dict_passthrough(self):
+        from second_brain.services.memory import _wrap_metadata_filter
+        assert _wrap_metadata_filter({}) == {}
+
+    def test_metadata_key_passthrough(self):
+        from second_brain.services.memory import _wrap_metadata_filter
+        assert _wrap_metadata_filter({"metadata": {"foo": "bar"}}) == {"metadata": {"foo": "bar"}}

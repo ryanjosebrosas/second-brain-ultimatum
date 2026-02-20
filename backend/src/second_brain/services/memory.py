@@ -21,6 +21,35 @@ _MEM0_RETRY = retry(
 )
 
 
+# Mem0 v2 API built-in filter keys — anything else is custom metadata
+_V2_BUILTIN_KEYS = frozenset({
+    "user_id", "agent_id", "app_id", "run_id",
+    "created_at", "updated_at", "timestamp", "text",
+    "categories", "metadata", "keywords_search",
+    "memory_ids", "keywords", "AND", "OR", "NOT",
+})
+
+
+def _wrap_metadata_filter(condition: dict) -> dict:
+    """Wrap custom metadata keys for Mem0 v2 API.
+
+    Mem0 v2 only accepts built-in keys as top-level filters.
+    Custom keys like {"category": "pattern"} must become
+    {"metadata": {"category": "pattern"}}.
+    """
+    if not condition or not isinstance(condition, dict):
+        return condition
+    key = next(iter(condition))
+    # Logical operators — recurse into their condition lists
+    if key in ("AND", "OR", "NOT"):
+        return {key: [_wrap_metadata_filter(c) for c in condition[key]]}
+    # Built-in key — pass through
+    if key in _V2_BUILTIN_KEYS:
+        return condition
+    # Custom metadata key — wrap
+    return {"metadata": condition}
+
+
 class MemoryService(MemoryServiceBase):
     """Semantic memory via Mem0 (cloud primary, local fallback)."""
 
@@ -233,6 +262,7 @@ class MemoryService(MemoryServiceBase):
         else:
             kwargs: dict = {"user_id": self.user_id}
         try:
+            logger.debug("Mem0 search kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
             if self._is_cloud:
                 @_MEM0_RETRY
                 def _search():
@@ -244,7 +274,7 @@ class MemoryService(MemoryServiceBase):
             async with asyncio.timeout(self._timeout):
                 results = await asyncio.to_thread(_search)
         except Exception as e:
-            logger.warning("Mem0 search failed: %s", type(e).__name__)
+            logger.warning("Mem0 search failed: %s — kwargs keys: %s", type(e).__name__, list(kwargs.keys()))
             logger.debug("Mem0 search error detail: %s", e)
             return SearchResult(memories=[], relations=[])
         if isinstance(results, dict):
@@ -279,18 +309,20 @@ class MemoryService(MemoryServiceBase):
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
 
         if self._is_cloud:
-            # Platform API: user_id goes ONLY inside filters, never as top-level kwarg
+            # Platform API v2: user_id inside filters, custom metadata wrapped
             conditions: list[dict] = [{"user_id": self.user_id}]
             if metadata_filters:
                 # Flatten caller's AND conditions to avoid double-nesting
                 if isinstance(metadata_filters, dict) and len(metadata_filters) == 1:
                     key = next(iter(metadata_filters))
                     if key == "AND" and isinstance(metadata_filters[key], list):
-                        conditions.extend(metadata_filters[key])
+                        conditions.extend(
+                            _wrap_metadata_filter(c) for c in metadata_filters[key]
+                        )
                     else:
-                        conditions.append(metadata_filters)
+                        conditions.append(_wrap_metadata_filter(metadata_filters))
                 else:
-                    conditions.append(metadata_filters)
+                    conditions.append(_wrap_metadata_filter(metadata_filters))
             kwargs: dict = {
                 "filters": {"AND": conditions},
                 "top_k": limit,
@@ -305,6 +337,7 @@ class MemoryService(MemoryServiceBase):
                 kwargs["filters"] = metadata_filters
 
         try:
+            logger.debug("Mem0 search_with_filters kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
             if self._is_cloud:
                 @_MEM0_RETRY
                 def _search():
@@ -330,7 +363,7 @@ class MemoryService(MemoryServiceBase):
                 async with asyncio.timeout(self._timeout):
                     results = await asyncio.to_thread(_search_no_filters)
         except Exception as e:
-            logger.warning("Mem0 search_with_filters failed: %s", type(e).__name__)
+            logger.warning("Mem0 search_with_filters failed: %s — kwargs keys: %s", type(e).__name__, list(kwargs.keys()))
             logger.debug("Mem0 search_with_filters error detail: %s", e)
             return SearchResult(memories=[], relations=[], search_filters=metadata_filters or {})
 
@@ -396,12 +429,13 @@ class MemoryService(MemoryServiceBase):
                 }
             else:
                 kwargs: dict = {"user_id": self.user_id}
+            logger.debug("Mem0 get_all kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
             results = await asyncio.to_thread(self._client.get_all, **kwargs)
             if isinstance(results, dict):
                 return results.get("results", [])
             return results
         except Exception as e:
-            logger.warning("Mem0 get_all failed: %s", type(e).__name__)
+            logger.warning("Mem0 get_all failed: %s — kwargs keys: %s", type(e).__name__, list(kwargs.keys()))
             logger.debug("Mem0 get_all error detail: %s", e)
             return []
 

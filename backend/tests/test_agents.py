@@ -197,7 +197,8 @@ class TestAskAgentConversationalBypass:
         assert result.is_conversational is True
 
     @pytest.mark.asyncio
-    async def test_non_conversational_still_requires_context(self):
+    async def test_non_conversational_without_context_passes(self):
+        """Long enough answers without context are accepted (graceful degradation)."""
         from second_brain.agents.ask import ask_agent
         output = AskResult(
             answer="A" * 60,
@@ -205,8 +206,8 @@ class TestAskAgentConversationalBypass:
         )
         ctx = MagicMock()
         validator = ask_agent._output_validators[0]
-        with pytest.raises(ModelRetry):
-            await validator.function(ctx, output)
+        result = await validator.function(ctx, output)
+        assert result == output
 
     @pytest.mark.asyncio
     async def test_non_conversational_short_answer_still_fails(self):
@@ -239,14 +240,25 @@ class TestRecallValidatorResilience:
         assert result.matches == []
 
     @pytest.mark.asyncio
-    async def test_empty_results_without_error_still_retries(self):
-        """When no error is set AND results are empty, validator should retry."""
+    async def test_empty_results_no_search_sources_retries(self):
+        """When no error, no results, AND no search_sources → retry (agent didn't search)."""
         from second_brain.agents.recall import recall_agent
         output = RecallResult(query="test")
         ctx = MagicMock()
         validator = recall_agent._output_validators[0]
         with pytest.raises(ModelRetry):
             await validator.function(ctx, output)
+
+    @pytest.mark.asyncio
+    async def test_empty_results_with_search_sources_passes(self):
+        """When no results but search_sources populated → accept (agent tried, found nothing)."""
+        from second_brain.agents.recall import recall_agent
+        output = RecallResult(query="test", search_sources=["mem0", "hybrid:patterns"])
+        ctx = MagicMock()
+        validator = recall_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.matches == []
+        assert result.search_sources == ["mem0", "hybrid:patterns"]
 
     def test_recall_result_error_field_default(self):
         """Error field should default to empty string."""

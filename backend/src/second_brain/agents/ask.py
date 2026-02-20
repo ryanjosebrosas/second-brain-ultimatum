@@ -49,27 +49,24 @@ ask_agent = Agent(
 
 @ask_agent.output_validator
 async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResult:
-    """Validate answer completeness and context grounding."""
-    # Conversational responses skip context/length requirements
+    """Validate answer completeness — accept graceful degradation.
+
+    When brain context tools fail, the agent should still provide a useful
+    answer from general knowledge. We don't force retries on missing context
+    to prevent death spirals when backends are down.
+    """
+    # Conversational responses skip all checks
     if output.is_conversational:
         return output
-    # Backend errors skip context requirements
+    # Backend errors — accept whatever the agent produced
     if output.error:
         return output
-    # Check answer isn't a cop-out
+    # Check answer isn't a cop-out (still enforce minimum substance)
     if len(output.answer) < 50:
         raise ModelRetry(
             "Your answer is too brief. Provide a COMPLETE, detailed response. "
-            "Use the brain context tools to gather more information if needed."
-        )
-    # Check context was actually used
-    if not output.context_used and not output.patterns_applied:
-        raise ModelRetry(
-            "You didn't reference any brain context or patterns. "
-            "Use load_brain_context and find_relevant_patterns tools to ground "
-            "your response in the brain's actual knowledge.\n\n"
-            "If brain context tools returned 'unavailable' errors, set the error "
-            "field and answer based on your general knowledge instead."
+            "If brain tools are unavailable, answer from general knowledge "
+            "and set the error field."
         )
     return output
 
