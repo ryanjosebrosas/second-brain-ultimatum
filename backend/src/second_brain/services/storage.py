@@ -21,10 +21,16 @@ class StorageService:
     def __init__(self, config: BrainConfig):
         self.config = config
         self.user_id = config.brain_user_id
+        self._timeout = config.service_timeout_seconds
         self._client: Client = create_client(
             config.supabase_url,
             config.supabase_key,
         )
+
+    async def _with_timeout(self, coro):
+        """Wrap an awaitable with the configured service timeout."""
+        async with asyncio.timeout(self._timeout):
+            return await coro
 
     # --- Patterns ---
 
@@ -69,6 +75,33 @@ class StorageService:
             logger.warning("Supabase upsert_pattern failed: %s", type(e).__name__)
             logger.debug("Supabase error detail: %s", e)
             return {}
+
+    async def bulk_upsert_patterns(
+        self, patterns: list[dict], chunk_size: int | None = None
+    ) -> dict:
+        """Batch upsert patterns in chunks. Returns {"inserted": N, "errors": N}."""
+        chunk_size = chunk_size or self.config.batch_upsert_chunk_size
+        inserted = 0
+        errors = 0
+        for i in range(0, len(patterns), chunk_size):
+            chunk = patterns[i : i + chunk_size]
+            for p in chunk:
+                p.setdefault("user_id", self.user_id)
+            try:
+                result = await self._with_timeout(
+                    asyncio.to_thread(
+                        self._client.table("patterns").upsert(chunk).execute
+                    )
+                )
+                inserted += len(result.data) if result.data else 0
+            except TimeoutError:
+                logger.warning("bulk_upsert_patterns chunk timed out after %ds", self._timeout)
+                errors += len(chunk)
+            except Exception as e:
+                logger.warning("Supabase bulk_upsert_patterns chunk failed: %s", type(e).__name__)
+                logger.debug("Supabase error detail: %s", e)
+                errors += len(chunk)
+        return {"inserted": inserted, "errors": errors}
 
     async def insert_pattern(self, pattern: dict) -> dict:
         """Insert a new pattern. Raises on duplicate name (DB UNIQUE constraint)."""
@@ -405,6 +438,33 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return {}
 
+    async def bulk_upsert_memory_content(
+        self, items: list[dict], chunk_size: int | None = None
+    ) -> dict:
+        """Batch upsert memory content in chunks. Returns {"inserted": N, "errors": N}."""
+        chunk_size = chunk_size or self.config.batch_upsert_chunk_size
+        inserted = 0
+        errors = 0
+        for i in range(0, len(items), chunk_size):
+            chunk = items[i : i + chunk_size]
+            for item in chunk:
+                item.setdefault("user_id", self.user_id)
+            try:
+                result = await self._with_timeout(
+                    asyncio.to_thread(
+                        self._client.table("memory_content").upsert(chunk).execute
+                    )
+                )
+                inserted += len(result.data) if result.data else 0
+            except TimeoutError:
+                logger.warning("bulk_upsert_memory_content chunk timed out after %ds", self._timeout)
+                errors += len(chunk)
+            except Exception as e:
+                logger.warning("Supabase bulk_upsert_memory_content chunk failed: %s", type(e).__name__)
+                logger.debug("Supabase error detail: %s", e)
+                errors += len(chunk)
+        return {"inserted": inserted, "errors": errors}
+
     async def delete_memory_content(
         self, category: str, subcategory: str = "general"
     ) -> bool:
@@ -463,6 +523,33 @@ class StorageService:
             logger.debug("Supabase error detail: %s", e)
             return {}
 
+    async def bulk_upsert_examples(
+        self, examples: list[dict], chunk_size: int | None = None
+    ) -> dict:
+        """Batch upsert examples in chunks. Returns {"inserted": N, "errors": N}."""
+        chunk_size = chunk_size or self.config.batch_upsert_chunk_size
+        inserted = 0
+        errors = 0
+        for i in range(0, len(examples), chunk_size):
+            chunk = examples[i : i + chunk_size]
+            for item in chunk:
+                item.setdefault("user_id", self.user_id)
+            try:
+                result = await self._with_timeout(
+                    asyncio.to_thread(
+                        self._client.table("examples").upsert(chunk).execute
+                    )
+                )
+                inserted += len(result.data) if result.data else 0
+            except TimeoutError:
+                logger.warning("bulk_upsert_examples chunk timed out after %ds", self._timeout)
+                errors += len(chunk)
+            except Exception as e:
+                logger.warning("Supabase bulk_upsert_examples chunk failed: %s", type(e).__name__)
+                logger.debug("Supabase error detail: %s", e)
+                errors += len(chunk)
+        return {"inserted": inserted, "errors": errors}
+
     async def delete_example(self, example_id: str) -> bool:
         """Delete an example by ID."""
         try:
@@ -507,6 +594,33 @@ class StorageService:
             logger.warning("Supabase upsert_knowledge failed: %s", type(e).__name__)
             logger.debug("Supabase error detail: %s", e)
             return {}
+
+    async def bulk_upsert_knowledge(
+        self, items: list[dict], chunk_size: int | None = None
+    ) -> dict:
+        """Batch upsert knowledge entries in chunks. Returns {"inserted": N, "errors": N}."""
+        chunk_size = chunk_size or self.config.batch_upsert_chunk_size
+        inserted = 0
+        errors = 0
+        for i in range(0, len(items), chunk_size):
+            chunk = items[i : i + chunk_size]
+            for item in chunk:
+                item.setdefault("user_id", self.user_id)
+            try:
+                result = await self._with_timeout(
+                    asyncio.to_thread(
+                        self._client.table("knowledge_repo").upsert(chunk).execute
+                    )
+                )
+                inserted += len(result.data) if result.data else 0
+            except TimeoutError:
+                logger.warning("bulk_upsert_knowledge chunk timed out after %ds", self._timeout)
+                errors += len(chunk)
+            except Exception as e:
+                logger.warning("Supabase bulk_upsert_knowledge chunk failed: %s", type(e).__name__)
+                logger.debug("Supabase error detail: %s", e)
+                errors += len(chunk)
+        return {"inserted": inserted, "errors": errors}
 
     async def delete_knowledge(self, knowledge_id: str) -> bool:
         """Delete a knowledge entry by ID."""
@@ -612,20 +726,25 @@ class StorageService:
             raise ValueError(f"Invalid table '{table}'. Must be one of: {valid_tables}")
 
         try:
-            result = await asyncio.to_thread(
-                self._client.rpc(
-                    "vector_search",
-                    {
-                        "query_embedding": embedding,
-                        "match_table": table,
-                        "match_count": limit,
-                        "match_threshold": similarity_threshold,
-                        "p_user_id": self.user_id,
-                        "p_ef_search": ef_search or self.config.hnsw_ef_search,
-                    }
-                ).execute
+            result = await self._with_timeout(
+                asyncio.to_thread(
+                    self._client.rpc(
+                        "vector_search",
+                        {
+                            "query_embedding": embedding,
+                            "match_table": table,
+                            "match_count": limit,
+                            "match_threshold": similarity_threshold,
+                            "p_user_id": self.user_id,
+                            "p_ef_search": ef_search or self.config.hnsw_ef_search,
+                        }
+                    ).execute
+                )
             )
             return result.data if result.data else []
+        except TimeoutError:
+            logger.warning("vector_search timed out on %s after %ds", table, self._timeout)
+            return []
         except Exception as e:
             logger.warning("vector_search failed on %s: %s", table, type(e).__name__)
             logger.debug("vector_search error detail: %s", e)
@@ -882,12 +1001,14 @@ class StorageService:
     async def get_quality_trending(self, days: int = 30) -> dict:
         """Get quality metrics trending data for the specified period."""
         try:
-            result = await asyncio.to_thread(
-                self._client.table("review_history")
-                .select("*")
-                .gte("review_date", (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat())
-                .order("review_date", desc=True)
-                .execute
+            result = await self._with_timeout(
+                asyncio.to_thread(
+                    self._client.table("review_history")
+                    .select("*")
+                    .gte("review_date", (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat())
+                    .order("review_date", desc=True)
+                    .execute
+                )
             )
             reviews = result.data if result.data else []
             if not reviews:

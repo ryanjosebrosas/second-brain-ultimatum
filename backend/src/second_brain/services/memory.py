@@ -2,12 +2,23 @@
 
 import asyncio
 import logging
+import time
+
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from second_brain.config import BrainConfig
 from second_brain.services.abstract import MemoryServiceBase
 from second_brain.services.search_result import SearchResult
 
 logger = logging.getLogger(__name__)
+
+# Retry config for Mem0 cloud calls — transient errors only
+_MEM0_RETRY = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+    reraise=True,
+)
 
 
 class MemoryService(MemoryServiceBase):
@@ -17,6 +28,9 @@ class MemoryService(MemoryServiceBase):
         self.config = config
         self.user_id = config.brain_user_id
         self.enable_graph = config.graph_provider == "mem0"
+        self._timeout = config.service_timeout_seconds
+        self._last_activity: float = time.monotonic()
+        self._idle_threshold: int = 240  # 4 minutes (< 5 min Mem0 timeout)
         self._client = self._init_client()
 
     def _init_client(self):
@@ -63,6 +77,7 @@ class MemoryService(MemoryServiceBase):
     async def add(self, content: str, metadata: dict | None = None,
                   enable_graph: bool | None = None) -> dict:
         """Add a memory. Content is auto-extracted into facts by Mem0."""
+        self._check_idle_reconnect()
         messages = [{"role": "user", "content": content}]
         kwargs: dict = {
             "user_id": self.user_id,
@@ -72,7 +87,16 @@ class MemoryService(MemoryServiceBase):
         if use_graph and self._is_cloud:
             kwargs["enable_graph"] = True
         try:
-            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
+            if self._is_cloud:
+                @_MEM0_RETRY
+                def _add():
+                    return self._client.add(messages, **kwargs)
+            else:
+                def _add():
+                    return self._client.add(messages, **kwargs)
+
+            async with asyncio.timeout(self._timeout):
+                result = await asyncio.to_thread(_add)
             return result
         except Exception as e:
             logger.warning("Mem0 add failed: %s", type(e).__name__)
@@ -169,6 +193,14 @@ class MemoryService(MemoryServiceBase):
     def _is_cloud(self) -> bool:
         return type(self._client).__name__ == "MemoryClient"
 
+    def _check_idle_reconnect(self) -> None:
+        """Re-instantiate client if idle for too long (Mem0 timeout workaround)."""
+        elapsed = time.monotonic() - self._last_activity
+        if elapsed > self._idle_threshold and self._is_cloud:
+            logger.debug("Mem0 idle for %.0fs, re-instantiating client", elapsed)
+            self._client = self._init_client()
+        self._last_activity = time.monotonic()
+
     async def enable_project_graph(self) -> None:
         """Enable graph memory at Mem0 Cloud project level."""
         if not self._is_cloud:
@@ -186,6 +218,7 @@ class MemoryService(MemoryServiceBase):
     async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None) -> SearchResult:
         """Semantic search across memories."""
+        self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
         kwargs: dict = {"user_id": self.user_id}
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
@@ -194,7 +227,16 @@ class MemoryService(MemoryServiceBase):
             if use_graph:
                 kwargs["enable_graph"] = True
         try:
-            results = await asyncio.to_thread(self._client.search, query, **kwargs)
+            if self._is_cloud:
+                @_MEM0_RETRY
+                def _search():
+                    return self._client.search(query, **kwargs)
+            else:
+                def _search():
+                    return self._client.search(query, **kwargs)
+
+            async with asyncio.timeout(self._timeout):
+                results = await asyncio.to_thread(_search)
         except Exception as e:
             logger.warning("Mem0 search failed: %s", type(e).__name__)
             logger.debug("Mem0 search error detail: %s", e)
@@ -226,6 +268,7 @@ class MemoryService(MemoryServiceBase):
             limit: Max results (defaults to config.memory_search_limit).
             enable_graph: Override graph setting. None = use config default.
         """
+        self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
         kwargs: dict = {"user_id": self.user_id}
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
@@ -250,12 +293,30 @@ class MemoryService(MemoryServiceBase):
                 kwargs["filters"] = metadata_filters
 
         try:
+            if self._is_cloud:
+                @_MEM0_RETRY
+                def _search():
+                    return self._client.search(query, **kwargs)
+
+                @_MEM0_RETRY
+                def _search_no_filters():
+                    kw = {k: v for k, v in kwargs.items() if k != "filters"}
+                    return self._client.search(query, **kw)
+            else:
+                def _search():
+                    return self._client.search(query, **kwargs)
+
+                def _search_no_filters():
+                    kw = {k: v for k, v in kwargs.items() if k != "filters"}
+                    return self._client.search(query, **kw)
+
             try:
-                results = await asyncio.to_thread(self._client.search, query, **kwargs)
+                async with asyncio.timeout(self._timeout):
+                    results = await asyncio.to_thread(_search)
             except TypeError:
                 logger.warning("Mem0 client doesn't support filters, falling back to unfiltered search")
-                kwargs.pop("filters", None)
-                results = await asyncio.to_thread(self._client.search, query, **kwargs)
+                async with asyncio.timeout(self._timeout):
+                    results = await asyncio.to_thread(_search_no_filters)
         except Exception as e:
             logger.warning("Mem0 search_with_filters failed: %s", type(e).__name__)
             logger.debug("Mem0 search_with_filters error detail: %s", e)

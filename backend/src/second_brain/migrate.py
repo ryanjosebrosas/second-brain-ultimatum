@@ -61,6 +61,8 @@ class BrainMigrator:
             ("values-beliefs", ["core-values.md", "frameworks.md", "principles.md", "povs.md"]),
             ("personal", ["expertise.md", "services.md", "positioning.md", "differentiators.md", "bio.md"]),
         ]
+        all_items = []
+        all_texts = []
         for category, files in categories:
             for filename in files:
                 filepath = self.data_path / "memory" / category / filename
@@ -69,14 +71,11 @@ class BrainMigrator:
                     continue
                 try:
                     content = filepath.read_text(encoding="utf-8")
-                    # Add to Mem0 (semantic)
+                    # Add to Mem0 (semantic) — still per-item
                     await self.memory.add(
                         content,
                         metadata={"category": category, "source": str(filepath)},
                     )
-                    # Generate embedding (non-critical)
-                    embedding = await self._get_embedding(content)
-                    # Add to Supabase (structured, upsert for idempotency)
                     data = {
                         "category": category,
                         "subcategory": filepath.stem,
@@ -84,14 +83,31 @@ class BrainMigrator:
                         "content": content,
                         "source_file": str(filepath),
                     }
-                    if embedding is not None:
-                        data["embedding"] = embedding
-                    await self.storage.upsert_memory_content(data)
-                    results["success"] += 1
-                    logger.info(f"Migrated: {category}/{filename}")
+                    all_items.append(data)
+                    all_texts.append(content[:8000])
                 except Exception as e:
                     results["errors"] += 1
                     logger.warning("Failed to migrate %s/%s: %s", category, filename, e)
+
+        # Batch embed all at once
+        if self.embedding and all_texts:
+            try:
+                embeddings = await self.embedding.embed_batch(all_texts)
+                for item, emb in zip(all_items, embeddings):
+                    if emb:
+                        item["embedding"] = emb
+            except Exception as e:
+                logger.warning("Batch embedding for memory_content failed: %s", e)
+
+        # Batch upsert to Supabase
+        if all_items:
+            bulk_result = await self.storage.bulk_upsert_memory_content(all_items)
+            results["success"] += bulk_result["inserted"]
+            results["errors"] += bulk_result["errors"]
+            logger.info(
+                "Migrated %d memory_content items (%d errors)",
+                bulk_result["inserted"], bulk_result["errors"],
+            )
 
     async def migrate_patterns(self, results: dict | None = None):
         """Migrate memory/patterns/ to Supabase patterns table."""
@@ -102,26 +118,44 @@ class BrainMigrator:
             logger.warning(f"Patterns directory not found: {patterns_dir}")
             return
 
+        all_patterns = []
+        all_texts = []
         for pattern_file in patterns_dir.glob("*.md"):
             if pattern_file.name == "INDEX.md":
                 continue
             content = pattern_file.read_text(encoding="utf-8")
             patterns = self._parse_patterns(content, str(pattern_file))
             for p in patterns:
+                # Add to Mem0 (semantic) — still per-item
                 try:
-                    embedding = await self._get_embedding(p.get("pattern_text", ""))
-                    if embedding is not None:
-                        p["embedding"] = embedding
-                    await self.storage.upsert_pattern(p)
                     await self.memory.add(
                         f"Pattern: {p['name']}\n{p['pattern_text']}",
                         metadata={"type": "pattern", "topic": p["topic"]},
                     )
-                    results["success"] += 1
                 except Exception as e:
-                    results["errors"] += 1
-                    logger.warning("Failed to migrate pattern '%s': %s", p.get("name"), e)
-            logger.info(f"Migrated {len(patterns)} patterns from {pattern_file.name}")
+                    logger.warning("Mem0 add for pattern '%s' failed: %s", p.get("name"), e)
+                all_patterns.append(p)
+                all_texts.append(p.get("pattern_text", "")[:8000])
+
+        # Batch embed all at once
+        if self.embedding and all_texts:
+            try:
+                embeddings = await self.embedding.embed_batch(all_texts)
+                for pattern, emb in zip(all_patterns, embeddings):
+                    if emb:
+                        pattern["embedding"] = emb
+            except Exception as e:
+                logger.warning("Batch embedding for patterns failed: %s", e)
+
+        # Batch upsert to Supabase
+        if all_patterns:
+            bulk_result = await self.storage.bulk_upsert_patterns(all_patterns)
+            results["success"] += bulk_result["inserted"]
+            results["errors"] += bulk_result["errors"]
+            logger.info(
+                "Migrated %d patterns (%d errors)",
+                bulk_result["inserted"], bulk_result["errors"],
+            )
 
     async def migrate_experiences(self, results: dict | None = None):
         """Migrate experiences/ folders to Supabase experiences table."""
@@ -183,6 +217,8 @@ class BrainMigrator:
             logger.warning(f"Examples directory not found: {examples_dir}")
             return
 
+        all_examples = []
+        all_texts = []
         skip_files = {"INDEX.md", "README.md", ".gitkeep"}
         for type_dir in examples_dir.iterdir():
             if not type_dir.is_dir():
@@ -194,25 +230,42 @@ class BrainMigrator:
                 try:
                     content = md_file.read_text(encoding="utf-8")
                     title = md_file.stem.replace("-", " ").title()
+                    # Add to Mem0 (semantic) — still per-item
                     await self.memory.add(
                         content,
                         metadata={"type": "example", "content_type": content_type},
                     )
-                    embedding = await self._get_embedding(content)
                     data = {
                         "content_type": content_type,
                         "title": title,
                         "content": content,
                         "source_file": str(md_file),
                     }
-                    if embedding is not None:
-                        data["embedding"] = embedding
-                    await self.storage.upsert_example(data)
-                    results["success"] += 1
-                    logger.info(f"Migrated example: {content_type}/{md_file.name}")
+                    all_examples.append(data)
+                    all_texts.append(content[:8000])
                 except Exception as e:
                     results["errors"] += 1
                     logger.warning("Failed to migrate example '%s/%s': %s", content_type, md_file.name, e)
+
+        # Batch embed all at once
+        if self.embedding and all_texts:
+            try:
+                embeddings = await self.embedding.embed_batch(all_texts)
+                for item, emb in zip(all_examples, embeddings):
+                    if emb:
+                        item["embedding"] = emb
+            except Exception as e:
+                logger.warning("Batch embedding for examples failed: %s", e)
+
+        # Batch upsert to Supabase
+        if all_examples:
+            bulk_result = await self.storage.bulk_upsert_examples(all_examples)
+            results["success"] += bulk_result["inserted"]
+            results["errors"] += bulk_result["errors"]
+            logger.info(
+                "Migrated %d examples (%d errors)",
+                bulk_result["inserted"], bulk_result["errors"],
+            )
 
     async def migrate_knowledge_repo(self, results: dict | None = None):
         """Migrate memory/knowledge-repo/ folders to Supabase knowledge_repo table."""
@@ -223,6 +276,8 @@ class BrainMigrator:
             logger.warning(f"Knowledge repo directory not found: {repo_dir}")
             return
 
+        all_items = []
+        all_texts = []
         skip_files = {"INDEX.md", "README.md", ".gitkeep", "_template.md"}
         for category_dir in repo_dir.iterdir():
             if not category_dir.is_dir():
@@ -234,25 +289,42 @@ class BrainMigrator:
                 try:
                     content = md_file.read_text(encoding="utf-8")
                     title = md_file.stem.replace("-", " ").title()
+                    # Add to Mem0 (semantic) — still per-item
                     await self.memory.add(
                         content,
                         metadata={"type": "knowledge", "category": category},
                     )
-                    embedding = await self._get_embedding(content)
                     data = {
                         "category": category,
                         "title": title,
                         "content": content,
                         "source_file": str(md_file),
                     }
-                    if embedding is not None:
-                        data["embedding"] = embedding
-                    await self.storage.upsert_knowledge(data)
-                    results["success"] += 1
-                    logger.info(f"Migrated knowledge: {category}/{md_file.name}")
+                    all_items.append(data)
+                    all_texts.append(content[:8000])
                 except Exception as e:
                     results["errors"] += 1
                     logger.warning("Failed to migrate knowledge '%s/%s': %s", category, md_file.name, e)
+
+        # Batch embed all at once
+        if self.embedding and all_texts:
+            try:
+                embeddings = await self.embedding.embed_batch(all_texts)
+                for item, emb in zip(all_items, embeddings):
+                    if emb:
+                        item["embedding"] = emb
+            except Exception as e:
+                logger.warning("Batch embedding for knowledge failed: %s", e)
+
+        # Batch upsert to Supabase
+        if all_items:
+            bulk_result = await self.storage.bulk_upsert_knowledge(all_items)
+            results["success"] += bulk_result["inserted"]
+            results["errors"] += bulk_result["errors"]
+            logger.info(
+                "Migrated %d knowledge items (%d errors)",
+                bulk_result["inserted"], bulk_result["errors"],
+            )
 
     def _parse_patterns(self, content: str, source_file: str) -> list[dict]:
         """Parse markdown pattern file into structured pattern dicts."""
