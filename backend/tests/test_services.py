@@ -2521,3 +2521,140 @@ class TestMemoryServiceResilience:
         with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
             result = await service.add("test content")
         assert result == {}
+
+
+class TestMem0FilterConstruction:
+    """Tests for Mem0 cloud filter payload construction — no top-level user_id."""
+
+    @pytest.fixture
+    def cloud_config(self, tmp_path):
+        return BrainConfig(
+            mem0_api_key="test-mem0-key",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="ryan",
+            model_provider="anthropic",
+            service_timeout_seconds=30,
+            _env_file=None,
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_search_cloud_no_top_level_user_id(self, mock_mem0_cls, cloud_config):
+        """Cloud search must not send user_id as top-level kwarg."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": [], "relations": []}
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.search("test query")
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert "user_id" not in kwargs, "user_id should not be a top-level kwarg for cloud"
+        assert "filters" in kwargs
+        assert "AND" in kwargs["filters"]
+        assert {"user_id": "ryan"} in kwargs["filters"]["AND"]
+        assert kwargs.get("version") == "v2"
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_flattens_nested_and(self, mock_mem0_cls, cloud_config):
+        """Compound AND metadata_filters should be flattened, not double-nested."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": [], "relations": []}
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        metadata = {"AND": [{"category": "pattern"}, {"topic": "X"}]}
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.search_with_filters("test query", metadata_filters=metadata)
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert "user_id" not in kwargs
+        filters = kwargs["filters"]
+        # Should be flattened: {"AND": [user_id, category, topic]} not nested AND inside AND
+        assert "AND" in filters
+        conditions = filters["AND"]
+        assert {"user_id": "ryan"} in conditions
+        assert {"category": "pattern"} in conditions
+        assert {"topic": "X"} in conditions
+        assert len(conditions) == 3  # user_id + category + topic
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_bare_dict(self, mock_mem0_cls, cloud_config):
+        """Simple metadata_filters like {"category": "pattern"} should wrap in AND."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": [], "relations": []}
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.search_with_filters("test query", metadata_filters={"category": "pattern"})
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert "user_id" not in kwargs
+        filters = kwargs["filters"]
+        assert "AND" in filters
+        conditions = filters["AND"]
+        assert {"user_id": "ryan"} in conditions
+        assert {"category": "pattern"} in conditions
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_no_metadata(self, mock_mem0_cls, cloud_config):
+        """Cloud search with no metadata should still wrap user_id in AND."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": [], "relations": []}
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.search_with_filters("test query")
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert "user_id" not in kwargs
+        assert kwargs["filters"] == {"AND": [{"user_id": "ryan"}]}
+
+    @patch("mem0.MemoryClient")
+    async def test_get_all_cloud_no_top_level_user_id(self, mock_mem0_cls, cloud_config):
+        """Cloud get_all must not send user_id as top-level kwarg."""
+        mock_client = MagicMock()
+        mock_client.get_all.return_value = []
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.get_all()
+
+        call_kwargs = mock_client.get_all.call_args
+        _, kwargs = call_kwargs
+        assert "user_id" not in kwargs
+        assert "filters" in kwargs
+        assert kwargs["filters"] == {"AND": [{"user_id": "ryan"}]}
+
+    @patch("mem0.Memory")
+    async def test_search_local_uses_top_level_user_id(self, mock_memory_cls, tmp_path):
+        """Local/OSS client should still use top-level user_id param."""
+        config = BrainConfig(
+            mem0_api_key=None,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="ryan",
+            model_provider="anthropic",
+            _env_file=None,
+        )
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        mock_memory_cls.from_config.return_value = mock_client
+
+        service = MemoryService(config)
+        await service.search("test query")
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert kwargs.get("user_id") == "ryan"
+        assert "filters" not in kwargs

@@ -19,7 +19,7 @@ from second_brain.schemas import (
 
 class TestRetryConfig:
     def test_recall_has_retries(self):
-        assert recall_agent._max_result_retries == 3
+        assert recall_agent._max_result_retries == 2
 
     def test_ask_has_retries(self):
         assert ask_agent._max_result_retries == 3

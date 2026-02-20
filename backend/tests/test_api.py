@@ -598,6 +598,21 @@ class TestAgentError:
         assert "Recall failed" in response.json()["detail"]
         assert "RuntimeError" in response.json()["detail"]
 
+    @patch("second_brain.api.routers.agents.recall_agent")
+    def test_recall_503_on_retry_exhaustion(self, mock_agent, client):
+        """UnexpectedModelBehavior should return structured 503 with suggestion."""
+        # Create an exception whose type name matches the string check
+        exc = type("UnexpectedModelBehavior", (Exception,), {})("Exceeded maximum retries")
+        mock_agent.run = AsyncMock(side_effect=exc)
+        response = client.post("/api/recall", json={"query": "test"})
+        assert response.status_code == 503
+        detail = response.json()["detail"]
+        assert isinstance(detail, dict)
+        assert "error" in detail
+        assert "suggestion" in detail
+        assert "quick_recall" in detail["suggestion"]
+        assert detail["retry_after"] == 30
+
     @patch("second_brain.api.routers.agents.ask_agent")
     def test_ask_502_on_agent_exception(self, mock_agent, client):
         mock_agent.run = AsyncMock(side_effect=ConnectionError("Mem0 unreachable"))

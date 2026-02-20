@@ -128,6 +128,26 @@ class TestMCPTools:
         assert "nonexistent topic" in result
         assert "Matches" not in result
 
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.recall_agent")
+    async def test_recall_surfaces_error_field(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """When recall agent returns with error field set, MCP output should include warning."""
+        from second_brain.mcp_server import recall
+
+        mock_result = MagicMock()
+        mock_result.output = RecallResult(
+            query="test",
+            error="Mem0 and Supabase both unavailable",
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        result = await recall(query="test")
+        assert "WARNING" in result
+        assert "Mem0 and Supabase both unavailable" in result
+
     @patch("second_brain.mcp_server._get_deps")
     async def test_brain_health_growing_status(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health

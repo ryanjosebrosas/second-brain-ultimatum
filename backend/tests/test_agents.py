@@ -253,6 +253,25 @@ class TestRecallValidatorResilience:
         result = RecallResult(query="test")
         assert result.error == ""
 
+    def test_recall_retries_reduced_to_two(self):
+        """Recall agent should have retries=2 for faster failure."""
+        from second_brain.agents.recall import recall_agent
+        assert recall_agent._max_result_retries == 2
+
+    def test_tool_error_has_backend_prefix(self):
+        """tool_error() should return strings with BACKEND_ERROR: prefix."""
+        from second_brain.agents.utils import tool_error, TOOL_ERROR_PREFIX
+        result = tool_error("test_tool", RuntimeError("connection refused"))
+        assert result.startswith(TOOL_ERROR_PREFIX)
+        assert "test_tool" in result
+        assert "RuntimeError" in result
+
+    def test_tool_error_still_contains_unavailable(self):
+        """tool_error() output should still contain 'unavailable' for LLM guidance."""
+        from second_brain.agents.utils import tool_error
+        result = tool_error("my_tool", ValueError("bad"))
+        assert "unavailable" in result
+
 
 class TestAskValidatorResilience:
     """Tests for ask validator graceful degradation on infrastructure errors."""
@@ -307,7 +326,9 @@ class TestRunAgentErrorHandling:
         with pytest.raises(HTTPException) as exc_info:
             await _run_agent("Test", failing_coro, timeout=30.0)
         assert exc_info.value.status_code == 503
-        assert "degraded" in exc_info.value.detail.lower()
+        detail = exc_info.value.detail
+        assert isinstance(detail, dict)
+        assert "degraded" in detail["error"].lower()
 
     @pytest.mark.asyncio
     async def test_generic_exception_returns_502(self):

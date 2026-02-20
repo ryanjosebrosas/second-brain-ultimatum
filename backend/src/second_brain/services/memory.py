@@ -220,13 +220,18 @@ class MemoryService(MemoryServiceBase):
         """Semantic search across memories."""
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
-        kwargs: dict = {"user_id": self.user_id}
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
         if self._is_cloud:
-            kwargs["filters"] = {"user_id": self.user_id}
-            kwargs["top_k"] = limit
+            # Platform API: user_id goes ONLY inside filters, never as top-level kwarg
+            kwargs: dict = {
+                "filters": {"AND": [{"user_id": self.user_id}]},
+                "top_k": limit,
+                "version": "v2",
+            }
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
+        else:
+            kwargs: dict = {"user_id": self.user_id}
         try:
             if self._is_cloud:
                 @_MEM0_RETRY
@@ -271,26 +276,31 @@ class MemoryService(MemoryServiceBase):
         """
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
-        kwargs: dict = {"user_id": self.user_id}
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
 
         if self._is_cloud:
-            # Cloud client merges user_id into filters
-            base_filters: dict = {"user_id": self.user_id}
+            # Platform API: user_id goes ONLY inside filters, never as top-level kwarg
+            conditions: list[dict] = [{"user_id": self.user_id}]
             if metadata_filters:
-                # Combine user filter with metadata filters using AND
-                base_filters = {
-                    "AND": [
-                        {"user_id": self.user_id},
-                        metadata_filters,
-                    ]
-                }
-            kwargs["filters"] = base_filters
-            kwargs["top_k"] = limit
+                # Flatten caller's AND conditions to avoid double-nesting
+                if isinstance(metadata_filters, dict) and len(metadata_filters) == 1:
+                    key = next(iter(metadata_filters))
+                    if key == "AND" and isinstance(metadata_filters[key], list):
+                        conditions.extend(metadata_filters[key])
+                    else:
+                        conditions.append(metadata_filters)
+                else:
+                    conditions.append(metadata_filters)
+            kwargs: dict = {
+                "filters": {"AND": conditions},
+                "top_k": limit,
+                "version": "v2",
+            }
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
         else:
-            # Local client: pass filters directly if supported
+            # OSS client: user_id as top-level param, filters passed directly
+            kwargs: dict = {"user_id": self.user_id}
             if metadata_filters:
                 kwargs["filters"] = metadata_filters
 
@@ -379,9 +389,10 @@ class MemoryService(MemoryServiceBase):
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""
         try:
-            kwargs: dict = {"user_id": self.user_id}
             if self._is_cloud:
-                kwargs["filters"] = {"user_id": self.user_id}
+                kwargs: dict = {"filters": {"AND": [{"user_id": self.user_id}]}}
+            else:
+                kwargs: dict = {"user_id": self.user_id}
             results = await asyncio.to_thread(self._client.get_all, **kwargs)
             if isinstance(results, dict):
                 return results.get("results", [])

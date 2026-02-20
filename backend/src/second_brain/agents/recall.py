@@ -6,6 +6,7 @@ import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
+    TOOL_ERROR_PREFIX,
     deduplicate_results,
     expand_query,
     format_memories,
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 recall_agent = Agent(
     deps_type=BrainDeps,
     output_type=RecallResult,
-    retries=3,
+    retries=2,
     instructions=(
         "You are a memory recall agent for an AI Second Brain. "
         "Search the user's semantic memory for relevant context, patterns, "
@@ -139,6 +140,15 @@ async def search_semantic_memory(
         )
 
         if not memories and not relations:
+            # Distinguish "no data" from "services failed"
+            mem0_failed = isinstance(mem0_result, BaseException) or mem0_result is None
+            hybrid_failed = embedding is None or (embedding is not None and not hybrid_result)
+            if mem0_failed and hybrid_failed:
+                return (
+                    f"{TOOL_ERROR_PREFIX} search_semantic_memory: all backends failed "
+                    f"(mem0={'error' if mem0_failed else 'ok'}, "
+                    f"hybrid={'error' if hybrid_failed else 'ok'})"
+                )
             return "No semantic matches found."
 
         parts = [format_memories(memories)]
@@ -243,6 +253,10 @@ async def search_patterns(
         if not formatted:
             patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
             if not patterns:
+                mem0_failed = isinstance(mem0_raw, BaseException) or mem0_raw is None
+                hybrid_failed = embedding is None or (embedding is not None and not hybrid_result)
+                if mem0_failed and hybrid_failed:
+                    return f"{TOOL_ERROR_PREFIX} search_patterns: all backends failed"
                 return "No patterns found in registry."
             formatted.append("## Pattern Registry")
             for p in patterns:
@@ -288,6 +302,8 @@ async def search_experiences(
             experiences = await ctx.deps.storage_service.get_experiences(category=category)
 
         if not experiences:
+            if embedding is None and query and ctx.deps.embedding_service:
+                return f"{TOOL_ERROR_PREFIX} search_experiences: embedding service failed"
             return "No past experiences found."
 
         formatted = []
@@ -331,6 +347,8 @@ async def search_examples(
             examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
 
         if not examples:
+            if embedding is None and query and ctx.deps.embedding_service:
+                return f"{TOOL_ERROR_PREFIX} search_examples: embedding service failed"
             return "No content examples found."
 
         formatted = []

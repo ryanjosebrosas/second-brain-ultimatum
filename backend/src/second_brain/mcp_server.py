@@ -218,6 +218,8 @@ async def recall(query: str) -> str:
         parts.append(f"\n## Summary\n{output.summary}")
     if output.search_sources:
         parts.append(f"\n_Sources: {', '.join(output.search_sources)}_")
+    if output.error:
+        parts.append(f"\n**WARNING**: {output.error}")
     return "\n".join(parts)
 
 

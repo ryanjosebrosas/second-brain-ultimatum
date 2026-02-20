@@ -59,7 +59,12 @@ async def _run_agent(
             logger.warning("%s agent exhausted retries: %s", name, e)
             raise HTTPException(
                 503,
-                detail=f"{name} service degraded: backend services may be unavailable. Please retry later.",
+                detail={
+                    "error": f"{name} service degraded",
+                    "message": "Backend memory services may be temporarily unavailable.",
+                    "suggestion": "Try again in a few minutes, or use quick_recall for direct search.",
+                    "retry_after": 30,
+                },
             )
         logger.error("%s agent failed: %s", name, e, exc_info=True)
         raise HTTPException(502, detail=f"{name} failed: {error_name}: {e}")

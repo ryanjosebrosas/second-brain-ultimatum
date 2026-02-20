@@ -886,10 +886,16 @@ async def load_voice_context(
     return "## Voice & Tone Guide\n" + "\n\n".join(sections)
 
 
+# Prefix used by output validators to detect tool-level backend failures.
+TOOL_ERROR_PREFIX = "BACKEND_ERROR:"
+
+
 def tool_error(tool_name: str, error: Exception) -> str:
     """Standard error format for agent tool failures.
 
-    Returns a user-friendly error string. Logs the technical details.
+    Returns a prefixed error string. The BACKEND_ERROR: prefix allows output
+    validators to deterministically detect service failures without relying
+    on LLM instruction-following.
 
     Args:
         tool_name: Name of the tool that failed.
@@ -900,4 +906,4 @@ def tool_error(tool_name: str, error: Exception) -> str:
     """
     logger.warning("%s failed: %s", tool_name, type(error).__name__)
     logger.debug("%s error detail: %s", tool_name, error)
-    return f"{tool_name} unavailable: {type(error).__name__}"
+    return f"{TOOL_ERROR_PREFIX} {tool_name} unavailable: {type(error).__name__}"
