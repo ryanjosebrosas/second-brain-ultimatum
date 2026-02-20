@@ -133,7 +133,7 @@ class TestBrainMigrator:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_memory_content = AsyncMock(return_value={})
+        mock_storage.bulk_upsert_memory_content = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(mock_config)
@@ -141,7 +141,7 @@ class TestBrainMigrator:
 
         # Should have migrated company/products.md
         assert mock_memory.add.call_count >= 1
-        assert mock_storage.upsert_memory_content.call_count >= 1
+        mock_storage.bulk_upsert_memory_content.assert_called_once()
 
     @patch("second_brain.migrate.StorageService")
     @patch("second_brain.migrate.MemoryService")
@@ -151,14 +151,14 @@ class TestBrainMigrator:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_pattern = AsyncMock(return_value={})
+        mock_storage.bulk_upsert_patterns = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(mock_config)
         await migrator.migrate_patterns()
 
         # Should have migrated test-patterns.md (1 pattern), skipped INDEX.md
-        assert mock_storage.upsert_pattern.call_count == 1
+        mock_storage.bulk_upsert_patterns.assert_called_once()
         assert mock_memory.add.call_count == 1
 
     @patch("second_brain.migrate.StorageService")
@@ -212,16 +212,18 @@ class TestExamplesMigration:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_example = AsyncMock(return_value={})
+        mock_storage.bulk_upsert_examples = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(mock_config)
         await migrator.migrate_examples()
 
-        mock_storage.upsert_example.assert_called_once()
-        call_args = mock_storage.upsert_example.call_args[0][0]
-        assert call_args["content_type"] == "linkedin"
-        assert "Hooks" in call_args["title"]
+        mock_storage.bulk_upsert_examples.assert_called_once()
+        # Verify the batch contains the right data
+        call_args = mock_storage.bulk_upsert_examples.call_args[0][0]
+        assert len(call_args) == 1
+        assert call_args[0]["content_type"] == "linkedin"
+        assert "Hooks" in call_args[0]["title"]
         assert mock_memory.add.call_count == 1
 
     @patch("second_brain.migrate.StorageService")
@@ -232,15 +234,16 @@ class TestExamplesMigration:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_example = AsyncMock(return_value={})
+        mock_storage.bulk_upsert_examples = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(mock_config)
         await migrator.migrate_examples()
 
-        # README.md should be skipped — only hooks-that-work.md migrated
-        for call in mock_storage.upsert_example.call_args_list:
-            assert "README" not in call[0][0].get("title", "")
+        # README.md should be skipped — only hooks-that-work.md in batch
+        call_args = mock_storage.bulk_upsert_examples.call_args[0][0]
+        for item in call_args:
+            assert "README" not in item.get("title", "")
 
 
 class TestNewContentTypeMigration:
@@ -266,23 +269,21 @@ class TestNewContentTypeMigration:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_example = AsyncMock()
+        mock_storage.bulk_upsert_examples = AsyncMock(return_value={"inserted": 5, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(config)
         await migrator.migrate_examples()
 
-        # Should have migrated 5 examples (one per type)
-        assert mock_storage.upsert_example.call_count == 5
+        # Should have migrated 5 examples (one per type) in one bulk call
+        mock_storage.bulk_upsert_examples.assert_called_once()
         assert mock_memory.add.call_count == 5
 
-        # Verify content types are correct
-        call_args = [
-            call.args[0]["content_type"]
-            for call in mock_storage.upsert_example.call_args_list
-        ]
+        # Verify content types are correct in the batch
+        batch = mock_storage.bulk_upsert_examples.call_args[0][0]
+        content_types = [item["content_type"] for item in batch]
         for ct in ["case-study", "proposal", "one-pager", "presentation", "instagram"]:
-            assert ct in call_args, f"Missing content_type: {ct}"
+            assert ct in content_types, f"Missing content_type: {ct}"
 
     @patch("second_brain.migrate.StorageService")
     @patch("second_brain.migrate.MemoryService")
@@ -304,17 +305,18 @@ class TestNewContentTypeMigration:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_example = AsyncMock()
+        mock_storage.bulk_upsert_examples = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(config)
         await migrator.migrate_examples()
 
         # Only real-example.md should be migrated, not README.md
-        assert mock_storage.upsert_example.call_count == 1
-        call_args = mock_storage.upsert_example.call_args_list[0].args[0]
-        assert call_args["content_type"] == "case-study"
-        assert call_args["title"] == "Real Example"
+        mock_storage.bulk_upsert_examples.assert_called_once()
+        batch = mock_storage.bulk_upsert_examples.call_args[0][0]
+        assert len(batch) == 1
+        assert batch[0]["content_type"] == "case-study"
+        assert batch[0]["title"] == "Real Example"
 
 
 class TestKnowledgeRepoMigration:
@@ -326,14 +328,15 @@ class TestKnowledgeRepoMigration:
         mock_mem_cls.return_value = mock_memory
 
         mock_storage = MagicMock()
-        mock_storage.upsert_knowledge = AsyncMock(return_value={})
+        mock_storage.bulk_upsert_knowledge = AsyncMock(return_value={"inserted": 1, "errors": 0})
         mock_storage_cls.return_value = mock_storage
 
         migrator = BrainMigrator(mock_config)
         await migrator.migrate_knowledge_repo()
 
-        mock_storage.upsert_knowledge.assert_called_once()
-        call_args = mock_storage.upsert_knowledge.call_args[0][0]
-        assert call_args["category"] == "frameworks"
-        assert "Value" in call_args["title"]
+        mock_storage.bulk_upsert_knowledge.assert_called_once()
+        batch = mock_storage.bulk_upsert_knowledge.call_args[0][0]
+        assert len(batch) == 1
+        assert batch[0]["category"] == "frameworks"
+        assert "Value" in batch[0]["title"]
         assert mock_memory.add.call_count == 1
