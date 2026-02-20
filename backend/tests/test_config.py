@@ -543,6 +543,90 @@ class TestGraphitiConfig:
         assert "secret" not in repr(config)
 
 
+class TestDataInfraConfig:
+    """Tests for data infrastructure config fields."""
+
+    def test_hnsw_ef_search_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.hnsw_ef_search == 100
+
+    def test_hnsw_ef_search_custom(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test",
+            brain_data_path=tmp_path,
+            hnsw_ef_search=200,
+            _env_file=None,
+        )
+        assert config.hnsw_ef_search == 200
+
+    def test_hnsw_ef_search_validation_min(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="x", supabase_key="x",
+                brain_data_path=tmp_path,
+                hnsw_ef_search=5,  # below ge=10
+                _env_file=None,
+            )
+
+    def test_hnsw_ef_search_validation_max(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="x", supabase_key="x",
+                brain_data_path=tmp_path,
+                hnsw_ef_search=600,  # above le=500
+                _env_file=None,
+            )
+
+    def test_service_timeout_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.service_timeout_seconds == 15
+
+    def test_service_timeout_custom(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path,
+            service_timeout_seconds=30,
+            _env_file=None,
+        )
+        assert config.service_timeout_seconds == 30
+
+    def test_batch_upsert_chunk_size_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.batch_upsert_chunk_size == 500
+
+    def test_batch_upsert_chunk_size_validation_max(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="x", supabase_key="x",
+                brain_data_path=tmp_path,
+                batch_upsert_chunk_size=2000,  # above le=1000
+                _env_file=None,
+            )
+
+    def test_batch_upsert_chunk_size_validation_min(self, tmp_path):
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="x", supabase_key="x",
+                brain_data_path=tmp_path,
+                batch_upsert_chunk_size=0,  # below ge=1
+                _env_file=None,
+            )
+
+
 class TestSubscriptionConfig:
     """Tests for subscription auth config fields."""
 
