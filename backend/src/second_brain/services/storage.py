@@ -9,10 +9,32 @@ from supabase import create_client, Client
 
 from second_brain.config import BrainConfig
 from second_brain.schemas import (
-    ContentTypeConfig, DEFAULT_CONTENT_TYPES, content_type_from_row,
+    ContentTypeConfig, DEFAULT_CONTENT_TYPES, ReviewDimensionConfig,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def content_type_from_row(row: dict) -> ContentTypeConfig:
+    """Convert a Supabase content_types row to a ContentTypeConfig."""
+    dims = row.get("review_dimensions")
+    review_dims = None
+    if dims and isinstance(dims, list):
+        review_dims = [ReviewDimensionConfig(**d) for d in dims]
+    return ContentTypeConfig(
+        name=row["name"],
+        default_mode=row.get("default_mode", "professional"),
+        structure_hint=row.get("structure_hint", ""),
+        example_type=row.get("example_type", row.get("slug", "")),
+        max_words=row.get("max_words", 0),
+        description=row.get("description", ""),
+        review_dimensions=review_dims,
+        is_builtin=row.get("is_builtin", False),
+        writing_instructions=row.get("writing_instructions") or "",
+        length_guidance=row.get("length_guidance", ""),
+        validation_rules=row.get("validation_rules") or {},
+        ui_config=row.get("ui_config") or {},
+    )
 
 
 class StorageService:
@@ -698,12 +720,13 @@ class StorageService:
             return {}
 
     async def delete_content_type(self, slug: str) -> bool:
-        """Delete a content type by slug. Returns True if deleted."""
+        """Delete a custom content type by slug. Built-in types cannot be deleted."""
         try:
             query = (
                 self._client.table("content_types")
                 .delete()
                 .eq("slug", slug)
+                .eq("is_builtin", False)
             )
             result = await asyncio.to_thread(query.execute)
             return len(result.data) > 0

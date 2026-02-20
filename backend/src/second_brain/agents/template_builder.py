@@ -6,6 +6,7 @@ Analyzes deliverables for patterns worth templating. Follows the
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
+from second_brain.agents.utils import format_pattern_registry, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import TemplateBuilderResult
 
@@ -61,10 +62,8 @@ async def search_existing_patterns(ctx: RunContext[BrainDeps], topic: str = "") 
         patterns = await ctx.deps.storage_service.get_patterns(topic=topic or None)
         if not patterns:
             return "No existing patterns found."
-        from second_brain.agents.utils import format_pattern_registry
         return format_pattern_registry(patterns[:10])
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_existing_patterns", e)
 
 
@@ -82,5 +81,4 @@ async def search_examples(ctx: RunContext[BrainDeps], content_type: str = "") ->
             lines.append(f"- {ex.get('title', 'Untitled')}: {ex.get('content', '')[:150]}...")
         return "Examples:\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_examples", e)

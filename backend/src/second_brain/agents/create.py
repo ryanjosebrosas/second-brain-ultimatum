@@ -7,6 +7,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from second_brain.agents.utils import (
     format_memories,
     format_relations,
+    load_voice_context,
     rerank_memories,
     search_with_graph_fallback,
     tool_error,
@@ -129,24 +130,7 @@ async def validate_create(ctx: RunContext[BrainDeps], output: CreateResult) -> C
 async def load_voice_guide(ctx: RunContext[BrainDeps]) -> str:
     """Load the user's voice and tone guide from the brain for style matching."""
     try:
-        content = await ctx.deps.storage_service.get_memory_content("style-voice")
-        if not content:
-            return "No voice guide found. Write in a clear, direct, conversational tone."
-        sections = []
-        for item in content:
-            title = item.get("title", "Untitled")
-            text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
-            sections.append(f"### {title}\n{text}")
-        # Enrich with graph relationships if available
-        graphiti_rels = await search_with_graph_fallback(
-            ctx.deps, "voice tone style brand"
-        )
-        if graphiti_rels:
-            sections.append("\n### Graph Context")
-            rel_text = format_relations(graphiti_rels)
-            if rel_text:
-                sections.append(rel_text)
-        return "## Voice & Tone Guide\n" + "\n\n".join(sections)
+        return await load_voice_context(ctx.deps, include_graph=True)
     except Exception as e:
         return tool_error("load_voice_guide", e)
 

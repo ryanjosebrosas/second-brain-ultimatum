@@ -6,6 +6,7 @@ actions with priority, effort estimates, dependencies, and ownership.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
+from second_brain.agents.utils import tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import SynthesizerResult
 
@@ -85,5 +86,4 @@ async def load_past_reviews(ctx: RunContext[BrainDeps], content_type: str = "") 
             )
         return "Past reviews (recurring issues context):\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_past_reviews", e)

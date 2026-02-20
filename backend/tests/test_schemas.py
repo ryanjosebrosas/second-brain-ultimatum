@@ -29,12 +29,11 @@ from second_brain.schemas import (
     DimensionBreakdown,
     BRAIN_MILESTONES,
     BRAIN_LEVEL_THRESHOLDS,
-    QUALITY_GATE_SCORE,
     DEFAULT_CONTENT_TYPES,
     DEFAULT_REVIEW_DIMENSIONS,
     REVIEW_DIMENSIONS,
-    content_type_from_row,
 )
+from second_brain.services.storage import content_type_from_row
 
 
 class TestMemoryMatch:
@@ -474,5 +473,7 @@ class TestProjectSchemas:
             "EMPTY", "FOUNDATION", "GROWTH", "COMPOUND", "EXPERT"
         }
 
-    def test_quality_gate_score_constant(self):
-        assert QUALITY_GATE_SCORE == 8.0
+    def test_quality_gate_score_in_config(self):
+        from second_brain.config import BrainConfig
+        config = BrainConfig()
+        assert config.quality_gate_score == 8.0

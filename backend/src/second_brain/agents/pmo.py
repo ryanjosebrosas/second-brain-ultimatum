@@ -6,6 +6,7 @@ Alignment 15%, Momentum 10%) to help users decide what to work on.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
+from second_brain.agents.utils import tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import PMOResult
 
@@ -72,7 +73,6 @@ async def load_strategic_context(ctx: RunContext[BrainDeps]) -> str:
             parts.append(f"HIGH confidence patterns: {len(patterns)}")
         return "\n\n".join(parts) if parts else "No strategic context available."
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_strategic_context", e)
 
 

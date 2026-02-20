@@ -7,6 +7,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     format_relations,
+    load_voice_context,
     search_with_graph_fallback,
     tool_error,
 )
@@ -73,15 +74,7 @@ async def validate_review(ctx: RunContext[BrainDeps], output: DimensionScore) ->
 async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
     """Load the user's voice and tone guide for evaluating brand voice consistency."""
     try:
-        content = await ctx.deps.storage_service.get_memory_content("style-voice")
-        if not content:
-            return "No voice guide found."
-        sections = []
-        for item in content:
-            title = item.get("title", "Untitled")
-            text = item.get("content", "")[:ctx.deps.config.content_preview_limit]
-            sections.append(f"### {title}\n{text}")
-        return "## Voice & Tone Reference\n" + "\n\n".join(sections)
+        return await load_voice_context(ctx.deps)
     except Exception as e:
         return tool_error("load_voice_reference", e)
 

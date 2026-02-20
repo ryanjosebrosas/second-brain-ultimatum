@@ -6,15 +6,12 @@ tasks directly — only coordinates.
 """
 
 import logging
-from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
+from second_brain.agents.utils import format_memories, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import RoutingDecision
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +110,6 @@ async def load_brain_overview(ctx: RunContext[BrainDeps]) -> str:
 
         return "\n".join(parts) if parts else "Brain is empty — suggest using 'learn' agent."
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_brain_overview", e)
 
 
@@ -122,12 +118,10 @@ async def search_brain_context(ctx: RunContext[BrainDeps], query: str) -> str:
     """Search brain memory for context relevant to routing the request."""
     try:
         results = await ctx.deps.memory_service.search(query, limit=5)
-        if not results:
+        if not results or not results.memories:
             return "No relevant context found in brain memory."
-        from second_brain.agents.utils import format_memories
-        return format_memories(results, limit=5)
+        return format_memories(results.memories, limit=5)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_brain_context", e)
 
 
@@ -145,5 +139,4 @@ async def check_active_projects(ctx: RunContext[BrainDeps]) -> str:
             lines.append(f"- {p.get('name', 'unnamed')} ({p.get('lifecycle_stage', '?')})")
         return "Active projects:\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("check_active_projects", e)

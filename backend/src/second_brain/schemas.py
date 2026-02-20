@@ -1132,28 +1132,3 @@ BRAIN_LEVEL_THRESHOLDS = {
     "EXPERT": {"min_patterns": 20, "min_high": 5, "min_experiences": 20, "min_avg_score": 9.0},
 }
 
-QUALITY_GATE_SCORE = 8.0  # Minimum review score for example promotion
-CONFIDENCE_DOWNGRADE_THRESHOLD = 6.0  # Score below which consecutive failures count
-CONFIDENCE_DOWNGRADE_CONSECUTIVE = 2  # Consecutive failures before downgrade
-
-
-def content_type_from_row(row: dict) -> ContentTypeConfig:
-    """Convert a Supabase content_types row to a ContentTypeConfig."""
-    dims = row.get("review_dimensions")
-    review_dims = None
-    if dims and isinstance(dims, list):
-        review_dims = [ReviewDimensionConfig(**d) for d in dims]
-    return ContentTypeConfig(
-        name=row["name"],
-        default_mode=row.get("default_mode", "professional"),
-        structure_hint=row.get("structure_hint", ""),
-        example_type=row.get("example_type", row.get("slug", "")),
-        max_words=row.get("max_words", 0),
-        description=row.get("description", ""),
-        review_dimensions=review_dims,
-        is_builtin=row.get("is_builtin", False),
-        writing_instructions=row.get("writing_instructions") or "",
-        length_guidance=row.get("length_guidance", ""),
-        validation_rules=row.get("validation_rules") or {},
-        ui_config=row.get("ui_config") or {},
-    )

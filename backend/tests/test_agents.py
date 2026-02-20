@@ -693,7 +693,7 @@ class TestDynamicContentTypes:
             assert dc.enabled is True
 
     def test_content_type_from_row_basic(self):
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "slug": "newsletter",
             "name": "Newsletter",
@@ -713,7 +713,7 @@ class TestDynamicContentTypes:
         assert config.review_dimensions is None
 
     def test_content_type_from_row_with_dimensions(self):
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "slug": "comment",
             "name": "Comment",
@@ -733,7 +733,7 @@ class TestDynamicContentTypes:
         assert config.review_dimensions[0].name == "Messaging"
 
     def test_content_type_from_row_minimal(self):
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "name": "Minimal",
             "slug": "minimal",

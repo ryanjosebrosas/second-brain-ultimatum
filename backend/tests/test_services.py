@@ -637,7 +637,8 @@ class TestContentTypeStorage:
         result = await service.delete_content_type("newsletter")
 
         assert result is True
-        mock_table.eq.assert_called_once_with("slug", "newsletter")
+        mock_table.eq.assert_any_call("slug", "newsletter")
+        mock_table.eq.assert_any_call("is_builtin", False)
 
     @patch("second_brain.services.storage.create_client")
     async def test_delete_content_type_not_found(self, mock_create, mock_config):

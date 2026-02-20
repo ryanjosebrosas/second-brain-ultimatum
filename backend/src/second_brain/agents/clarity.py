@@ -6,6 +6,7 @@ Produces severity-ranked findings with specific improvement suggestions.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
+from second_brain.agents.utils import load_voice_context, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import ClarityResult
 
@@ -70,7 +71,6 @@ async def load_audience_context(ctx: RunContext[BrainDeps]) -> str:
             a.get("content", "")[:200] for a in audience[:3]
         )
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_audience_context", e)
 
 
@@ -78,10 +78,6 @@ async def load_audience_context(ctx: RunContext[BrainDeps]) -> str:
 async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
     """Load voice/style guide for language level calibration."""
     try:
-        voice = await ctx.deps.storage_service.get_memory_content("style-voice")
-        if not voice:
-            return "No voice guide available."
-        return "Voice guide:\n" + "\n".join(v.get("content", "")[:200] for v in voice[:2])
+        return await load_voice_context(ctx.deps, preview_limit=200)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_voice_reference", e)

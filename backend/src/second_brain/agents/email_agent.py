@@ -3,6 +3,7 @@
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.tools import ToolDefinition
+from second_brain.agents.utils import load_voice_context, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import EmailAction
 
@@ -46,18 +47,17 @@ async def validate_email(ctx: RunContext[BrainDeps], output: EmailAction) -> Ema
 async def load_email_voice(ctx: RunContext[BrainDeps]) -> str:
     """Load email-specific voice and style guidelines."""
     try:
-        voice = await ctx.deps.storage_service.get_memory_content("style-voice")
-        examples = await ctx.deps.storage_service.get_examples(content_type="email")
         parts = []
-        if voice:
-            parts.append("Voice guide:\n" + "\n".join(v.get("content", "")[:200] for v in voice[:2]))
+        voice_text = await load_voice_context(ctx.deps, preview_limit=200)
+        if voice_text:
+            parts.append(voice_text)
+        examples = await ctx.deps.storage_service.get_examples(content_type="email")
         if examples:
             parts.append("Email examples:\n" + "\n".join(
                 f"- {e.get('title', '?')}: {e.get('content', '')[:100]}..." for e in examples[:3]
             ))
         return "\n\n".join(parts) if parts else "No email voice guide available."
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_email_voice", e)
 
 
@@ -75,7 +75,6 @@ async def search_email_history(ctx: RunContext[BrainDeps], query: str) -> str:
         lines = [f"- {r.get('subject', '?')} from {r.get('from', '?')}" for r in results]
         return "Email history:\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_email_history", e)
 
 
@@ -86,5 +85,4 @@ async def send_email(ctx: RunContext[BrainDeps], to: str, subject: str, body: st
         result = await ctx.deps.email_service.send([to], subject, body)
         return f"Email sent to {to}: {result.get('status', 'unknown')}"
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("send_email", e)

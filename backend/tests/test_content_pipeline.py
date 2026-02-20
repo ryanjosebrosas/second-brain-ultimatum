@@ -368,7 +368,7 @@ class TestContentTypeEnrichment:
 
     def test_content_type_from_row_parses_new_fields(self):
         """content_type_from_row() correctly parses enrichment fields from DB rows."""
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "name": "Test Type",
             "slug": "test",
@@ -389,7 +389,7 @@ class TestContentTypeEnrichment:
 
     def test_content_type_from_row_handles_none_fields(self):
         """content_type_from_row() handles None for JSONB fields (Supabase returns None)."""
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "name": "Minimal",
             "slug": "minimal",
@@ -407,7 +407,7 @@ class TestContentTypeEnrichment:
 
     def test_content_type_from_row_handles_missing_fields(self):
         """content_type_from_row() handles missing new fields (old DB rows without migration)."""
-        from second_brain.schemas import content_type_from_row
+        from second_brain.services.storage import content_type_from_row
         row = {
             "name": "Legacy",
             "slug": "legacy",

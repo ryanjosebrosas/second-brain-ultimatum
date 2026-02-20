@@ -8,6 +8,7 @@ Uses CalendarService and TaskManagementService when available.
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.tools import ToolDefinition
+from second_brain.agents.utils import format_memories, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import CoachSession
 
@@ -72,7 +73,6 @@ async def load_goals_context(ctx: RunContext[BrainDeps]) -> str:
                 parts.append(f"{cat}:\n" + "\n".join(c.get("content", "")[:150] for c in content[:2]))
         return "\n\n".join(parts) if parts else "No goals context in brain."
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("load_goals_context", e)
 
 
@@ -81,12 +81,10 @@ async def search_past_sessions(ctx: RunContext[BrainDeps], query: str = "daily s
     """Search for past coaching sessions and learnings."""
     try:
         results = await ctx.deps.memory_service.search(query, limit=3)
-        if not results:
+        if not results or not results.memories:
             return "No past sessions found."
-        from second_brain.agents.utils import format_memories
-        return format_memories(results, limit=3)
+        return format_memories(results.memories, limit=3)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_past_sessions", e)
 
 
@@ -106,7 +104,6 @@ async def check_calendar(ctx: RunContext[BrainDeps], date: str = "") -> str:
         lines = [f"- {e.get('summary', '?')} ({e.get('start', '?')} - {e.get('end', '?')})" for e in events]
         return "Today's calendar:\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("check_calendar", e)
 
 
@@ -119,7 +116,6 @@ async def create_time_block(
         result = await ctx.deps.calendar_service.create_event(summary, start, end, description)
         return f"Time block created: {summary} ({start} - {end})"
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("create_time_block", e)
 
 
@@ -139,5 +135,4 @@ async def get_task_backlog(ctx: RunContext[BrainDeps]) -> str:
         lines = [f"- {t.get('title', '?')} (priority: {t.get('priority', '?')})" for t in tasks]
         return "Task backlog:\n" + "\n".join(lines)
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("get_task_backlog", e)

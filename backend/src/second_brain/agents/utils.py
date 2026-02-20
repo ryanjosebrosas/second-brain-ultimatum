@@ -542,6 +542,37 @@ async def run_pipeline(
     return results
 
 
+async def load_voice_context(
+    deps: "BrainDeps",
+    preview_limit: int | None = None,
+    include_graph: bool = False,
+) -> str:
+    """Load user's voice/tone guide from storage. Shared across agents.
+
+    Args:
+        deps: BrainDeps with storage_service
+        preview_limit: Max chars per content item (None = use config default)
+        include_graph: Whether to enrich with graph relationships
+    """
+    limit = preview_limit or deps.config.content_preview_limit
+    content = await deps.storage_service.get_memory_content("style-voice")
+    if not content:
+        return "No voice guide found. Write in a clear, direct, conversational tone."
+    sections = []
+    for item in content:
+        title = item.get("title", "Untitled")
+        text = item.get("content", "")[:limit]
+        sections.append(f"### {title}\n{text}")
+    if include_graph:
+        graphiti_rels = await search_with_graph_fallback(deps, "voice tone style brand")
+        if graphiti_rels:
+            sections.append("\n### Graph Context")
+            rel_text = format_relations(graphiti_rels)
+            if rel_text:
+                sections.append(rel_text)
+    return "## Voice & Tone Guide\n" + "\n\n".join(sections)
+
+
 def tool_error(tool_name: str, error: Exception) -> str:
     """Standard error format for agent tool failures.
 

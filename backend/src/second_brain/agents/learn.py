@@ -213,10 +213,10 @@ async def store_pattern(
         # Quality gate: auto-promote to examples if associated review scored high enough
         if source_experience:
             try:
-                from second_brain.schemas import QUALITY_GATE_SCORE
+                quality_gate = ctx.deps.config.quality_gate_score
                 experiences = await ctx.deps.storage_service.get_experiences()
                 matching = [e for e in experiences if e.get("name") == source_experience
-                            and e.get("review_score") and e["review_score"] >= QUALITY_GATE_SCORE]
+                            and e.get("review_score") and e["review_score"] >= quality_gate]
                 if matching:
                     parts.append(f"Source experience scored {matching[0]['review_score']} — pattern promoted from quality work")
             except Exception:
@@ -468,12 +468,12 @@ async def learn_from_review(
             logger.debug("Growth event recording failed (non-critical)")
 
         # If score is high enough, suggest example promotion
-        from second_brain.schemas import QUALITY_GATE_SCORE
-        if review_score >= QUALITY_GATE_SCORE:
-            parts.append(f"Score {review_score} >= {QUALITY_GATE_SCORE} — eligible for example promotion")
+        quality_gate = ctx.deps.config.quality_gate_score
+        if review_score >= quality_gate:
+            parts.append(f"Score {review_score} >= {quality_gate} — eligible for example promotion")
             parts.append("Use store_pattern to extract successful patterns from strengths")
         else:
-            parts.append(f"Score {review_score} < {QUALITY_GATE_SCORE} — focus on learning from issues")
+            parts.append(f"Score {review_score} < {quality_gate} — focus on learning from issues")
 
         if strengths.strip():
             parts.append(f"\nStrengths to learn from:\n{strengths}")

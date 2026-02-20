@@ -6,6 +6,7 @@ second brain system architecture with mandatory source attribution.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
+from second_brain.agents.utils import format_pattern_registry, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import SpecialistAnswer
 
@@ -64,7 +65,6 @@ async def search_codebase_knowledge(ctx: RunContext[BrainDeps], query: str) -> s
             f"- {m.get('title', '?')}: {m.get('content', '')[:200]}" for m in matches[:5]
         )
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_codebase_knowledge", e)
 
 
@@ -75,8 +75,6 @@ async def search_patterns_for_answer(ctx: RunContext[BrainDeps], topic: str) -> 
         patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
         if not patterns:
             return f"No patterns found for topic '{topic}'."
-        from second_brain.agents.utils import format_pattern_registry
         return format_pattern_registry(patterns[:5])
     except Exception as e:
-        from second_brain.agents.utils import tool_error
         return tool_error("search_patterns_for_answer", e)
