@@ -177,6 +177,7 @@ class ClaudeSDKModel(Model):
                 ResultMessage,
                 query as sdk_query,
             )
+            from claude_agent_sdk._errors import MessageParseError
         except ImportError:
             raise RuntimeError(
                 "claude-agent-sdk not installed. "
@@ -222,11 +223,18 @@ class ClaudeSDKModel(Model):
                 # Exhaust the generator fully — do NOT return/break early.
                 # Early exit triggers GeneratorExit which corrupts anyio's
                 # cancel scope stack when the SDK cleans up its task group.
-                async for message in sdk_query(
-                    prompt=user_prompt, options=options
-                ):
+                gen = sdk_query(prompt=user_prompt, options=options).__aiter__()
+                while True:
+                    try:
+                        message = await gen.__anext__()
+                    except StopAsyncIteration:
+                        break
+                    except MessageParseError as e:
+                        # SDK doesn't recognize newer CLI message types
+                        # (e.g. rate_limit_event). Skip and continue.
+                        logger.debug("Skipping unknown SDK message: %s", e)
+                        continue
                     if isinstance(message, ResultMessage):
-                        # Prefer structured_output when we requested it
                         if output_schema and message.structured_output is not None:
                             result = message.structured_output
                         else:

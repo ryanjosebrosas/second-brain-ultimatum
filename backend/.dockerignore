@@ -20,6 +20,7 @@ docker-compose*.yml
 README.md
 tests/
 scripts/
+!scripts/docker-entrypoint.sh
 supabase/
 docs/
 .dockerignore

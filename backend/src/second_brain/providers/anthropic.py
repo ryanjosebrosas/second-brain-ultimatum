@@ -24,10 +24,10 @@ class AnthropicProvider(BaseProvider):
         self._config = config
 
     def validate_config(self) -> bool:
-        if not self._api_key:
+        if not self._api_key and not self._use_subscription:
             raise ValueError(
-                "Anthropic provider requires ANTHROPIC_API_KEY. "
-                "Get one at https://console.anthropic.com/"
+                "Anthropic provider requires ANTHROPIC_API_KEY or USE_SUBSCRIPTION=true. "
+                "Get an API key at https://console.anthropic.com/"
             )
         return True
 
@@ -42,6 +42,12 @@ class AnthropicProvider(BaseProvider):
                     return sdk_model
             except Exception as e:
                 logger.warning("Subscription auth failed, falling back to API key: %s", e)
+
+        if not self._api_key:
+            raise ValueError(
+                "Subscription auth unavailable and no ANTHROPIC_API_KEY set. "
+                "Either authenticate Claude CLI or provide an API key."
+            )
 
         from pydantic_ai.models.anthropic import AnthropicModel
         from pydantic_ai.providers.anthropic import AnthropicProvider as PydanticAnthropicProvider

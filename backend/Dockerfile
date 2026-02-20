@@ -14,12 +14,12 @@ COPY pyproject.toml uv.lock ./
 
 # Install dependencies only (no project install yet — better layer caching)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --locked --no-install-project --no-dev --extra subscription
 
 # Copy source and install project
 COPY src/ ./src/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+    uv sync --locked --no-dev --extra subscription
 
 # ── Runtime stage ─────────────────────────────────────────
 FROM python:3.12-slim AS runtime
@@ -28,25 +28,34 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# curl for HEALTHCHECK
+# Install curl (healthcheck) + Node.js (Claude CLI)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    npm install -g @anthropic-ai/claude-code && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy virtual env from builder (contains all installed packages)
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy source
+# Copy source and entrypoint
 COPY src/ ./src/
 COPY pyproject.toml ./
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 # Activate venv by putting it first on PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Non-root user
+# Non-root user + Claude CLI config scaffold
 RUN groupadd --gid 1001 appuser && \
-    useradd --uid 1001 --gid appuser --no-create-home --shell /bin/false appuser && \
-    mkdir -p /data && chown appuser:appuser /data
+    useradd --uid 1001 --gid appuser --create-home --shell /bin/bash appuser && \
+    mkdir -p /data && chown appuser:appuser /data && \
+    mkdir -p /home/appuser/.claude/debug && \
+    echo '{}' > /home/appuser/.claude/remote-settings.json && \
+    echo '{}' > /home/appuser/.claude/settings.json && \
+    chown -R appuser:appuser /home/appuser/.claude
 
 USER appuser
 
@@ -56,9 +65,9 @@ ENV MCP_TRANSPORT=http \
     MCP_PORT=8000 \
     BRAIN_DATA_PATH=/data
 
-EXPOSE 8000
+EXPOSE 8000 8001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/health && curl -f http://localhost:8001/api/health/metrics || exit 1
 
-CMD ["python", "-m", "second_brain.mcp_server"]
+CMD ["bash", "/app/docker-entrypoint.sh"]

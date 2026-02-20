@@ -18,13 +18,14 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - brain-data:/data
+      - ${USERPROFILE:-.}/.claude/.credentials.json:/home/appuser/.claude/.credentials.json:ro
     networks:
       - brain-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health && curl -f http://localhost:8001/api/health/metrics"]
       interval: 30s
       timeout: 10s
-      start_period: 30s
+      start_period: 45s
       retries: 3
     restart: unless-stopped
 
