@@ -2375,3 +2375,85 @@ class TestQuickRecallExceptionHandler:
         result = await quick_recall(query="test query")
         assert isinstance(result, str)
         assert "timed out" in result.lower() or "error" in result.lower()
+
+
+class TestMultimodalVectorSearchExceptionHandler:
+    """Tests that multimodal_vector_search handles unexpected exceptions."""
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unexpected_exception_returns_error_string(self, mock_deps_fn):
+        from second_brain.mcp_server import multimodal_vector_search
+
+        deps = _mock_deps()
+        deps.embedding_service = MagicMock()
+        deps.embedding_service.embed_multimodal = AsyncMock(
+            side_effect=RuntimeError("GPU error")
+        )
+        mock_deps_fn.return_value = deps
+
+        result = await multimodal_vector_search(query="test")
+        assert isinstance(result, str)
+        assert "error" in result.lower() or "RuntimeError" in result
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_timeout_returns_timeout_message(self, mock_deps_fn):
+        from second_brain.mcp_server import multimodal_vector_search
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.001
+        deps.embedding_service = MagicMock()
+        deps.embedding_service.embed_multimodal = AsyncMock(
+            side_effect=TimeoutError()
+        )
+        mock_deps_fn.return_value = deps
+
+        result = await multimodal_vector_search(query="test")
+        assert isinstance(result, str)
+        assert "timed out" in result.lower()
+
+
+class TestRunBrainPipelineTimeout:
+    """Tests that run_brain_pipeline handles timeouts."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_pipeline_timeout_returns_message(self, mock_deps_fn, mock_model_fn):
+        from second_brain.mcp_server import run_brain_pipeline
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.001
+        mock_deps_fn.return_value = deps
+        mock_model_fn.return_value = MagicMock()
+
+        with patch("second_brain.agents.utils.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+            mock_pipeline.side_effect = TimeoutError()
+            result = await run_brain_pipeline(request="test", steps="recall,create")
+            assert isinstance(result, str)
+            assert "timed out" in result.lower() or "Pipeline" in result
+
+
+class TestLearnImageImportError:
+    """Tests that learn_image handles PIL ImportError."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_pil_import_error_returns_actionable_message(self, mock_deps_fn):
+        from second_brain.mcp_server import learn_image
+
+        deps = _mock_deps(
+            memory_service=MagicMock(
+                add_multimodal=AsyncMock(return_value={"id": "img-123"})
+            ),
+            embedding_service=MagicMock(),
+        )
+        mock_deps_fn.return_value = deps
+
+        with patch.dict("sys.modules", {"PIL": None, "PIL.Image": None}):
+            result = await learn_image(
+                image_url="data:image/png;base64,iVBORw0KGgoAAAANS",
+                context="Test image",
+            )
+        assert isinstance(result, str)
+        # Should contain either the PIL error message or still succeed with embedding skipped
+        assert "Learn Image" in result

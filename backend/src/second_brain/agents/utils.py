@@ -1,5 +1,6 @@
 """Shared utilities for Second Brain agents."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -258,19 +259,19 @@ async def parallel_search_gather(
         - all_results: Flat list of normalized result dicts from all successful sources.
         - source_names: List of source names that contributed results.
     """
-    import asyncio as _asyncio
+
     import time as _time
 
     source_names_input = [name for name, _ in searches]
     coros = []
     for _, coro in searches:
         if per_source_timeout:
-            coros.append(_asyncio.wait_for(coro, timeout=per_source_timeout))
+            coros.append(asyncio.wait_for(coro, timeout=per_source_timeout))
         else:
             coros.append(coro)
 
     start = _time.perf_counter()
-    results = await _asyncio.gather(*coros, return_exceptions=True)
+    results = await asyncio.gather(*coros, return_exceptions=True)
     total_ms = (_time.perf_counter() - start) * 1000
 
     all_results: list[dict] = []
@@ -279,14 +280,17 @@ async def parallel_search_gather(
 
     for name, result in zip(source_names_input, results):
         if isinstance(result, BaseException):
-            if isinstance(result, _asyncio.TimeoutError):
+            if isinstance(result, asyncio.TimeoutError):
                 logger.info("Search source '%s' timed out", name)
             else:
                 logger.info("Search source '%s' failed: %s", name, type(result).__name__)
             source_timings.append(f"{name}=FAIL")
             continue
         if isinstance(result, list) and result:
-            all_results.extend(result)
+            all_results.extend(
+                normalize_results(result, source=name,
+                                  content_key="content", score_key="similarity")
+            )
             contributing_sources.append(name)
             source_timings.append(f"{name}={len(result)}hits")
         elif hasattr(result, "memories") and result.memories:
@@ -381,7 +385,7 @@ async def deep_recall_search(
         Dict with keys: memories (list[dict]), relations (list[dict]),
         search_sources (list[str]), query (str).
     """
-    import asyncio as _asyncio
+
 
     expanded = expand_query(query)
     oversample = deps.config.retrieval_oversample_factor
@@ -435,10 +439,10 @@ async def deep_recall_search(
     source_names = [name for name, _ in searches]
     per_source_timeout = deps.config.service_timeout_seconds
     coros = [
-        _asyncio.wait_for(coro, timeout=per_source_timeout)
+        asyncio.wait_for(coro, timeout=per_source_timeout)
         for _, coro in searches
     ]
-    raw_results = await _asyncio.gather(*coros, return_exceptions=True)
+    raw_results = await asyncio.gather(*coros, return_exceptions=True)
 
     # --- Process results ---
     all_memories: list[dict] = []
@@ -586,7 +590,7 @@ async def run_review_learn_pipeline(
     from second_brain.models import get_agent_model
 
     # Step 1: Review (per-agent model resolution)
-    review_model = get_agent_model("review", deps.config) if deps else model
+    review_model = get_agent_model("review", deps.config)
     review_result = await run_full_review(
         content=content,
         content_type=content_type,
@@ -595,7 +599,7 @@ async def run_review_learn_pipeline(
     )
 
     # Step 2: Learn from review (per-agent model resolution)
-    learn_model = get_agent_model("learn", deps.config) if deps else model
+    learn_model = get_agent_model("learn", deps.config)
     strengths = "\n".join(review_result.top_strengths or [])
     issues = "\n".join(review_result.critical_issues or [])
     overall_score = review_result.overall_score
@@ -829,56 +833,63 @@ async def run_pipeline(
         agent, description = registry[step_name]
         logger.info("Pipeline step %d/%d: %s (%s)", i + 1, len(steps), step_name, description)
 
+        step_timeout = deps.config.api_timeout_seconds
+        if step_name == "review":
+            step_timeout *= deps.config.mcp_review_timeout_multiplier
         try:
-            # Per-step model resolution
-            from second_brain.models import get_agent_model
-            step_model = get_agent_model(step_name, deps.config) if deps else model
+            async with asyncio.timeout(step_timeout):
+                # Per-step model resolution
+                from second_brain.models import get_agent_model
+                step_model = get_agent_model(step_name, deps.config)
 
-            # Special handling for review — uses run_full_review()
-            if step_name == "review":
-                from second_brain.agents.review import run_full_review
-                # Use previous step's output as content to review
-                content_to_review = current_context
-                if "create" in results:
-                    content_to_review = str(results["create"])
-                review_result = await run_full_review(
-                    content=content_to_review,
-                    deps=deps,
-                    model=step_model,
-                    content_type=content_type,
-                )
-                results[step_name] = review_result
+                # Special handling for review — uses run_full_review()
+                if step_name == "review":
+                    from second_brain.agents.review import run_full_review
+                    # Use previous step's output as content to review
+                    content_to_review = current_context
+                    if "create" in results:
+                        content_to_review = str(results["create"])
+                    review_result = await run_full_review(
+                        content=content_to_review,
+                        deps=deps,
+                        model=step_model,
+                        content_type=content_type,
+                    )
+                    results[step_name] = review_result
+                    current_context = (
+                        f"{current_context}\n\n"
+                        f"[Review result]: Score {review_result.overall_score}/10 — "
+                        f"{review_result.verdict}\n"
+                        f"Strengths: {', '.join(review_result.top_strengths[:3])}\n"
+                        f"Issues: {', '.join(review_result.critical_issues[:3])}"
+                    )
+                    continue
+
+                # Standard agent execution
+                kwargs = {"deps": deps, "usage_limits": limits}
+                if step_model is not None:
+                    kwargs["model"] = step_model
+
+                result = await agent.run(current_context, **kwargs)
+                results[step_name] = result.output
+
+                # Build context for next step
+                output_str = str(result.output)
+                if hasattr(result.output, "summary") and result.output.summary:
+                    output_str = result.output.summary
+                elif hasattr(result.output, "draft") and result.output.draft:
+                    output_str = result.output.draft
+                elif hasattr(result.output, "answer") and result.output.answer:
+                    output_str = result.output.answer
+
                 current_context = (
-                    f"{current_context}\n\n"
-                    f"[Review result]: Score {review_result.overall_score}/10 — "
-                    f"{review_result.verdict}\n"
-                    f"Strengths: {', '.join(review_result.top_strengths[:3])}\n"
-                    f"Issues: {', '.join(review_result.critical_issues[:3])}"
+                    f"{initial_prompt}\n\n"
+                    f"[Context from {step_name}]: {output_str}"
                 )
-                continue
 
-            # Standard agent execution
-            kwargs = {"deps": deps, "usage_limits": limits}
-            if step_model is not None:
-                kwargs["model"] = step_model
-
-            result = await agent.run(current_context, **kwargs)
-            results[step_name] = result.output
-
-            # Build context for next step
-            output_str = str(result.output)
-            if hasattr(result.output, "summary") and result.output.summary:
-                output_str = result.output.summary
-            elif hasattr(result.output, "draft") and result.output.draft:
-                output_str = result.output.draft
-            elif hasattr(result.output, "answer") and result.output.answer:
-                output_str = result.output.answer
-
-            current_context = (
-                f"{initial_prompt}\n\n"
-                f"[Context from {step_name}]: {output_str}"
-            )
-
+        except TimeoutError:
+            logger.error("Pipeline step '%s' timed out after %ss", step_name, step_timeout)
+            results[step_name] = {"error": f"Step timed out after {step_timeout}s"}
         except Exception as e:
             logger.error("Pipeline step '%s' failed: %s", step_name, e)
             results[step_name] = {"error": str(e)}

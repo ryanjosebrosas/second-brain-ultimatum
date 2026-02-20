@@ -2097,3 +2097,40 @@ class TestFormatMemoriesSourceTag:
         result = format_memories(memories)
         assert "[mem0]" in result
         assert "[hybrid:memory_content]" in result
+
+
+class TestParallelSearchGatherNormalization:
+    """Tests that parallel_search_gather normalizes all result types."""
+
+    async def test_list_results_are_normalized(self):
+        from second_brain.agents.utils import parallel_search_gather
+
+        async def mock_hybrid_search():
+            return [
+                {"content": "hybrid result", "similarity": 0.85, "title": "Pattern A"},
+            ]
+
+        results, sources = await parallel_search_gather(
+            [("hybrid", mock_hybrid_search())],
+        )
+        assert len(results) == 1
+        assert "memory" in results[0], "List results should be normalized to canonical format"
+        assert "score" in results[0]
+        assert "source" in results[0]
+        assert results[0]["source"] == "hybrid"
+
+    async def test_search_result_objects_are_normalized(self):
+        from unittest.mock import MagicMock
+        from second_brain.agents.utils import parallel_search_gather
+
+        async def mock_mem0_search():
+            result = MagicMock()
+            result.memories = [{"memory": "mem0 result", "score": 0.9}]
+            return result
+
+        results, sources = await parallel_search_gather(
+            [("mem0", mock_mem0_search())],
+        )
+        assert len(results) == 1
+        assert "memory" in results[0]
+        assert results[0]["source"] == "mem0"

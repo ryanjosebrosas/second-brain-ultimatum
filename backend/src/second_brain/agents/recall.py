@@ -1,11 +1,13 @@
 """RecallAgent — semantic memory search across Mem0 and Supabase."""
 
+import asyncio
 import logging
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     deduplicate_results,
+    expand_query,
     format_memories,
     format_relations,
     normalize_results,
@@ -61,8 +63,8 @@ async def search_semantic_memory(
 ) -> str:
     """Search Mem0 semantic memory and pgvector in parallel for relevant content."""
     try:
-        import asyncio as _asyncio
-        from second_brain.agents.utils import expand_query
+
+
 
         expanded = expand_query(query)
         oversample = ctx.deps.config.retrieval_oversample_factor
@@ -88,7 +90,7 @@ async def search_semantic_memory(
 
         # Execute concurrently
         if hybrid_coro:
-            mem0_result, hybrid_result = await _asyncio.gather(
+            mem0_result, hybrid_result = await asyncio.gather(
                 mem0_coro, hybrid_coro, return_exceptions=True,
             )
         else:
@@ -130,8 +132,8 @@ async def search_patterns(
 ) -> str:
     """Search the pattern registry using hybrid + semantic search in parallel."""
     try:
-        import asyncio as _asyncio
-        from second_brain.agents.utils import expand_query
+
+
 
         formatted = []
         query_text = topic or "patterns"
@@ -141,8 +143,13 @@ async def search_patterns(
         coros = {}
 
         # Path A: Hybrid search (semantic + keyword via pgvector + FTS)
+        embedding = None
         if ctx.deps.embedding_service:
-            embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            try:
+                embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            except Exception:
+                logger.debug("Embedding failed in search_patterns, skipping hybrid search")
+        if embedding:
             coros["hybrid"] = ctx.deps.storage_service.hybrid_search(
                 query_text=query_text,
                 query_embedding=embedding,
@@ -163,7 +170,7 @@ async def search_patterns(
 
         # Execute in parallel
         if len(coros) >= 2:
-            results = await _asyncio.gather(
+            results = await asyncio.gather(
                 *coros.values(), return_exceptions=True,
             )
             result_map = dict(zip(coros.keys(), results))
@@ -175,33 +182,35 @@ async def search_patterns(
                 except Exception as exc:
                     result_map[key] = exc
 
-        # Process hybrid results
+        # Collect all results for unified reranking
+        all_pattern_results = []
+
+        # Hybrid results (Supabase)
         hybrid_result = result_map.get("hybrid")
         if hybrid_result and not isinstance(hybrid_result, BaseException):
-            if hybrid_result:
-                formatted.append("## Pattern Matches (hybrid)")
-                for p in hybrid_result:
-                    title = p.get("title", "Unknown")
-                    content = p.get("content", "")[:ctx.deps.config.pattern_preview_limit]
-                    sim = p.get("similarity", 0)
-                    search_type = p.get("search_type", "semantic")
-                    formatted.append(f"- [{sim:.3f}|{search_type}] {title}: {content}")
+            all_pattern_results.extend(
+                normalize_results(hybrid_result, source="hybrid",
+                                  content_key="content", score_key="similarity")
+            )
 
-        # Process Mem0 results
-        semantic_results = []
+        # Semantic results (Mem0)
         semantic_relations = []
         mem0_result = result_map.get("mem0")
         if mem0_result and not isinstance(mem0_result, BaseException):
-            semantic_results = mem0_result.memories
+            all_pattern_results.extend(
+                normalize_results(mem0_result.memories, source="mem0")
+            )
             semantic_relations = mem0_result.relations
         elif isinstance(mem0_result, BaseException):
             logger.debug("Semantic pattern search failed: %s", mem0_result)
 
-        semantic_results = await rerank_memories(ctx.deps, topic or "patterns", semantic_results)
+        # Deduplicate and rerank as a unified set
+        all_pattern_results = deduplicate_results(all_pattern_results)
+        all_pattern_results = await rerank_memories(ctx.deps, topic or "patterns", all_pattern_results)
 
-        if semantic_results:
-            formatted.append("\n## Semantic Matches (Mem0)")
-            formatted.append(format_memories(semantic_results))
+        if all_pattern_results:
+            formatted.append("## Pattern Matches")
+            formatted.append(format_memories(all_pattern_results))
 
         # Path C: Exact-match fallback (only if no results from A or B)
         if not formatted:
@@ -235,14 +244,19 @@ async def search_experiences(
         experiences = []
 
         # Semantic search path (preferred when query + embedding service available)
+        embedding = None
         if query and ctx.deps.embedding_service:
-            embedding = await ctx.deps.embedding_service.embed_query(query)
+            try:
+                embedding = await ctx.deps.embedding_service.embed_query(query)
+            except Exception:
+                logger.debug("Embedding failed in search_experiences, skipping semantic search")
+        if embedding:
             experiences = await ctx.deps.storage_service.search_experiences_semantic(
                 embedding=embedding,
                 limit=ctx.deps.config.experience_limit,
             )
 
-        # Fallback / supplement: exact-match filter
+        # Fallback: exact-match filter when semantic search returns nothing
         if not experiences:
             experiences = await ctx.deps.storage_service.get_experiences(category=category)
 
@@ -273,14 +287,19 @@ async def search_examples(
         examples = []
 
         # Semantic search path (preferred when query + embedding service available)
+        embedding = None
         if query and ctx.deps.embedding_service:
-            embedding = await ctx.deps.embedding_service.embed_query(query)
+            try:
+                embedding = await ctx.deps.embedding_service.embed_query(query)
+            except Exception:
+                logger.debug("Embedding failed in search_examples, skipping semantic search")
+        if embedding:
             examples = await ctx.deps.storage_service.search_examples_semantic(
                 embedding=embedding,
                 limit=ctx.deps.config.memory_search_limit,
             )
 
-        # Fallback / supplement: exact-match filter
+        # Fallback: exact-match filter when semantic search returns nothing
         if not examples:
             examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
 

@@ -30,9 +30,15 @@ def _validate_mcp_input(
     label: str = "input",
     max_length: int | None = None,
 ) -> str:
-    """Validate MCP tool text input."""
+    """Validate MCP tool text input.
+
+    max_length priority: explicit param > deps config > 10000 fallback.
+    """
     if max_length is None:
-        max_length = 10000  # fallback if called before deps available
+        if _deps is not None:
+            max_length = _deps.config.max_input_length
+        else:
+            max_length = 10000  # fallback if called before deps available
     if not text or not text.strip():
         raise ValueError(f"{label} cannot be empty")
     if len(text) > max_length:
@@ -124,7 +130,7 @@ def init_deps() -> None:
         _deps = create_deps()
         _model = get_model(_deps.config)
         _agent_models = {}
-        logger.warning("Dependencies initialized successfully")
+        logger.info("Dependencies initialized successfully")
     except Exception as e:
         _deps_failed = True
         _deps_error = str(e)
@@ -223,24 +229,24 @@ async def quick_recall(query: str, limit: int = 10) -> str:
         query: What to search for (e.g., "content patterns", "client feedback")
         limit: Maximum results after dedup + reranking (default: 10)
     """
-    deps = _get_deps()
     try:
-        query = _validate_mcp_input(query, label="query", max_length=deps.config.max_input_length)
+        query = _validate_mcp_input(query, label="query")
     except ValueError as e:
         return str(e)
+    deps = _get_deps()
 
     timeout = deps.config.api_timeout_seconds
 
-    # Auto-upgrade complex queries to deep recall
-    from second_brain.agents.utils import classify_query_complexity
-    complexity = classify_query_complexity(query, deps.config.complex_query_word_threshold)
-    logger.info("quick_recall complexity=%s query=%r", complexity, query[:80])
-    if complexity == "complex":
-        logger.info("quick_recall routing to recall_deep for complex query")
-        return await recall_deep(query, limit=limit)
-
     try:
         async with asyncio.timeout(timeout):
+            # Auto-upgrade complex queries to deep recall
+            from second_brain.agents.utils import classify_query_complexity
+            complexity = classify_query_complexity(query, deps.config.complex_query_word_threshold)
+            logger.info("quick_recall complexity=%s query=%r", complexity, query[:80])
+            if complexity == "complex":
+                logger.info("quick_recall routing to recall_deep for complex query")
+                return await recall_deep(query, limit=limit)
+
             from second_brain.agents.utils import (
                 expand_query,
                 deduplicate_results,
@@ -250,7 +256,6 @@ async def quick_recall(query: str, limit: int = 10) -> str:
                 rerank_memories,
                 search_with_graph_fallback,
             )
-            import asyncio as _asyncio
 
             # Step 1: Expand query with domain synonyms
             expanded = expand_query(query)
@@ -277,7 +282,7 @@ async def quick_recall(query: str, limit: int = 10) -> str:
 
             # Execute concurrently
             if hybrid_coro:
-                mem0_result, hybrid_result = await _asyncio.gather(
+                mem0_result, hybrid_result = await asyncio.gather(
                     mem0_coro, hybrid_coro, return_exceptions=True,
                 )
             else:
@@ -357,11 +362,11 @@ async def recall_deep(query: str, limit: int = 15) -> str:
                enterprise client engagement approaches")
         limit: Maximum results after dedup + reranking (default: 15)
     """
-    deps = _get_deps()
     try:
-        query = _validate_mcp_input(query, label="query", max_length=deps.config.max_input_length)
+        query = _validate_mcp_input(query, label="query")
     except ValueError as e:
         return str(e)
+    deps = _get_deps()
 
     timeout = deps.config.api_timeout_seconds
 
@@ -580,6 +585,8 @@ async def learn_image(image_url: str, context: str = "", category: str = "visual
                 )
             if embeddings:
                 results.append(f"Multimodal embedding generated ({len(embeddings[0])} dims)")
+        except ImportError:
+            results.append("Embedding skipped: Pillow (PIL) is required for base64 image processing. Install with: pip install Pillow")
         except ValueError as e:
             results.append(f"Embedding skipped: {e}")
         except Exception as e:
@@ -818,6 +825,10 @@ async def multimodal_vector_search(
         return f"Multimodal search timed out after {timeout}s."
     except ValueError as e:
         return str(e)
+    except Exception as e:
+        logger.error("Multimodal vector search failed: %s", type(e).__name__)
+        logger.debug("Multimodal vector search error detail: %s", e)
+        return f"Multimodal search encountered an error: {type(e).__name__}. Check embedding service configuration."
 
     if not results:
         return f"No multimodal matches found in '{table}'."
@@ -1343,7 +1354,7 @@ async def graph_advanced_search(
     if not deps.graphiti_service:
         return "Advanced search unavailable — Graphiti not configured."
     try:
-        labels = [l.strip() for l in node_labels.split(",") if l.strip()] or None
+        labels = [lbl.strip() for lbl in node_labels.split(",") if lbl.strip()] or None
         types = [t.strip() for t in edge_types.split(",") if t.strip()] or None
         async with asyncio.timeout(deps.config.api_timeout_seconds):
             result = await deps.graphiti_service.advanced_search(
@@ -2398,12 +2409,17 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
     else:
         step_list = [s.strip() for s in steps.split(",") if s.strip()]
 
-    results = await run_pipeline(
-        steps=step_list,
-        initial_prompt=request,
-        deps=deps,
-        model=model,
-    )
+    pipeline_timeout = deps.config.api_timeout_seconds * max(len(step_list), 1) * deps.config.mcp_review_timeout_multiplier
+    try:
+        async with asyncio.timeout(pipeline_timeout):
+            results = await run_pipeline(
+                steps=step_list,
+                initial_prompt=request,
+                deps=deps,
+                model=model,
+            )
+    except TimeoutError:
+        return f"Pipeline timed out after {pipeline_timeout}s ({len(step_list)} steps). Try fewer steps or a simpler request."
     final = results.get("final")
     return str(final) if final else "Pipeline completed with no output."
 
