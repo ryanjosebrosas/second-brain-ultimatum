@@ -792,3 +792,347 @@ class TestTimeoutWrapping:
         service._client.add_episode = slow_add
         # Should not raise
         await service.add_episode("test content")
+
+
+class TestRetryDecorator:
+    """Tests for _GRAPHITI_RETRY tenacity decorator."""
+
+    async def test_retry_decorator_exists(self):
+        from second_brain.services.graphiti import _GRAPHITI_RETRY
+        assert _GRAPHITI_RETRY is not None
+
+    async def test_search_retries_on_connection_error(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_client = AsyncMock()
+        service._client = mock_client
+        # First call raises ConnectionError, second succeeds
+        mock_edge = MagicMock()
+        mock_edge.source_node_name = "A"
+        mock_edge.fact = "rel"
+        mock_edge.target_node_name = "B"
+        mock_client.search.side_effect = [ConnectionError("conn failed"), [mock_edge]]
+        # Remove search_ to avoid group_id branch
+        if hasattr(mock_client, "search_"):
+            del mock_client.search_
+        result = await service.search("test")
+        assert mock_client.search.call_count == 2
+        assert len(result) == 1
+
+    async def test_search_no_retry_on_value_error(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_client = AsyncMock()
+        service._client = mock_client
+        mock_client.search.side_effect = ValueError("bad query")
+        if hasattr(mock_client, "search_"):
+            del mock_client.search_
+        result = await service.search("test")
+        assert mock_client.search.call_count == 1
+        assert result == []
+
+
+class TestGetEpisodeCountOptimized:
+    """Tests for O(1) get_episode_count using COUNT query."""
+
+    async def test_count_uses_cypher_not_full_scan(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([{"cnt": 42}], None, None)
+        service._client = MagicMock(driver=mock_driver)
+        count = await service.get_episode_count("user1")
+        assert count == 42
+        # Verify it used COUNT query, not get_episodes
+        query_arg = mock_driver.execute_query.call_args[0][0]
+        assert "count(e)" in query_arg.lower()
+
+    async def test_count_zero_when_no_records(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(driver=mock_driver)
+        count = await service.get_episode_count("user1")
+        assert count == 0
+
+
+class TestGetEpisodeById:
+    """Tests for get_episode_by_id O(1) lookup."""
+
+    async def test_returns_episode_dict(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = (
+            [{"id": "uuid-123", "content": "test content", "source": "brain", "created_at": "2024-01-01"}],
+            None, None,
+        )
+        service._client = MagicMock(driver=mock_driver)
+        ep = await service.get_episode_by_id("uuid-123")
+        assert ep is not None
+        assert ep["id"] == "uuid-123"
+        assert ep["content"] == "test content"
+
+    async def test_returns_none_when_not_found(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(driver=mock_driver)
+        ep = await service.get_episode_by_id("nonexistent")
+        assert ep is None
+
+
+class TestSearchEntities:
+    """Tests for search_entities Cypher query."""
+
+    async def test_returns_entity_dicts(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = (
+            [{"uuid": "e1", "name": "Alice", "summary": "A person", "labels": ["Person"], "created_at": None}],
+            None, None,
+        )
+        service._client = MagicMock(driver=mock_driver)
+        entities = await service.search_entities("Alice")
+        assert len(entities) == 1
+        assert entities[0]["name"] == "Alice"
+        assert entities[0]["summary"] == "A person"
+
+    async def test_empty_on_no_results(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(driver=mock_driver)
+        entities = await service.search_entities("nothing")
+        assert entities == []
+
+    async def test_label_fallback(self, graphiti_config):
+        """Should try Entity first, then EntityNode."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        # First call (Entity label) returns empty, second call (EntityNode) returns data
+        mock_driver.execute_query.side_effect = [
+            ([], None, None),
+            ([{"uuid": "e1", "name": "Bob", "summary": "", "labels": [], "created_at": None}], None, None),
+        ]
+        service._client = MagicMock(driver=mock_driver)
+        entities = await service.search_entities("Bob")
+        assert len(entities) == 1
+        assert entities[0]["name"] == "Bob"
+        assert mock_driver.execute_query.call_count == 2
+
+    async def test_group_id_filtering(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = (
+            [{"uuid": "e1", "name": "Alice", "summary": "", "labels": [], "created_at": None}],
+            None, None,
+        )
+        service._client = MagicMock(driver=mock_driver)
+        await service.search_entities("Alice", group_id="user1")
+        # Verify Cypher includes group_id filter
+        query_arg = mock_driver.execute_query.call_args[0][0]
+        assert "group_id" in query_arg
+
+    async def test_returns_empty_when_not_initialized(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.search_entities("test")
+        assert result == []
+
+
+class TestGetEntityContext:
+    """Tests for get_entity_context Cypher query."""
+
+    async def test_returns_entity_with_relationships(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = (
+            [{
+                "uuid": "e1", "name": "Alice", "summary": "A person",
+                "outgoing": [
+                    {"type": "KNOWS", "fact": "knows well", "target_name": "Bob", "target_uuid": "e2", "direction": "outgoing"},
+                ],
+                "incoming": [
+                    {"type": "WORKS_AT", "fact": "employed", "source_name": "Corp", "source_uuid": "e3", "direction": "incoming"},
+                ],
+            }],
+            None, None,
+        )
+        service._client = MagicMock(driver=mock_driver)
+        ctx = await service.get_entity_context("e1")
+        assert ctx["entity"]["name"] == "Alice"
+        assert len(ctx["relationships"]) == 2
+
+    async def test_returns_none_entity_when_not_found(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(driver=mock_driver)
+        ctx = await service.get_entity_context("nonexistent")
+        assert ctx["entity"] is None
+        assert ctx["relationships"] == []
+
+    async def test_returns_default_when_not_initialized(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        ctx = await service.get_entity_context("e1")
+        assert ctx["entity"] is None
+
+
+class TestTraverseNeighbors:
+    """Tests for traverse_neighbors BFS traversal."""
+
+    async def test_cypher_fallback(self, graphiti_config):
+        """When search_ not available, falls back to Cypher variable-length path."""
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = (
+            [{"source": "Alice", "relationship": "KNOWS", "target": "Bob", "fact": "friends"}],
+            None, None,
+        )
+        # Use spec=[] so hasattr(client, "search_") returns False
+        service._client = MagicMock(spec=["driver"])
+        service._client.driver = mock_driver
+        result = await service.traverse_neighbors("e1")
+        assert len(result) == 1
+        assert result[0]["source"] == "Alice"
+
+    async def test_max_hops_capped_at_5(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(spec=["driver"])
+        service._client.driver = mock_driver
+        await service.traverse_neighbors("e1", max_hops=10)
+        query_arg = mock_driver.execute_query.call_args[0][0]
+        assert "*1..5" in query_arg
+
+    async def test_empty_on_no_connections(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([], None, None)
+        service._client = MagicMock(spec=["driver"])
+        service._client.driver = mock_driver
+        result = await service.traverse_neighbors("e1")
+        assert result == []
+
+
+class TestSearchCommunities:
+    """Tests for search_communities via search_ API."""
+
+    async def test_returns_community_dicts(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_community = MagicMock()
+        mock_community.uuid = "c1"
+        mock_community.name = "Engineering"
+        mock_community.summary = "Engineering team"
+        mock_raw = MagicMock()
+        mock_raw.communities = [mock_community]
+        service._client = AsyncMock()
+        service._client.search_ = AsyncMock(return_value=mock_raw)
+        result = await service.search_communities("engineering")
+        assert len(result) == 1
+        assert result[0]["name"] == "Engineering"
+
+    async def test_empty_when_search_unavailable(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = MagicMock(spec=["search", "driver"])
+        result = await service.search_communities("test")
+        assert result == []
+
+    async def test_returns_empty_when_not_initialized(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.search_communities("test")
+        assert result == []
+
+
+class TestAdvancedSearch:
+    """Tests for advanced_search with filters."""
+
+    async def test_returns_edges_nodes_communities(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_edge = MagicMock()
+        mock_edge.source_node_name = "A"
+        mock_edge.fact = "knows"
+        mock_edge.target_node_name = "B"
+        mock_edge.uuid = "edge1"
+        mock_node = MagicMock()
+        mock_node.uuid = "n1"
+        mock_node.name = "NodeA"
+        mock_node.summary = "A node"
+        mock_community = MagicMock()
+        mock_community.uuid = "c1"
+        mock_community.name = "Community1"
+        mock_community.summary = "A community"
+        mock_raw = MagicMock()
+        mock_raw.edges = [mock_edge]
+        mock_raw.nodes = [mock_node]
+        mock_raw.communities = [mock_community]
+        service._client = AsyncMock()
+        service._client.search_ = AsyncMock(return_value=mock_raw)
+        result = await service.advanced_search("test")
+        assert len(result["edges"]) == 1
+        assert len(result["nodes"]) == 1
+        assert len(result["communities"]) == 1
+
+    async def test_falls_back_to_basic_search(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_edge = MagicMock()
+        mock_edge.source_node_name = "X"
+        mock_edge.fact = "rel"
+        mock_edge.target_node_name = "Y"
+        # Mock basic search path
+        service._client = AsyncMock()
+        service._client.search = AsyncMock(return_value=[mock_edge])
+        # Remove search_ so it falls back
+        del service._client.search_
+        result = await service.advanced_search("test")
+        assert len(result["edges"]) == 1
+        assert result["nodes"] == []
+        assert result["communities"] == []
+
+    async def test_returns_empty_when_not_initialized(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.advanced_search("test")
+        assert result == {"edges": [], "nodes": [], "communities": []}

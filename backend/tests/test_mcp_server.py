@@ -823,6 +823,198 @@ class TestGraphHealth:
         assert "Connection timeout" in result
 
 
+class TestGraphEntitySearch:
+    """Test graph_entity_search MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unavailable_without_graphiti(self, mock_get_deps):
+        mock_deps = _mock_deps()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_search
+        result = await graph_entity_search(query="test")
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_returns_formatted_entities(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search_entities = AsyncMock(return_value=[
+            {"name": "Alice", "summary": "A person", "labels": ["Person"], "uuid": "e1", "created_at": None},
+        ])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_search
+        result = await graph_entity_search(query="Alice")
+        assert "Alice" in result
+        assert "A person" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_empty_results(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search_entities = AsyncMock(return_value=[])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_search
+        result = await graph_entity_search(query="nothing")
+        assert "no entities" in result.lower()
+
+
+class TestGraphEntityContext:
+    """Test graph_entity_context MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unavailable_without_graphiti(self, mock_get_deps):
+        mock_deps = _mock_deps()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_context
+        result = await graph_entity_context(entity_uuid="e1")
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_returns_entity_with_relationships(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.get_entity_context = AsyncMock(return_value={
+            "entity": {"uuid": "e1", "name": "Alice", "summary": "A person"},
+            "relationships": [
+                {"direction": "outgoing", "type": "KNOWS", "fact": "friends", "connected_entity": "Bob", "connected_uuid": "e2"},
+            ],
+        })
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_context
+        result = await graph_entity_context(entity_uuid="e1")
+        assert "Alice" in result
+        assert "Bob" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_entity_not_found(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.get_entity_context = AsyncMock(return_value={
+            "entity": None, "relationships": [],
+        })
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_entity_context
+        result = await graph_entity_context(entity_uuid="nonexistent")
+        assert "not found" in result.lower()
+
+
+class TestGraphTraverse:
+    """Test graph_traverse MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unavailable_without_graphiti(self, mock_get_deps):
+        mock_deps = _mock_deps()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_traverse
+        result = await graph_traverse(entity_uuid="e1")
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_returns_traversal_results(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.traverse_neighbors = AsyncMock(return_value=[
+            {"source": "Alice", "relationship": "knows", "target": "Bob"},
+        ])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_traverse
+        result = await graph_traverse(entity_uuid="e1")
+        assert "Alice" in result
+        assert "knows" in result
+        assert "Bob" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_no_connections(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.traverse_neighbors = AsyncMock(return_value=[])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_traverse
+        result = await graph_traverse(entity_uuid="e1")
+        assert "no connections" in result.lower()
+
+
+class TestGraphCommunities:
+    """Test graph_communities MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unavailable_without_graphiti(self, mock_get_deps):
+        mock_deps = _mock_deps()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_communities
+        result = await graph_communities()
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_returns_communities(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search_communities = AsyncMock(return_value=[
+            {"uuid": "c1", "name": "Engineering", "summary": "The engineering team"},
+        ])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_communities
+        result = await graph_communities(query="engineering")
+        assert "Engineering" in result
+        assert "engineering team" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_no_communities(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search_communities = AsyncMock(return_value=[])
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_communities
+        result = await graph_communities()
+        assert "no communities" in result.lower()
+
+
+class TestGraphAdvancedSearch:
+    """Test graph_advanced_search MCP tool."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_unavailable_without_graphiti(self, mock_get_deps):
+        mock_deps = _mock_deps()
+        mock_deps.graphiti_service = None
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_advanced_search
+        result = await graph_advanced_search(query="test")
+        assert "unavailable" in result.lower()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_returns_edges_nodes_communities(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.advanced_search = AsyncMock(return_value={
+            "edges": [{"source": "A", "relationship": "knows", "target": "B"}],
+            "nodes": [{"name": "NodeA", "summary": "A node", "uuid": "n1"}],
+            "communities": [{"name": "CommA", "summary": "A community", "uuid": "c1"}],
+        })
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_advanced_search
+        result = await graph_advanced_search(query="test")
+        assert "Relationships" in result
+        assert "A --[knows]--> B" in result
+        assert "NodeA" in result
+        assert "CommA" in result
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_no_results(self, mock_get_deps):
+        mock_graphiti = AsyncMock()
+        mock_graphiti.advanced_search = AsyncMock(return_value={
+            "edges": [], "nodes": [], "communities": [],
+        })
+        mock_deps = _mock_deps(graphiti_service=mock_graphiti)
+        mock_get_deps.return_value = mock_deps
+        from second_brain.mcp_server import graph_advanced_search
+        result = await graph_advanced_search(query="nothing")
+        assert "no results" in result.lower()
+
+
 class TestConsolidateBrain:
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
