@@ -25,18 +25,33 @@ from second_brain.agents.review import run_full_review
 
 logger = logging.getLogger(__name__)
 
-MAX_INPUT_LENGTH = 10000  # Characters
-
-
-def _validate_mcp_input(text: str, label: str = "input") -> str:
+def _validate_mcp_input(
+    text: str,
+    label: str = "input",
+    max_length: int = 10000,
+) -> str:
     """Validate MCP tool text input."""
     if not text or not text.strip():
         raise ValueError(f"{label} cannot be empty")
-    if len(text) > MAX_INPUT_LENGTH:
+    if len(text) > max_length:
         raise ValueError(
-            f"{label} too long ({len(text)} chars, max {MAX_INPUT_LENGTH})"
+            f"{label} too long ({len(text)} chars, max {max_length})"
         )
     return text.strip()
+
+
+def _validate_url_scheme(url: str, label: str = "URL") -> str:
+    """Validate URL uses HTTP(S) scheme. Allows data URIs for base64 images."""
+    if not url or not url.strip():
+        raise ValueError(f"{label} cannot be empty")
+    url = url.strip()
+    if url.startswith("data:"):
+        return url  # Allow data URIs for base64 images
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(f"{label} must use HTTP(S) scheme.")
+    return url
 
 
 # Initialize server
@@ -371,8 +386,10 @@ async def learn_image(image_url: str, context: str = "", category: str = "visual
         context: Optional text description or context about the image.
         category: Memory category for filtering (default: visual).
     """
-    if not image_url or not image_url.strip():
-        return "image_url cannot be empty"
+    try:
+        image_url = _validate_url_scheme(image_url, label="image_url")
+    except ValueError as e:
+        return str(e)
 
     deps = _get_deps()
     timeout = deps.config.api_timeout_seconds
@@ -455,8 +472,10 @@ async def learn_document(
         context: Optional text description or context about the document.
         category: Memory category for filtering (default: document).
     """
-    if not document_url or not document_url.strip():
-        return "document_url cannot be empty"
+    try:
+        document_url = _validate_url_scheme(document_url, label="document_url")
+    except ValueError as e:
+        return str(e)
 
     valid_types = {"pdf", "mdx", "txt"}
     if document_type not in valid_types:
@@ -521,8 +540,10 @@ async def learn_video(video_url: str, context: str = "", category: str = "video"
         context: Optional text description of the video content.
         category: Memory category for filtering (default: video).
     """
-    if not video_url or not video_url.strip():
-        return "video_url cannot be empty"
+    try:
+        video_url = _validate_url_scheme(video_url, label="video_url")
+    except ValueError as e:
+        return str(e)
 
     deps = _get_deps()
 
@@ -1463,7 +1484,8 @@ async def create_project(
             )
         return "Failed to create project."
     except Exception as e:
-        return f"Error creating project: {e}"
+        logger.error("Failed to create project: %s", e)
+        return "Failed to create project. Check server logs for details."
 
 
 @server.tool()
@@ -1492,7 +1514,8 @@ async def project_status(project_id: str) -> str:
                 parts.append(f"  - {a['artifact_type']}: {a.get('title', 'untitled')}")
         return "\n".join(parts)
     except Exception as e:
-        return f"Error getting project status: {e}"
+        logger.error("Failed to get project status: %s", e)
+        return "Failed to get project status. Check server logs for details."
 
 
 @server.tool()
@@ -1511,6 +1534,8 @@ async def advance_project(project_id: str, target_stage: str | None = None) -> s
             return f"Project not found: {project_id}"
         current = proj.get("lifecycle_stage", "planning")
         if target_stage:
+            if target_stage not in stage_order:
+                return f"Invalid stage: {target_stage}. Must be one of: {stage_order}"
             next_stage = target_stage
         else:
             try:
@@ -1523,7 +1548,8 @@ async def advance_project(project_id: str, target_stage: str | None = None) -> s
             return f"Project '{proj['name']}' advanced: {current} -> {next_stage}"
         return "Failed to advance project."
     except Exception as e:
-        return f"Error advancing project: {e}"
+        logger.error("Failed to advance project: %s", e)
+        return "Failed to advance project. Check server logs for details."
 
 
 @server.tool()
@@ -1560,7 +1586,8 @@ async def list_projects(
             parts.append("")
         return "\n".join(parts)
     except Exception as e:
-        return f"Error listing projects: {e}"
+        logger.error("Failed to list projects: %s", e)
+        return "Failed to list projects. Check server logs for details."
 
 
 @server.tool()
@@ -1597,7 +1624,8 @@ async def update_project(
         changed = ", ".join(fields.keys())
         return f"Project updated: {result.get('name', project_id)}\nChanged: {changed}"
     except Exception as e:
-        return f"Error updating project: {e}"
+        logger.error("Failed to update project: %s", e)
+        return "Failed to update project. Check server logs for details."
 
 
 @server.tool()
@@ -1626,7 +1654,8 @@ async def delete_project(project_id: str) -> str:
             return f"Deleted project: {project_name}"
         return f"Failed to delete project: {project_id}"
     except Exception as e:
-        return f"Error deleting project: {e}"
+        logger.error("Failed to delete project: %s", e)
+        return "Failed to delete project. Check server logs for details."
 
 
 @server.tool()
@@ -1667,7 +1696,8 @@ async def add_artifact(
             )
         return "Failed to add artifact."
     except Exception as e:
-        return f"Error adding artifact: {e}"
+        logger.error("Failed to add artifact: %s", e)
+        return "Failed to add artifact. Check server logs for details."
 
 
 @server.tool()
@@ -1688,7 +1718,8 @@ async def delete_artifact(artifact_id: str) -> str:
             return f"Deleted artifact: {artifact_id}"
         return f"Artifact not found: {artifact_id}"
     except Exception as e:
-        return f"Error deleting artifact: {e}"
+        logger.error("Failed to delete artifact: %s", e)
+        return "Failed to delete artifact. Check server logs for details."
 
 
 @server.tool()
@@ -1726,7 +1757,8 @@ async def search_experiences(
             parts.append("")
         return "\n".join(parts)
     except Exception as e:
-        return f"Error searching experiences: {e}"
+        logger.error("Failed to search experiences: %s", e)
+        return "Failed to search experiences. Check server logs for details."
 
 
 @server.tool()
@@ -1775,7 +1807,8 @@ async def search_patterns(
             parts.append("")
         return "\n".join(parts)
     except Exception as e:
-        return f"Error searching patterns: {e}"
+        logger.error("Failed to search patterns: %s", e)
+        return "Failed to search patterns. Check server logs for details."
 
 
 @server.tool()
@@ -1820,7 +1853,8 @@ async def ingest_example(
             )
         return "Failed to ingest example."
     except Exception as e:
-        return f"Error ingesting example: {e}"
+        logger.error("Failed to ingest example: %s", e)
+        return "Failed to ingest example. Check server logs for details."
 
 
 @server.tool()
@@ -1865,7 +1899,8 @@ async def ingest_knowledge(
             )
         return "Failed to ingest knowledge."
     except Exception as e:
-        return f"Error ingesting knowledge: {e}"
+        logger.error("Failed to ingest knowledge: %s", e)
+        return "Failed to ingest knowledge. Check server logs for details."
 
 
 @server.tool()
@@ -1893,7 +1928,8 @@ async def brain_setup() -> str:
             parts.append("\nBrain is fully configured!")
         return "\n".join(parts)
     except Exception as e:
-        return f"Error checking setup: {e}"
+        logger.error("Failed to check setup: %s", e)
+        return "Failed to check setup. Check server logs for details."
 
 
 @server.tool()
@@ -1905,7 +1941,8 @@ async def pattern_registry() -> str:
         registry = await deps.storage_service.get_pattern_registry()
         return format_pattern_registry(registry, config=deps.config)
     except Exception as e:
-        return f"Error loading pattern registry: {e}"
+        logger.error("Failed to load pattern registry: %s", e)
+        return "Failed to load pattern registry. Check server logs for details."
 
 
 # --- Operations & Advisory Agents ---
@@ -2154,7 +2191,7 @@ if __name__ == "__main__":
 
     try:
         if _transport in ("http", "sse"):
-            _host = _os.environ.get("MCP_HOST", "0.0.0.0")
+            _host = _os.environ.get("MCP_HOST", "127.0.0.1")
             _port = int(_os.environ.get("MCP_PORT", "8000"))
             logger.warning(
                 "Starting MCP server: transport=%s host=%s port=%s",

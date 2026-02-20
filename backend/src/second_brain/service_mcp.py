@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 # Initialize server with a distinct name (not "Second Brain" to avoid conflicts)
 service_server = FastMCP("Second Brain Services")
 
-MAX_INPUT_LENGTH = 10000  # Characters
-
 # Deps initialized eagerly before server.run() via init_deps()
 _deps: BrainDeps | None = None
 
@@ -53,13 +51,17 @@ async def _get_deps() -> BrainDeps:
     return _deps
 
 
-def _validate_input(text: str, label: str = "input") -> str:
+def _validate_input(
+    text: str,
+    label: str = "input",
+    max_length: int = 10000,
+) -> str:
     """Validate service MCP tool text input."""
     if not text or not text.strip():
         raise ValueError(f"{label} cannot be empty")
-    if len(text) > MAX_INPUT_LENGTH:
+    if len(text) > max_length:
         raise ValueError(
-            f"{label} too long ({len(text)} chars, max {MAX_INPUT_LENGTH})"
+            f"{label} too long ({len(text)} chars, max {max_length})"
         )
     return text.strip()
 

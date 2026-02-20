@@ -204,6 +204,10 @@ class BrainConfig(BaseSettings):
 
     # Brain
     brain_user_id: str = Field(default="", description="User ID for data isolation. Set BRAIN_USER_ID in .env.")
+    brain_api_key: str = Field(
+        default="",
+        description="API key for REST API authentication. Set BRAIN_API_KEY in .env. Leave empty to disable auth (local-only use).",
+    )
     brain_data_path: Path = Field(
         ...,
         description="Path to Second Brain markdown data",
@@ -531,6 +535,12 @@ class BrainConfig(BaseSettings):
                 "BRAIN_USER_ID is not set — data will not be user-scoped. "
                 "Set BRAIN_USER_ID in your .env for multi-user deployments."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _warn_missing_api_key(self) -> "BrainConfig":
+        if not self.brain_api_key:
+            logger.warning("BRAIN_API_KEY not set -- REST API will accept unauthenticated requests")
         return self
 
     @property

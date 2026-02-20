@@ -3,12 +3,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from second_brain.config import BrainConfig
 from second_brain.deps import create_deps
-from second_brain.models import get_model
+from second_brain.models import get_model as get_model_fn
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize BrainDeps on startup, cleanup on shutdown."""
-    config = BrainConfig()
+    config = app.state.config  # Set by create_app before lifespan runs
     logger.info("Initializing Second Brain deps for API...")
     try:
         deps = create_deps()
-        model = get_model(config)
+        model = get_model_fn(config)
         app.state.deps = deps
         app.state.model = model
         logger.info("Second Brain API initialized successfully")
@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+    app.state.config = config  # Store for auth dependency + lifespan
 
     # CORS — allow Streamlit frontend
     app.add_middleware(
@@ -52,20 +53,21 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register routers
+    # Register routers — health exempt from auth, others require API key
     from second_brain.api.routers.agents import router as agents_router
     from second_brain.api.routers.memory import router as memory_router
     from second_brain.api.routers.health import router as health_router
     from second_brain.api.routers.projects import router as projects_router
     from second_brain.api.routers.graph import router as graph_router
     from second_brain.api.routers.settings import router as settings_router
+    from second_brain.api.deps import verify_api_key
 
-    app.include_router(agents_router, prefix="/api")
-    app.include_router(memory_router, prefix="/api")
-    app.include_router(health_router, prefix="/api")
-    app.include_router(projects_router, prefix="/api")
-    app.include_router(graph_router, prefix="/api")
-    app.include_router(settings_router, prefix="/api")
+    app.include_router(health_router, prefix="/api")  # No auth — monitoring
+    app.include_router(agents_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+    app.include_router(memory_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+    app.include_router(projects_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+    app.include_router(graph_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+    app.include_router(settings_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
     return app
 
@@ -78,7 +80,6 @@ if __name__ == "__main__":
     config = BrainConfig()
     uvicorn.run(
         "second_brain.api.main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=config.api_port,
-        reload=True,
     )

@@ -3,7 +3,7 @@
 import dataclasses
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from second_brain.deps import BrainDeps
 from second_brain.api.deps import get_deps
@@ -21,7 +21,7 @@ async def brain_health(deps: BrainDeps = Depends(get_deps)):
 
 
 @router.get("/growth")
-async def growth_report(days: int = 30, deps: BrainDeps = Depends(get_deps)):
+async def growth_report(days: int = Query(default=30, ge=1, le=365), deps: BrainDeps = Depends(get_deps)):
     """Get growth report for the brain."""
     from second_brain.services.health import HealthService
     health = HealthService()
@@ -39,7 +39,7 @@ async def milestones(deps: BrainDeps = Depends(get_deps)):
 
 
 @router.get("/quality")
-async def quality_trend(days: int = 30, deps: BrainDeps = Depends(get_deps)):
+async def quality_trend(days: int = Query(default=30, ge=1, le=365), deps: BrainDeps = Depends(get_deps)):
     """Get quality trending data."""
     from second_brain.services.health import HealthService
     health = HealthService()

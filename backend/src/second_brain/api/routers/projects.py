@@ -85,6 +85,8 @@ async def advance_project(project_id: str, body: AdvanceProjectRequest, deps: Br
         raise HTTPException(404, detail=f"Project not found: {project_id}")
     current = proj.get("lifecycle_stage", "planning")
     if body.target_stage:
+        if body.target_stage not in stage_order:
+            raise HTTPException(400, detail=f"Invalid stage: {body.target_stage}. Must be one of: {stage_order}")
         next_stage = body.target_stage
     else:
         try:

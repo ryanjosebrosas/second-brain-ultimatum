@@ -3,6 +3,8 @@
 These are INPUT schemas only — output schemas live in second_brain.schemas.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -69,14 +71,18 @@ class TemplateRequest(BaseModel):
 
 class VectorSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=10000)
-    table: str = Field(default="memory_content")
+    table: Literal["memory_content", "patterns", "examples", "knowledge_repo"] = Field(
+        default="memory_content"
+    )
     limit: int = Field(default=10, ge=1, le=100)
 
 
 class MultimodalSearchRequest(BaseModel):
     query: str = Field(default="")
     image_url: str = Field(default="")
-    table: str = Field(default="memory_content")
+    table: Literal["memory_content", "patterns", "examples", "knowledge_repo"] = Field(
+        default="memory_content"
+    )
     limit: int = Field(default=10, ge=1, le=100)
 
 
