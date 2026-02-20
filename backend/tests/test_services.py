@@ -146,18 +146,31 @@ class TestVoyageServiceRetrieval:
 
 
 class TestMemoryService:
-    @patch("mem0.Memory")
-    def test_init_local(self, mock_memory_cls, mock_config):
-        """MemoryService initializes Mem0 local when no cloud key."""
+    @patch("mem0.MemoryClient")
+    def test_init_cloud(self, mock_mem0_cls, mock_config):
+        """MemoryService initializes Mem0 cloud client with API key."""
         service = MemoryService(mock_config)
-        mock_memory_cls.from_config.assert_called_once()
+        mock_mem0_cls.assert_called_once_with(api_key="test-mem0-key")
         assert service.user_id == "ryan"
 
-    @patch("mem0.Memory")
-    async def test_add(self, mock_memory_cls, mock_config):
+    def test_init_raises_without_api_key(self, tmp_path):
+        """MemoryService raises ValueError when no cloud key."""
+        config = BrainConfig(
+            mem0_api_key=None,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            model_provider="anthropic",
+            _env_file=None,
+        )
+        with pytest.raises(ValueError, match="mem0_api_key is required"):
+            MemoryService(config)
+
+    @patch("mem0.MemoryClient")
+    async def test_add(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.add.return_value = {"id": "mem-123"}
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.add("test content", metadata={"source": "test"})
@@ -165,13 +178,14 @@ class TestMemoryService:
         mock_client.add.assert_called_once()
         assert result == {"id": "mem-123"}
 
-    @patch("mem0.Memory")
-    async def test_search(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": "test pattern", "score": 0.95}
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [{"memory": "test pattern", "score": 0.95}],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         results = await service.search("test query")
@@ -180,25 +194,28 @@ class TestMemoryService:
         assert results.memories[0]["memory"] == "test pattern"
         assert results.relations == []
 
-    @patch("mem0.Memory")
-    async def test_search_with_limit(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_limit(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": f"result {i}", "score": 0.9 - i * 0.1}
-            for i in range(5)
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [
+                {"memory": f"result {i}", "score": 0.9 - i * 0.1}
+                for i in range(5)
+            ],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         results = await service.search("test", limit=2)
 
         assert len(results.memories) == 2
 
-    @patch("mem0.Memory")
-    async def test_search_non_list_result(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_non_list_result(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_client.search.return_value = {"results": []}  # non-list
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {"results": []}
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         results = await service.search("test")
@@ -206,35 +223,35 @@ class TestMemoryService:
         assert results.memories == []
         assert results.relations == []
 
-    @patch("mem0.Memory")
-    async def test_get_all(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_get_all(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.get_all.return_value = [{"id": "1"}, {"id": "2"}]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         results = await service.get_all()
 
         assert len(results) == 2
 
-    @patch("mem0.Memory")
-    async def test_get_memory_count(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_get_memory_count(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.get_all.return_value = [
             {"id": "1", "memory": "a"},
             {"id": "2", "memory": "b"},
             {"id": "3", "memory": "c"},
         ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         count = await service.get_memory_count()
         assert count == 3
 
-    @patch("mem0.Memory")
-    async def test_delete(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_delete(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         await service.delete("mem-123")
@@ -245,11 +262,11 @@ class TestMemoryService:
 class TestMemoryServiceMetadata:
     """Tests for metadata-aware MemoryService methods."""
 
-    @patch("mem0.Memory")
-    async def test_add_with_metadata(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_add_with_metadata(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.add.return_value = {"id": "mem-meta-1"}
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.add_with_metadata(
@@ -262,12 +279,12 @@ class TestMemoryServiceMetadata:
         assert call_kwargs[1]["metadata"]["category"] == "pattern"
         assert result == {"id": "mem-meta-1"}
 
-    @patch("mem0.Memory")
-    async def test_add_with_metadata_graph_enabled(self, mock_memory_cls, mock_config):
-        """Local client with graph enabled does not pass enable_graph."""
+    @patch("mem0.MemoryClient")
+    async def test_add_with_metadata_graph_enabled(self, mock_mem0_cls, mock_config):
+        """Cloud client with graph enabled passes enable_graph kwarg."""
         mock_client = MagicMock()
         mock_client.add.return_value = {"id": "mem-meta-2"}
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         await service.add_with_metadata(
@@ -275,18 +292,18 @@ class TestMemoryServiceMetadata:
             metadata={"category": "pattern"},
             enable_graph=True,
         )
-        # Local client doesn't pass enable_graph (only cloud does)
         mock_client.add.assert_called_once()
         call_kwargs = mock_client.add.call_args[1]
-        assert "enable_graph" not in call_kwargs
+        assert call_kwargs.get("enable_graph") is True
 
-    @patch("mem0.Memory")
-    async def test_search_with_filters_simple(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_simple(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": "Hook First pattern", "score": 0.9}
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [{"memory": "Hook First pattern", "score": 0.9}],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.search_with_filters(
@@ -297,12 +314,15 @@ class TestMemoryServiceMetadata:
         assert len(result.memories) == 1
         assert result.search_filters == {"category": "pattern"}
 
-    @patch("mem0.Memory")
-    async def test_search_with_filters_none(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_none(self, mock_mem0_cls, mock_config):
         """Search without filters behaves like regular search."""
         mock_client = MagicMock()
-        mock_client.search.return_value = [{"memory": "test", "score": 0.5}]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [{"memory": "test", "score": 0.5}],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.search_with_filters("test query")
@@ -310,30 +330,33 @@ class TestMemoryServiceMetadata:
         assert len(result.memories) == 1
         assert result.search_filters == {}
 
-    @patch("mem0.Memory")
-    async def test_search_with_filters_respects_limit(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_respects_limit(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": f"result {i}", "score": 0.9 - i * 0.1}
-            for i in range(5)
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [
+                {"memory": f"result {i}", "score": 0.9 - i * 0.1}
+                for i in range(5)
+            ],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.search_with_filters("test", limit=2)
 
         assert len(result.memories) == 2
 
-    @patch("mem0.Memory")
-    async def test_search_with_filters_fallback_on_type_error(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_fallback_on_type_error(self, mock_mem0_cls, mock_config):
         """If client doesn't support filters kwarg, fall back gracefully."""
         mock_client = MagicMock()
         # First call with filters raises TypeError, second without works
         mock_client.search.side_effect = [
             TypeError("unexpected keyword argument 'filters'"),
-            [{"memory": "fallback result", "score": 0.7}],
+            {"results": [{"memory": "fallback result", "score": 0.7}], "relations": []},
         ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         result = await service.search_with_filters(
@@ -344,16 +367,16 @@ class TestMemoryServiceMetadata:
         assert len(result.memories) == 1
         assert mock_client.search.call_count == 2
 
-    @patch("mem0.Memory")
-    async def test_update_memory_local(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_update_memory_cloud(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(mock_config)
         await service.update_memory("mem-123", content="Updated content")
 
         mock_client.update.assert_called_once_with(
-            memory_id="mem-123", data="Updated content"
+            memory_id="mem-123", text="Updated content"
         )
 
 
@@ -1458,65 +1481,65 @@ class TestEnhancedHealthService:
 class TestMemoryServiceErrorHandling:
     """Test MemoryService graceful degradation."""
 
-    @patch("mem0.Memory")
-    async def test_add_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_add_returns_empty_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.add.side_effect = Exception("Connection refused")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.add("test content")
         assert result == {}
 
-    @patch("mem0.Memory")
-    async def test_search_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_returns_empty_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.search.side_effect = Exception("Timeout")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.search("test query")
         assert result.memories == []
         assert result.relations == []
 
-    @patch("mem0.Memory")
-    async def test_get_all_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_get_all_returns_empty_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.get_all.side_effect = Exception("Auth failed")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.get_all()
         assert result == []
 
-    @patch("mem0.Memory")
-    async def test_delete_does_not_raise_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_delete_does_not_raise_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.delete.side_effect = Exception("Not found")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         await service.delete("nonexistent-id")  # Should not raise
 
-    @patch("mem0.Memory")
-    async def test_add_with_metadata_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_add_with_metadata_returns_empty_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.add.side_effect = Exception("API error")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.add_with_metadata("content", metadata={"key": "val"})
         assert result == {}
 
-    @patch("mem0.Memory")
-    async def test_search_with_filters_returns_empty_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_returns_empty_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.search.side_effect = Exception("DB down")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.search_with_filters("test", metadata_filters={"cat": "x"})
         assert result.memories == []
 
-    @patch("mem0.Memory")
-    async def test_update_memory_does_not_raise_on_failure(self, mock_mem_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_update_memory_does_not_raise_on_failure(self, mock_mem0_cls, mock_config):
         mock_client = MagicMock()
         mock_client.update.side_effect = Exception("Update failed")
-        mock_mem_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         await service.update_memory("mem-123", content="Updated")  # Should not raise
 
@@ -1954,54 +1977,55 @@ class TestStorageServiceProjectOperations:
 class TestMemoryServiceExtendedOperations:
     """Tests for get_by_id, delete_all, and search_by_category on MemoryService."""
 
-    @patch("mem0.Memory")
-    async def test_get_by_id_found(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_get_by_id_found(self, mock_mem0_cls, mock_config):
         """get_by_id fetches all memories and filters by ID."""
         mock_client = MagicMock()
         mock_client.get_all.return_value = [
             {"id": "mem-1", "memory": "Brand voice is direct"},
             {"id": "mem-2", "memory": "Other memory"},
         ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.get_by_id("mem-1")
         assert result is not None
         assert result["memory"] == "Brand voice is direct"
 
-    @patch("mem0.Memory")
-    async def test_get_by_id_not_found(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_get_by_id_not_found(self, mock_mem0_cls, mock_config):
         """get_by_id returns None when ID not in memory list."""
         mock_client = MagicMock()
         mock_client.get_all.return_value = [
             {"id": "mem-1", "memory": "Something"},
         ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.get_by_id("nonexistent")
         assert result is None
 
-    @patch("mem0.Memory")
-    async def test_delete_all_returns_count(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_delete_all_returns_count(self, mock_mem0_cls, mock_config):
         """delete_all iterates all memories and deletes each one."""
         mock_client = MagicMock()
         mock_client.get_all.return_value = [
             {"id": "mem-1"}, {"id": "mem-2"}, {"id": "mem-3"},
         ]
         mock_client.delete.return_value = None
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         count = await service.delete_all()
         assert count == 3
         assert mock_client.delete.call_count == 3
 
-    @patch("mem0.Memory")
-    async def test_search_by_category(self, mock_memory_cls, mock_config):
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category(self, mock_mem0_cls, mock_config):
         """search_by_category calls search with category filter."""
         mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": "voice pattern", "score": 0.9},
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
+        mock_client.search.return_value = {
+            "results": [{"memory": "voice pattern", "score": 0.9}],
+            "relations": [],
+        }
+        mock_mem0_cls.return_value = mock_client
         service = MemoryService(mock_config)
         result = await service.search_by_category("voice", query="brand")
         assert len(result.memories) == 1
@@ -2467,7 +2491,6 @@ class TestMemoryServiceResilience:
     @patch("mem0.MemoryClient")
     async def test_idle_detection_triggers_reconnect(self, mock_mem0_cls, mock_config):
         """After idle threshold, cloud client should be re-instantiated."""
-        # Return different mock instances on successive calls
         client_1 = MagicMock(name="client-1")
         client_2 = MagicMock(name="client-2")
         mock_mem0_cls.side_effect = [client_1, client_2]
@@ -2477,10 +2500,7 @@ class TestMemoryServiceResilience:
 
         # Simulate idle period
         service._last_activity = time.monotonic() - 300  # 5 min ago
-        # _is_cloud checks type().__name__ == "MemoryClient", which is False
-        # for MagicMock. Patch the property to make it think this is a cloud client.
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            service._check_idle_reconnect()
+        service._check_idle_reconnect()
 
         # Client should have been re-created
         assert service._client is client_2
@@ -2492,8 +2512,7 @@ class TestMemoryServiceResilience:
         original_client = service._client
 
         service._last_activity = time.monotonic() - 10  # 10 sec ago
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            service._check_idle_reconnect()
+        service._check_idle_reconnect()
 
         assert service._client is original_client
 
@@ -2501,13 +2520,10 @@ class TestMemoryServiceResilience:
     async def test_retry_on_connection_error(self, mock_mem0_cls, mock_config):
         """Mem0 cloud calls should retry on ConnectionError."""
         service = MemoryService(mock_config)
-        # Use side_effect list: first call raises, second succeeds
         service._client.add = MagicMock(
             side_effect=[ConnectionError("Network error"), {"id": "success"}]
         )
-        # Patch _is_cloud so the retry decorator is applied
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            result = await service.add("test content")
+        result = await service.add("test content")
         assert result.get("id") == "success"
         assert service._client.add.call_count == 2  # retried once
 
@@ -2518,8 +2534,7 @@ class TestMemoryServiceResilience:
         service._client.add = MagicMock(
             side_effect=ConnectionError("Persistent failure")
         )
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            result = await service.add("test content")
+        result = await service.add("test content")
         assert result == {}
 
 
@@ -2547,8 +2562,7 @@ class TestMem0FilterConstruction:
         mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(cloud_config)
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.search("test query")
+        await service.search("test query")
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs
@@ -2567,20 +2581,18 @@ class TestMem0FilterConstruction:
 
         service = MemoryService(cloud_config)
         metadata = {"AND": [{"category": "pattern"}, {"topic": "X"}]}
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.search_with_filters("test query", metadata_filters=metadata)
+        await service.search_with_filters("test query", metadata_filters=metadata)
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs
         assert "user_id" not in kwargs
         filters = kwargs["filters"]
-        # Should be flattened: {"AND": [user_id, wrapped_category, wrapped_topic]}
         assert "AND" in filters
         conditions = filters["AND"]
         assert {"user_id": "ryan"} in conditions
         assert {"metadata": {"category": "pattern"}} in conditions
         assert {"metadata": {"topic": "X"}} in conditions
-        assert len(conditions) == 3  # user_id + wrapped category + wrapped topic
+        assert len(conditions) == 3
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_bare_dict(self, mock_mem0_cls, cloud_config):
@@ -2590,8 +2602,7 @@ class TestMem0FilterConstruction:
         mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(cloud_config)
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.search_with_filters("test query", metadata_filters={"category": "pattern"})
+        await service.search_with_filters("test query", metadata_filters={"category": "pattern"})
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs
@@ -2610,8 +2621,7 @@ class TestMem0FilterConstruction:
         mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(cloud_config)
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.search_with_filters("test query")
+        await service.search_with_filters("test query")
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs
@@ -2626,38 +2636,13 @@ class TestMem0FilterConstruction:
         mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(cloud_config)
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.get_all()
+        await service.get_all()
 
         call_kwargs = mock_client.get_all.call_args
         _, kwargs = call_kwargs
         assert kwargs.get("user_id") == "ryan", "get_all must pass user_id as top-level kwarg"
         assert "filters" not in kwargs, "get_all does not support filters kwarg"
         assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
-
-    @patch("mem0.Memory")
-    async def test_search_local_uses_top_level_user_id(self, mock_memory_cls, tmp_path):
-        """Local/OSS client should still use top-level user_id param."""
-        config = BrainConfig(
-            mem0_api_key=None,
-            supabase_url="https://test.supabase.co",
-            supabase_key="test-key",
-            brain_data_path=tmp_path,
-            brain_user_id="ryan",
-            model_provider="anthropic",
-            _env_file=None,
-        )
-        mock_client = MagicMock()
-        mock_client.search.return_value = []
-        mock_memory_cls.from_config.return_value = mock_client
-
-        service = MemoryService(config)
-        await service.search("test query")
-
-        call_kwargs = mock_client.search.call_args
-        _, kwargs = call_kwargs
-        assert kwargs.get("user_id") == "ryan"
-        assert "filters" not in kwargs
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_no_version_kwarg(self, mock_mem0_cls, cloud_config):
@@ -2667,8 +2652,7 @@ class TestMem0FilterConstruction:
         mock_mem0_cls.return_value = mock_client
 
         service = MemoryService(cloud_config)
-        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
-            await service.search_with_filters("test", metadata_filters={"category": "pattern"})
+        await service.search_with_filters("test", metadata_filters={"category": "pattern"})
 
         call_kwargs = mock_client.search.call_args
         _, kwargs = call_kwargs

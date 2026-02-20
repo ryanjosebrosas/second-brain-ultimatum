@@ -28,7 +28,7 @@ def brain_config(tmp_path):
     return BrainConfig(
         anthropic_api_key="test-key",
         openai_api_key="test-key",
-        mem0_api_key=None,
+        mem0_api_key="test-mem0-key",
         graph_provider="none",
         neo4j_url=None,
         neo4j_username=None,

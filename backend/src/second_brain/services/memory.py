@@ -1,4 +1,4 @@
-"""Semantic memory via Mem0 (cloud primary, local fallback)."""
+"""Semantic memory via Mem0 Cloud."""
 
 import asyncio
 import logging
@@ -51,7 +51,7 @@ def _wrap_metadata_filter(condition: dict) -> dict:
 
 
 class MemoryService(MemoryServiceBase):
-    """Semantic memory via Mem0 (cloud primary, local fallback)."""
+    """Semantic memory via Mem0 Cloud. Requires mem0_api_key."""
 
     def __init__(self, config: BrainConfig):
         self.config = config
@@ -63,45 +63,17 @@ class MemoryService(MemoryServiceBase):
         self._client = self._init_client()
 
     def _init_client(self):
-        """Initialize Mem0 -- try cloud first, fall back to local OSS."""
-        if self.config.mem0_api_key:
-            try:
-                from mem0 import MemoryClient
+        """Initialize Mem0 cloud client. Requires mem0_api_key."""
+        if not self.config.mem0_api_key:
+            raise ValueError(
+                "mem0_api_key is required for MemoryService. "
+                "Set MEM0_API_KEY in .env or use MEMORY_PROVIDER=graphiti for OSS fallback."
+            )
+        from mem0 import MemoryClient
 
-                client = MemoryClient(api_key=self.config.mem0_api_key)
-                logger.info("Using Mem0 cloud client")
-                return client
-            except Exception as e:
-                logger.warning(f"Mem0 cloud unavailable: {e}")
-
-        from mem0 import Memory
-
-        mem0_config = {
-            "llm": {
-                "provider": "anthropic",
-                "config": {
-                    "model": "claude-sonnet-4-5-20250929",
-                    "temperature": 0.1,
-                    "max_tokens": 2000,
-                    "api_key": self.config.anthropic_api_key,
-                },
-            }
-        }
-        if self.enable_graph and self.config.neo4j_url:
-            mem0_config["graph_store"] = {
-                "provider": "neo4j",
-                "config": {
-                    "url": self.config.neo4j_url,
-                    "username": self.config.neo4j_username,
-                    "password": self.config.neo4j_password,
-                },
-            }
-        try:
-            logger.info("Using Mem0 local client")
-            return Memory.from_config(mem0_config)
-        except Exception as e:
-            logger.error("Failed to initialize Mem0 local client: %s", e)
-            raise
+        client = MemoryClient(api_key=self.config.mem0_api_key)
+        logger.info("Mem0 cloud client initialized")
+        return client
 
     async def add(self, content: str, metadata: dict | None = None,
                   enable_graph: bool | None = None) -> dict:
@@ -113,16 +85,12 @@ class MemoryService(MemoryServiceBase):
             "metadata": metadata or {},
         }
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
-        if use_graph and self._is_cloud:
+        if use_graph:
             kwargs["enable_graph"] = True
         try:
-            if self._is_cloud:
-                @_MEM0_RETRY
-                def _add():
-                    return self._client.add(messages, **kwargs)
-            else:
-                def _add():
-                    return self._client.add(messages, **kwargs)
+            @_MEM0_RETRY
+            def _add():
+                return self._client.add(messages, **kwargs)
 
             async with asyncio.timeout(self._timeout):
                 result = await asyncio.to_thread(_add)
@@ -154,7 +122,7 @@ class MemoryService(MemoryServiceBase):
             "metadata": metadata,
         }
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
-        if use_graph and self._is_cloud:
+        if use_graph:
             kwargs["enable_graph"] = True
         try:
             result = await asyncio.to_thread(self._client.add, messages, **kwargs)
@@ -207,7 +175,7 @@ class MemoryService(MemoryServiceBase):
             "metadata": metadata or {},
         }
         use_graph = enable_graph if enable_graph is not None else self.enable_graph
-        if use_graph and self._is_cloud:
+        if use_graph:
             kwargs["enable_graph"] = True
 
         try:
@@ -218,23 +186,16 @@ class MemoryService(MemoryServiceBase):
             logger.debug("Mem0 add_multimodal error detail: %s", e)
             return {}
 
-    @property
-    def _is_cloud(self) -> bool:
-        return type(self._client).__name__ == "MemoryClient"
-
     def _check_idle_reconnect(self) -> None:
         """Re-instantiate client if idle for too long (Mem0 timeout workaround)."""
         elapsed = time.monotonic() - self._last_activity
-        if elapsed > self._idle_threshold and self._is_cloud:
+        if elapsed > self._idle_threshold:
             logger.debug("Mem0 idle for %.0fs, re-instantiating client", elapsed)
             self._client = self._init_client()
         self._last_activity = time.monotonic()
 
     async def enable_project_graph(self) -> None:
         """Enable graph memory at Mem0 Cloud project level."""
-        if not self._is_cloud:
-            logger.warning("Project-level graph requires Mem0 Cloud client — skipping")
-            return
         if not self.enable_graph:
             logger.warning("Graph provider is not 'mem0' — skipping project graph enablement")
             return
@@ -249,26 +210,18 @@ class MemoryService(MemoryServiceBase):
         """Semantic search across memories."""
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
-        use_graph = enable_graph if enable_graph is not None else self.enable_graph
-        if self._is_cloud:
-            # Platform API: user_id goes ONLY inside filters, never as top-level kwarg
-            kwargs: dict = {
-                "filters": {"AND": [{"user_id": self.user_id}]},
-                "top_k": limit,
-            }
-            if self.config.mem0_keyword_search:
-                kwargs["keyword_search"] = True
-        else:
-            kwargs: dict = {"user_id": self.user_id}
+        kwargs: dict = {
+            "filters": {"AND": [{"user_id": self.user_id}]},
+            "top_k": limit,
+        }
+        if self.config.mem0_keyword_search:
+            kwargs["keyword_search"] = True
         try:
             logger.debug("Mem0 search kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
-            if self._is_cloud:
-                @_MEM0_RETRY
-                def _search():
-                    return self._client.search(query, **kwargs)
-            else:
-                def _search():
-                    return self._client.search(query, **kwargs)
+
+            @_MEM0_RETRY
+            def _search():
+                return self._client.search(query, **kwargs)
 
             async with asyncio.timeout(self._timeout):
                 results = await asyncio.to_thread(_search)
@@ -305,53 +258,39 @@ class MemoryService(MemoryServiceBase):
         """
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
-        use_graph = enable_graph if enable_graph is not None else self.enable_graph
 
-        if self._is_cloud:
-            # Platform API v2: user_id inside filters, custom metadata wrapped
-            conditions: list[dict] = [{"user_id": self.user_id}]
-            if metadata_filters:
-                # Flatten caller's AND conditions to avoid double-nesting
-                if isinstance(metadata_filters, dict) and len(metadata_filters) == 1:
-                    key = next(iter(metadata_filters))
-                    if key == "AND" and isinstance(metadata_filters[key], list):
-                        conditions.extend(
-                            _wrap_metadata_filter(c) for c in metadata_filters[key]
-                        )
-                    else:
-                        conditions.append(_wrap_metadata_filter(metadata_filters))
+        # Platform API v2: user_id inside filters, custom metadata wrapped
+        conditions: list[dict] = [{"user_id": self.user_id}]
+        if metadata_filters:
+            # Flatten caller's AND conditions to avoid double-nesting
+            if isinstance(metadata_filters, dict) and len(metadata_filters) == 1:
+                key = next(iter(metadata_filters))
+                if key == "AND" and isinstance(metadata_filters[key], list):
+                    conditions.extend(
+                        _wrap_metadata_filter(c) for c in metadata_filters[key]
+                    )
                 else:
                     conditions.append(_wrap_metadata_filter(metadata_filters))
-            kwargs: dict = {
-                "filters": {"AND": conditions},
-                "top_k": limit,
-            }
-            if self.config.mem0_keyword_search:
-                kwargs["keyword_search"] = True
-        else:
-            # OSS client: user_id as top-level param, filters passed directly
-            kwargs: dict = {"user_id": self.user_id}
-            if metadata_filters:
-                kwargs["filters"] = metadata_filters
+            else:
+                conditions.append(_wrap_metadata_filter(metadata_filters))
+        kwargs: dict = {
+            "filters": {"AND": conditions},
+            "top_k": limit,
+        }
+        if self.config.mem0_keyword_search:
+            kwargs["keyword_search"] = True
 
         try:
             logger.debug("Mem0 search_with_filters kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
-            if self._is_cloud:
-                @_MEM0_RETRY
-                def _search():
-                    return self._client.search(query, **kwargs)
 
-                @_MEM0_RETRY
-                def _search_no_filters():
-                    kw = {k: v for k, v in kwargs.items() if k != "filters"}
-                    return self._client.search(query, **kw)
-            else:
-                def _search():
-                    return self._client.search(query, **kwargs)
+            @_MEM0_RETRY
+            def _search():
+                return self._client.search(query, **kwargs)
 
-                def _search_no_filters():
-                    kw = {k: v for k, v in kwargs.items() if k != "filters"}
-                    return self._client.search(query, **kw)
+            @_MEM0_RETRY
+            def _search_no_filters():
+                kw = {k: v for k, v in kwargs.items() if k != "filters"}
+                return self._client.search(query, **kw)
 
             try:
                 async with asyncio.timeout(self._timeout):
@@ -395,24 +334,15 @@ class MemoryService(MemoryServiceBase):
             metadata: New metadata dict (None = keep existing).
         """
         try:
-            if self._is_cloud:
-                kwargs: dict = {}
-                if content is not None:
-                    kwargs["text"] = content
-                if metadata is not None:
-                    kwargs["metadata"] = metadata
-                if kwargs:
-                    await asyncio.to_thread(
-                        self._client.update, memory_id=memory_id, **kwargs
-                    )
-            else:
-                # Local client only supports data= parameter
-                if content is not None:
-                    await asyncio.to_thread(
-                        self._client.update, memory_id=memory_id, data=content
-                    )
-                elif metadata is not None:
-                    logger.warning("Local Mem0 client doesn't support metadata-only updates")
+            kwargs: dict = {}
+            if content is not None:
+                kwargs["text"] = content
+            if metadata is not None:
+                kwargs["metadata"] = metadata
+            if kwargs:
+                await asyncio.to_thread(
+                    self._client.update, memory_id=memory_id, **kwargs
+                )
         except Exception as e:
             logger.warning("Mem0 update_memory failed: %s", type(e).__name__)
             logger.debug("Mem0 update_memory error detail: %s", e)
@@ -420,12 +350,7 @@ class MemoryService(MemoryServiceBase):
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""
         try:
-            if self._is_cloud:
-                kwargs: dict = {
-                    "user_id": self.user_id,
-                }
-            else:
-                kwargs: dict = {"user_id": self.user_id}
+            kwargs: dict = {"user_id": self.user_id}
             logger.debug("Mem0 get_all kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
             results = await asyncio.to_thread(self._client.get_all, **kwargs)
             if isinstance(results, dict):

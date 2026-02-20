@@ -1,6 +1,6 @@
 """Tests for graph memory functionality."""
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from second_brain.services.memory import MemoryService
 from second_brain.services.search_result import SearchResult
@@ -67,10 +67,9 @@ class TestMemoryServiceGraph:
         assert len(result.memories) == 1
         assert len(result.relations) == 1
 
-    @patch.object(MemoryService, '_is_cloud', new_callable=PropertyMock, return_value=True)
     @patch("mem0.MemoryClient")
     async def test_add_with_graph_passes_enable_graph(
-        self, mock_client_cls, mock_is_cloud, brain_config_graph
+        self, mock_client_cls, brain_config_graph
     ):
         mock_client = MagicMock()
         mock_client.add.return_value = [{"id": "m1", "event": "ADD"}]
@@ -80,41 +79,15 @@ class TestMemoryServiceGraph:
         call_kwargs = mock_client.add.call_args[1]
         assert call_kwargs.get("enable_graph") is True
 
-    @patch("mem0.Memory")
-    async def test_search_without_graph_returns_empty_relations(
-        self, mock_memory_cls, mock_config
-    ):
-        mock_client = MagicMock()
-        mock_client.search.return_value = [
-            {"memory": "test", "score": 0.9}
-        ]
-        mock_memory_cls.from_config.return_value = mock_client
-        service = MemoryService(mock_config)
-        result = await service.search("test query")
-        assert isinstance(result, SearchResult)
-        assert len(result.memories) == 1
-        assert result.relations == []
-
-    @patch.object(MemoryService, '_is_cloud', new_callable=PropertyMock, return_value=True)
     @patch("mem0.MemoryClient")
     async def test_enable_project_graph_on_cloud(
-        self, mock_client_cls, mock_is_cloud, brain_config_graph
+        self, mock_client_cls, brain_config_graph
     ):
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
         service = MemoryService(brain_config_graph)
         await service.enable_project_graph()
         mock_client.project.update.assert_called_once_with(enable_graph=True)
-
-    @patch("mem0.Memory")
-    async def test_enable_project_graph_skips_local(
-        self, mock_memory_cls, mock_config
-    ):
-        mock_client = MagicMock()
-        mock_memory_cls.from_config.return_value = mock_client
-        service = MemoryService(mock_config)
-        await service.enable_project_graph()
-        mock_client.project.update.assert_not_called()
 
 
 class TestReingestVerification:
