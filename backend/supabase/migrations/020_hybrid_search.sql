@@ -7,25 +7,25 @@
 -- patterns: search over pattern_text + name
 ALTER TABLE patterns ADD COLUMN IF NOT EXISTS fts tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('english', COALESCE(name, '') || ' ' || COALESCE(pattern_text, ''))
+    to_tsvector('english', LEFT(COALESCE(name, '') || ' ' || COALESCE(pattern_text, ''), 900000))
   ) STORED;
 
--- memory_content: search over content + title
+-- memory_content: search over content + title (LEFT caps at 900K to stay under 1MB tsvector limit)
 ALTER TABLE memory_content ADD COLUMN IF NOT EXISTS fts tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+    to_tsvector('english', LEFT(COALESCE(title, '') || ' ' || COALESCE(content, ''), 900000))
   ) STORED;
 
 -- examples: search over content + title
 ALTER TABLE examples ADD COLUMN IF NOT EXISTS fts tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+    to_tsvector('english', LEFT(COALESCE(title, '') || ' ' || COALESCE(content, ''), 900000))
   ) STORED;
 
 -- knowledge_repo: search over content + title
 ALTER TABLE knowledge_repo ADD COLUMN IF NOT EXISTS fts tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+    to_tsvector('english', LEFT(COALESCE(title, '') || ' ' || COALESCE(content, ''), 900000))
   ) STORED;
 
 -- Step 2: Create GIN indexes for full-text search
