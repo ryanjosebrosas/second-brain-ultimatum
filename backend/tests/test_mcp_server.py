@@ -2269,3 +2269,65 @@ class TestPerAgentModel:
         await ask(question="test?")
 
         mock_model_fn.assert_called_with("ask")
+
+
+class TestToolDescriptionQuality:
+    """Verify all MCP tool descriptions follow quality standards."""
+
+    def _get_tools(self):
+        from second_brain.mcp_server import server
+        return server._tool_manager._tools
+
+    def test_all_tools_have_descriptions(self):
+        """Every tool must have a non-empty description."""
+        tools = self._get_tools()
+        for name, tool in tools.items():
+            desc = tool.description or ""
+            assert len(desc) > 20, f"Tool '{name}' has too-short description: {desc[:50]}"
+
+    def test_all_tools_have_when_to_use(self):
+        """Every tool description should include 'When to use' guidance."""
+        tools = self._get_tools()
+        missing = []
+        for name, tool in tools.items():
+            desc = (tool.description or "").lower()
+            if "when to use" not in desc:
+                missing.append(name)
+        assert not missing, f"Tools missing 'When to use': {missing}"
+
+    def test_recall_tools_differentiated(self):
+        """recall, quick_recall, and recall_deep should have distinct descriptions."""
+        tools = self._get_tools()
+        recall_desc = tools["recall"].description or ""
+        quick_desc = tools["quick_recall"].description or ""
+        assert "agent" in recall_desc.lower() or "llm" in recall_desc.lower()
+        assert "fast" in quick_desc.lower() or "parallel" in quick_desc.lower()
+        if "recall_deep" in tools:
+            deep_desc = tools["recall_deep"].description or ""
+            assert "parallel" in deep_desc.lower() or "all" in deep_desc.lower()
+
+    def test_search_tools_differentiated(self):
+        """Search tools should explain when to use each one."""
+        tools = self._get_tools()
+        for name in ["search_examples", "search_knowledge", "search_patterns",
+                     "search_experiences", "vector_search"]:
+            if name in tools:
+                desc = (tools[name].description or "").lower()
+                assert "when to use" in desc, f"'{name}' missing When-to-use"
+
+    def test_descriptions_start_with_action_verb(self):
+        """Tool descriptions should start with an action verb, not 'This tool'."""
+        tools = self._get_tools()
+        bad_starts = []
+        for name, tool in tools.items():
+            desc = (tool.description or "").strip()
+            if desc.lower().startswith("this tool"):
+                bad_starts.append(name)
+        assert not bad_starts, f"Tools starting with 'This tool': {bad_starts}"
+
+    def test_no_empty_descriptions(self):
+        """No tool should have an empty or None description."""
+        tools = self._get_tools()
+        empty = [name for name, tool in tools.items()
+                 if not (tool.description or "").strip()]
+        assert not empty, f"Tools with empty descriptions: {empty}"

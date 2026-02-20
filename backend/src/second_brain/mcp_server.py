@@ -148,8 +148,16 @@ def _get_model(agent_name: str | None = None) -> "Model | None":
 
 @server.tool()
 async def recall(query: str) -> str:
-    """Search your Second Brain's memory for relevant context, patterns,
-    and past experiences. Returns ranked results with sources.
+    """Search your Second Brain using an LLM agent that selects the optimal
+    search strategy across semantic memory, patterns, experiences, examples,
+    and projects. The agent can chain multiple searches and synthesize results.
+
+    When to use: For nuanced queries where the best search strategy is unclear,
+    or when you need the agent to try multiple approaches. Slower than quick_recall
+    (~5-15s) but more thorough for ambiguous queries.
+
+    Returns: Ranked matches with relevance scores, related patterns, graph
+    relationships, and a synthesis summary.
 
     Args:
         query: What to search for (e.g., "content writing patterns",
@@ -199,13 +207,19 @@ async def recall(query: str) -> str:
 
 @server.tool()
 async def quick_recall(query: str, limit: int = 10) -> str:
-    """Fast memory search — skips LLM agent for simple queries.
-    Uses Mem0 semantic + keyword search with Voyage reranking.
-    For complex multi-source queries, use recall() instead.
+    """Fast parallel memory search — runs Mem0 semantic + pgvector hybrid
+    concurrently, then deduplicates and reranks with Voyage AI. No LLM agent
+    overhead. Auto-upgrades complex queries to recall_deep.
+
+    When to use: Default choice for memory search. Handles simple lookups
+    (~1-2s) and medium queries (~2-4s). Complex queries (comparisons,
+    synthesis) are automatically redirected to recall_deep.
+
+    Returns: Ranked matches with scores and source attribution.
 
     Args:
         query: What to search for (e.g., "content patterns", "client feedback")
-        limit: Maximum results (default: 10)
+        limit: Maximum results after dedup + reranking (default: 10)
     """
     try:
         query = _validate_mcp_input(query, label="query")
@@ -311,10 +325,16 @@ async def quick_recall(query: str, limit: int = 10) -> str:
 
 @server.tool()
 async def recall_deep(query: str, limit: int = 15) -> str:
-    """Deep multi-source memory search for complex queries. Fans out to ALL
-    search sources in parallel: Mem0, hybrid pgvector, patterns, examples,
-    knowledge, experiences, and graph. Use for synthesis queries, comparisons,
-    or comprehensive overviews.
+    """Deep parallel search across ALL memory sources — Mem0 semantic, hybrid
+    pgvector, patterns, examples, knowledge, experiences, and graph. Runs all
+    sources concurrently for maximum recall breadth.
+
+    When to use: For complex synthesis queries, cross-source comparisons, or
+    comprehensive overviews. Slower (~3-8s) but searches every source. Usually
+    auto-triggered by quick_recall for complex queries — rarely called directly.
+
+    Returns: Ranked matches from multiple sources with source attribution,
+    graph relationships, and source count summary.
 
     Args:
         query: Complex search query (e.g., "compare all content patterns with
@@ -364,13 +384,20 @@ async def recall_deep(query: str, limit: int = 15) -> str:
 
 @server.tool()
 async def ask(question: str) -> str:
-    """Ask your Second Brain a question. Gets instant help powered by
-    accumulated knowledge: company context, customer insights, content
-    patterns, style preferences, and past experiences.
+    """Answer questions using your Second Brain's accumulated knowledge —
+    patterns, experiences, client context, and content history. The agent
+    searches memory first, then synthesizes an answer.
+
+    When to use: For questions that need a synthesized answer, not just raw
+    search results. Unlike recall (which returns matches), ask interprets
+    and answers. For pure search, use quick_recall instead.
+
+    Returns: Answer text with context sources, patterns applied, graph
+    relationships, and suggested next action.
 
     Args:
-        question: Your question (e.g., "Help me write a follow-up email",
-                  "What's our positioning for enterprise clients?")
+        question: Your question (e.g., "What's our positioning for enterprise?",
+                  "Help me write a follow-up email to John")
     """
     try:
         question = _validate_mcp_input(question, label="question")
@@ -407,14 +434,19 @@ async def ask(question: str) -> str:
 
 @server.tool()
 async def learn(content: str, category: str = "general") -> str:
-    """Extract patterns and learnings from a work session or experience.
-    Feed raw text and the agent will identify patterns, insights, and
-    store them in your Second Brain.
+    """Extract patterns and learnings from raw text — work sessions, meeting
+    notes, client conversations, or content drafts. Identifies reusable
+    patterns, reinforces existing ones, and stores experiences.
+
+    When to use: After completing work you want to learn from. Feed raw text
+    and the agent extracts patterns, insights, and experiences automatically.
+
+    Returns: Extracted patterns (new + reinforced), stored experiences, and
+    a learning summary.
 
     Args:
-        content: Raw text from a work session, conversation, or experience
-                 to extract learnings from.
-        category: Experience category - content, prospects, clients, or general.
+        content: Raw text from a work session, conversation, or experience.
+        category: Experience category — content, prospects, clients, or general.
     """
     try:
         content = _validate_mcp_input(content, label="content")
@@ -460,11 +492,14 @@ async def learn(content: str, category: str = "general") -> str:
 
 @server.tool()
 async def learn_image(image_url: str, context: str = "", category: str = "visual") -> str:
-    """Store an image in your Second Brain's memory.
+    """Extract learnings from an image — diagrams, screenshots, photos, whiteboard
+    captures. Uses multimodal embeddings for visual semantic search.
 
-    The image is processed by Mem0 to extract visual information and stored
-    as a searchable memory. Optionally generates a multimodal vector embedding
-    for Supabase similarity search.
+    When to use: When you have a visual artifact to learn from. Complements the
+    text-based learn tool. Stored with multimodal embeddings for retrieval via
+    multimodal_vector_search.
+
+    Returns: Extracted insights and storage confirmation.
 
     Args:
         image_url: Image URL (https://...) or base64 data URI
@@ -546,16 +581,20 @@ async def learn_image(image_url: str, context: str = "", category: str = "visual
 async def learn_document(
     document_url: str, document_type: str = "pdf", context: str = "", category: str = "document"
 ) -> str:
-    """Store a document (PDF, text, or MDX) in your Second Brain's memory.
+    """Extract learnings from a document — PDFs, reports, slide decks.
+    Analyzes content and stores with searchable memory.
 
-    The document is processed by Mem0 to extract textual information and stored
-    as searchable memory.
+    When to use: For document-based learning. Unlike learn (which takes raw text),
+    this processes document formats directly. Stored for retrieval via
+    multimodal_vector_search.
+
+    Returns: Document analysis and storage confirmation.
 
     Args:
         document_url: Document URL (https://...) or base64 string.
                       For PDFs: URL only. For text/MDX: URL or raw base64.
-        document_type: Type of document: pdf, mdx, or txt (default: pdf).
-        context: Optional text description or context about the document.
+        document_type: Document format — pdf, mdx, or txt (default: pdf).
+        context: Optional description of the document's purpose.
         category: Memory category for filtering (default: document).
     """
     try:
@@ -616,14 +655,17 @@ async def learn_document(
 
 @server.tool()
 async def learn_video(video_url: str, context: str = "", category: str = "video") -> str:
-    """Generate a vector embedding for a video and store it in your Second Brain.
+    """Extract learnings from a video — presentations, tutorials, interviews.
+    Generates vector embedding via Voyage AI and stores context in Mem0.
 
-    Note: Video embedding is stored in Supabase via Voyage AI only.
-    Mem0 does not support video — only the vector embedding is generated.
+    When to use: For video-based learning. Stored for retrieval via
+    multimodal_vector_search. Requires video to be accessible via URL.
+
+    Returns: Video analysis, embedding status, and storage confirmation.
 
     Args:
         video_url: Video URL (https://...) or local file path. MP4 format only.
-        context: Optional text description of the video content.
+        context: Optional description of the video content.
         category: Memory category for filtering (default: video).
     """
     try:
@@ -701,16 +743,20 @@ async def multimodal_vector_search(
     table: str = "memory_content",
     limit: int = 10,
 ) -> str:
-    """Search your Second Brain using multimodal vector similarity.
+    """Search across text AND visual content using multimodal embeddings.
+    Finds images, documents, and videos alongside text matches.
 
-    Combines text and/or image queries into a single embedding for
-    cross-modal search (e.g., find text content related to an image).
+    When to use: When searching for visual content stored via learn_image,
+    learn_document, or learn_video. For text-only search, use quick_recall
+    or vector_search instead.
+
+    Returns: Multimodal matches ranked by similarity with content type and preview.
 
     Args:
         query: Optional text search query.
         image_url: Optional image URL or base64 data URI to search with.
-        table: Table to search: memory_content, patterns, examples, knowledge_repo.
-        limit: Maximum results (default 10).
+        table: Table to search — memory_content, patterns, examples, knowledge_repo.
+        limit: Maximum results (default: 10).
     """
     if not query.strip() and not image_url.strip():
         return "Provide at least one of: query (text) or image_url."
@@ -775,15 +821,21 @@ async def multimodal_vector_search(
 async def create_content(
     prompt: str, content_type: str = "linkedin",
 ) -> str:
-    """Draft content in your voice using brain knowledge.
-    The agent loads your voice guide, relevant examples, and applicable patterns
-    via its own tools, then produces a draft for human editing.
+    """Create content using your brand voice, patterns, and accumulated knowledge.
+    Loads voice guide, relevant examples, and patterns before generating.
+
+    When to use: For content creation — LinkedIn posts, emails, case studies,
+    newsletters, landing pages, essays. Specify content_type for format-specific
+    structure and voice calibration.
+
+    Returns: Generated content draft with structure following the content type's
+    template, plus voice alignment notes.
 
     Args:
-        prompt: What to write about — e.g., "Announce our new AI automation product"
-        content_type: Content type — linkedin, email, landing-page, comment,
-                      case-study, proposal, one-pager, presentation, instagram,
-                      or any custom type you've added.
+        prompt: What to create (e.g., "Announce our new AI automation product",
+                "Draft a cold outreach email for SaaS founders")
+        content_type: Content format — linkedin, email, case-study, newsletter,
+                      landing-page, essay, or any custom type (default: linkedin)
     """
     try:
         prompt = _validate_mcp_input(prompt, label="prompt")
@@ -834,15 +886,20 @@ async def create_content(
 
 @server.tool()
 async def review_content(content: str, content_type: str | None = None) -> str:
-    """Review content quality with adaptive dimension scoring. Returns a structured
-    scorecard with per-dimension scores, overall score, and verdict.
-    When content_type is provided, review dimensions are adapted to that type
-    (e.g., a comment skips 'Data Accuracy', a case study weights it heavily).
+    """Score content across multiple quality dimensions — structure, voice alignment,
+    engagement, clarity, and persuasion. Uses your established patterns as the
+    review standard.
+
+    When to use: Before publishing content. Provides actionable scores and
+    specific improvement suggestions. For voice-only analysis, use analyze_clarity
+    instead.
+
+    Returns: Overall score (1-10), per-dimension scores, top strengths,
+    critical issues, and verdict (READY TO SEND / NEEDS REVISION / REWRITE).
 
     Args:
-        content: The content to review (draft text, email, post, etc.)
-        content_type: Optional content type for adaptive dimension scoring
-                     (linkedin, email, etc.)
+        content: The content text to review.
+        content_type: Content format for type-specific review criteria (optional).
     """
     try:
         content = _validate_mcp_input(content, label="content")
@@ -887,12 +944,17 @@ async def review_content(content: str, content_type: str | None = None) -> str:
 
 @server.tool()
 async def search_examples(content_type: str | None = None) -> str:
-    """Search your Second Brain's content examples — real samples of
-    emails, LinkedIn posts, case studies, presentations, and more.
+    """Browse stored content examples — real samples of emails, posts, case
+    studies, and other content types from your experience.
+
+    When to use: When you need reference examples for content creation or
+    review. Filter by content_type for specific formats. For semantic search
+    across examples, use quick_recall or recall instead.
+
+    Returns: List of examples with content type, title, and preview text.
 
     Args:
-        content_type: Filter by type (linkedin, email, case-study, etc.)
-                      or None for all examples.
+        content_type: Filter by type (linkedin, email, case-study) or None for all.
     """
     deps = _get_deps()
     examples = await deps.storage_service.get_examples(content_type=content_type)
@@ -908,12 +970,18 @@ async def search_examples(content_type: str | None = None) -> str:
 
 @server.tool()
 async def search_knowledge(category: str | None = None) -> str:
-    """Search your Second Brain's knowledge repository — frameworks,
-    methodologies, playbooks, research, and tools.
+    """Browse the knowledge repository — frameworks, methodologies, playbooks,
+    research findings, and tools stored in the brain.
+
+    When to use: When you need reference material or frameworks. Filter by
+    category for specific types. For semantic search across knowledge, use
+    quick_recall or recall instead.
+
+    Returns: List of knowledge entries with category, title, and preview text.
 
     Args:
-        category: Filter by category (framework, methodology, playbook,
-                  research, tool) or None for all.
+        category: Filter — framework, methodology, playbook, research, or tool.
+                  None for all entries.
     """
     deps = _get_deps()
     knowledge = await deps.storage_service.get_knowledge(category=category)
@@ -929,11 +997,17 @@ async def search_knowledge(category: str | None = None) -> str:
 
 @server.tool()
 async def delete_item(table: str, item_id: str) -> str:
-    """Delete an item from your Second Brain by table and ID.
+    """Delete a specific item from the brain by table and UUID.
+
+    When to use: To remove outdated, incorrect, or duplicate entries. Deletion
+    is permanent — there is no undo. Get the item_id from search results or
+    list views.
+
+    Returns: Confirmation of deletion or error if item not found.
 
     Args:
-        table: Which table to delete from (pattern, experience, example, knowledge)
-        item_id: The UUID of the item to delete
+        table: Source table — pattern, experience, example, or knowledge
+        item_id: UUID of the item to delete (from search results)
     """
     try:
         item_id = _validate_mcp_input(item_id, label="item_id")
@@ -956,7 +1030,15 @@ async def delete_item(table: str, item_id: str) -> str:
 
 @server.tool()
 async def brain_health() -> str:
-    """Check the health and growth metrics of your Second Brain."""
+    """Check health metrics of your Second Brain — memory count, pattern
+    distribution, experience count, graph status, and topic coverage.
+
+    When to use: For a quick overview of brain state. For detailed setup
+    progress, use brain_setup. For pattern details, use pattern_registry.
+
+    Returns: Health summary with memory count, pattern distribution by
+    confidence, experience count, graph provider status, and topic breakdown.
+    """
     from second_brain.services.health import HealthService
 
     deps = _get_deps()
@@ -982,13 +1064,18 @@ async def brain_health() -> str:
 
 @server.tool()
 async def graph_search(query: str, limit: int = 10) -> str:
-    """Search the Graphiti knowledge graph for entity relationships.
-    Returns connections between people, concepts, patterns, and experiences
-    discovered through graph traversal.
+    """Search the knowledge graph for relationships between entities —
+    people, concepts, patterns, and experiences connected through Graphiti.
+
+    When to use: When you need to understand HOW things are connected, not
+    just find them. For content/memory search, use quick_recall. For entity
+    lookup, use graph_entity_search.
+
+    Returns: List of directed relationships (source --[type]--> target).
 
     Args:
-        query: What to search for in the knowledge graph
-        limit: Maximum number of relationships to return (default: 10)
+        query: What to search for in the graph (e.g., "content strategy")
+        limit: Maximum relationships to return (default: 10)
     """
     deps = _get_deps()
     if not deps.graphiti_service:
@@ -1010,8 +1097,12 @@ async def graph_search(query: str, limit: int = 10) -> str:
 
 @server.tool()
 async def graph_health() -> str:
-    """Check the health and connectivity of the Graphiti knowledge graph backend.
-    Returns status, backend type, and any errors.
+    """Check Graphiti knowledge graph connectivity and backend status.
+
+    When to use: To verify the graph backend is running and accessible.
+    For brain-wide health, use brain_health instead.
+
+    Returns: Status (healthy/error), backend type, and error details if any.
     """
     deps = _get_deps()
     if not deps.graphiti_service:
@@ -1030,7 +1121,14 @@ async def graph_health() -> str:
 
 @server.tool()
 async def graph_entity_search(query: str, limit: int = 10) -> str:
-    """Search for entities (people, concepts, topics) in the knowledge graph.
+    """Find entities (people, concepts, topics) in the knowledge graph by name
+    or description. Returns entity details, not relationships.
+
+    When to use: To find specific entities before exploring their connections
+    with graph_entity_context or graph_traverse. For relationship search,
+    use graph_search instead.
+
+    Returns: List of entities with name, labels, and summary.
 
     Args:
         query: Entity name or description to search for
@@ -1067,12 +1165,16 @@ async def graph_entity_search(query: str, limit: int = 10) -> str:
 
 @server.tool()
 async def graph_entity_context(entity_uuid: str) -> str:
-    """Get all relationships for a specific entity by UUID.
+    """Get all relationships for a specific entity — both incoming and outgoing
+    connections. Shows how an entity relates to the rest of the knowledge graph.
 
-    Shows incoming and outgoing connections to understand an entity's role.
+    When to use: After finding an entity via graph_entity_search, use this to
+    explore its connections. For broader traversal, use graph_traverse.
+
+    Returns: Entity details with lists of incoming and outgoing relationships.
 
     Args:
-        entity_uuid: UUID of the entity to explore
+        entity_uuid: UUID of the entity (from graph_entity_search results)
     """
     deps = _get_deps()
     if not deps.graphiti_service:
@@ -1112,14 +1214,19 @@ async def graph_entity_context(entity_uuid: str) -> str:
 
 @server.tool()
 async def graph_traverse(entity_uuid: str, max_hops: int = 2, limit: int = 20) -> str:
-    """Traverse the knowledge graph from a starting entity.
+    """Traverse the knowledge graph from a starting entity, following
+    relationships up to N hops deep. Discovers indirect connections.
 
-    Multi-hop BFS traversal to discover connected entities and relationships.
+    When to use: To explore how far-reaching an entity's influence is, or to
+    find indirect connections between concepts. Start with graph_entity_search
+    to find the starting entity UUID.
+
+    Returns: Multi-hop relationship paths from the starting entity.
 
     Args:
-        entity_uuid: UUID of the starting entity
-        max_hops: Maximum traversal depth (default: 2, max: 5)
-        limit: Maximum relationships to return (default: 20)
+        entity_uuid: Starting entity UUID (from graph_entity_search)
+        max_hops: Maximum relationship hops to follow (default: 2, max: 5)
+        limit: Maximum total relationships to return (default: 20)
     """
     deps = _get_deps()
     if not deps.graphiti_service:
@@ -1148,13 +1255,18 @@ async def graph_traverse(entity_uuid: str, max_hops: int = 2, limit: int = 20) -
 
 @server.tool()
 async def graph_communities(query: str = "", limit: int = 5) -> str:
-    """Search for communities (clusters of related entities) in the knowledge graph.
+    """Discover topic communities in the knowledge graph — clusters of
+    densely connected entities that represent coherent knowledge domains.
 
-    Communities are automatically detected groups of closely related entities.
+    When to use: To understand the brain's knowledge structure at a high level.
+    For specific entity lookup, use graph_entity_search. For relationship
+    exploration, use graph_search.
+
+    Returns: Community clusters with member entities and connection density.
 
     Args:
-        query: Optional search query to filter communities
-        limit: Maximum results (default: 5)
+        query: Optional filter to find communities related to a topic
+        limit: Maximum communities to return (default: 5)
     """
     deps = _get_deps()
     if not deps.graphiti_service:
@@ -1190,13 +1302,20 @@ async def graph_advanced_search(
     created_after: str = "",
     created_before: str = "",
 ) -> str:
-    """Advanced graph search with type and temporal filters.
+    """Advanced graph search with filtering by entity type, edge type,
+    and date range.
+
+    When to use: When basic graph_search returns too many results and you need
+    to narrow by entity type, edge type, or time range. For simple graph queries,
+    use graph_search instead.
+
+    Returns: Filtered relationships, entities, and communities with relevance.
 
     Args:
-        query: Search query
+        query: Search query text
         limit: Maximum results (default: 10)
-        node_labels: Comma-separated node label filters (e.g., "Person,Organization")
-        edge_types: Comma-separated edge type filters (e.g., "WORKS_AT,KNOWS")
+        node_labels: Comma-separated entity type filter (e.g., "Person,Organization")
+        edge_types: Comma-separated edge type filter (e.g., "WORKS_AT,KNOWS")
         created_after: ISO date filter (e.g., "2024-01-01")
         created_before: ISO date filter (e.g., "2024-12-31")
     """
@@ -1245,12 +1364,18 @@ async def graph_advanced_search(
 
 @server.tool()
 async def consolidate_brain(min_cluster_size: int = 3) -> str:
-    """Consolidate accumulated memories into patterns. Reviews recent Mem0
-    memories, identifies recurring themes, and promotes them to structured
-    patterns in the pattern registry.
+    """Analyze and consolidate the brain's memory into coherent clusters.
+    Identifies related memories, suggests merges, and detects gaps.
+
+    When to use: Periodically (weekly/monthly) to keep the brain organized.
+    Finds redundant memories that can be merged and topics with insufficient
+    coverage.
+
+    Returns: Cluster summary with merge suggestions, gap analysis, and
+    consolidation recommendations.
 
     Args:
-        min_cluster_size: Minimum memories needed to form a pattern cluster (default: 3)
+        min_cluster_size: Minimum memories to form a cluster (default: 3)
     """
     deps = _get_deps()
     model = _get_model("learn")
@@ -1287,11 +1412,18 @@ async def consolidate_brain(min_cluster_size: int = 3) -> str:
 
 @server.tool()
 async def growth_report(days: int = 30) -> str:
-    """Get a growth report for your Second Brain showing pattern creation,
-    reinforcement, confidence upgrades, and review score trends.
+    """Generate a growth report showing brain activity, pattern evolution, and
+    learning velocity over a time period.
+
+    When to use: For periodic progress review. Shows pattern creation, confidence
+    transitions, review scores, and growth milestones. For current state only,
+    use brain_health instead.
+
+    Returns: Growth metrics, pattern activity, quality trends, milestones,
+    and stale pattern warnings.
 
     Args:
-        days: Number of days to include in the report (default: 30)
+        days: Lookback period in days (default: 30)
     """
     from second_brain.services.health import HealthService
 
@@ -1355,8 +1487,15 @@ async def growth_report(days: int = 30) -> str:
 
 @server.tool()
 async def list_content_types() -> str:
-    """List all available content types in the Second Brain.
-    Shows built-in and custom types with their configuration."""
+    """List all available content types — built-in and custom — with their
+    configuration (mode, word count, built-in status).
+
+    When to use: To see what content types are available for create_content
+    and review_content. For managing types, use manage_content_type.
+
+    Returns: Table of content types with slug, name, mode, word count, and
+    built-in flag.
+    """
     deps = _get_deps()
     registry = deps.get_content_type_registry()
     all_types = await registry.get_all()
@@ -1385,13 +1524,19 @@ async def manage_content_type(
 ) -> str:
     """Add or remove a content type from the Second Brain.
 
+    When to use: To create custom content types for create_content and
+    review_content, or to remove ones no longer needed. For listing types,
+    use list_content_types.
+
+    Returns: Confirmation of add/remove action.
+
     Args:
         action: 'add' to create/update a content type, 'remove' to delete it
         slug: Content type slug in kebab-case (e.g., 'newsletter', 'blog-post')
         name: Human-readable name (required for 'add')
         default_mode: Communication mode — casual, professional, or formal
         structure_hint: Composition guide (required for 'add', e.g., 'Hook -> Body -> CTA')
-        max_words: Target word count (default 500)
+        max_words: Target word count (default: 500)
         description: Brief description of the content type
     """
     try:
@@ -1438,16 +1583,20 @@ async def vector_search(
     table: str = "memory_content",
     limit: int = 10,
 ) -> str:
-    """Search your Second Brain using vector similarity (pgvector).
+    """Raw vector similarity search using pgvector embeddings. Bypasses the
+    recall agent for direct embedding-to-embedding matching on a specific table.
 
-    Generates an embedding for the query and finds the most similar content
-    in the specified table. Complements semantic search (recall) with
-    pure vector similarity matching.
+    When to use: For precise vector matching on a specific table when you know
+    exactly where to look. For general memory search, prefer quick_recall (which
+    combines Mem0 + pgvector + reranking). For multi-table search, use recall_deep.
+
+    Returns: Matches ranked by cosine similarity with score, title, and preview.
 
     Args:
-        query: Text to search for (generates embedding automatically)
-        table: Table to search: memory_content, patterns, examples, knowledge_repo
-        limit: Maximum results (default 10)
+        query: Text to embed and search (generates embedding automatically)
+        table: Table to search — memory_content, patterns, examples, knowledge_repo
+               (default: memory_content)
+        limit: Maximum results (default: 10)
     """
     try:
         query = _validate_mcp_input(query, label="query")
@@ -1493,8 +1642,17 @@ async def create_project(
     category: str = "content",
     description: str | None = None,
 ) -> str:
-    """Create a new project for lifecycle tracking (plan -> execute -> review -> learn).
-    Categories: content, prospects, clients, products, general."""
+    """Create a new project for lifecycle tracking through plan -> execute -> review -> learn stages.
+
+    When to use: Starting a new initiative. Use advance_project to move through stages.
+
+    Returns: Project name, ID, initial stage, and next action.
+
+    Args:
+        name: Project name (e.g., "Q4 Content Campaign")
+        category: Project type — content, prospects, clients, products, or general
+        description: Optional project description and goals
+    """
     try:
         name = _validate_mcp_input(name, label="name")
     except ValueError as e:
@@ -1520,7 +1678,16 @@ async def create_project(
 
 @server.tool()
 async def project_status(project_id: str) -> str:
-    """Get project status, artifacts, and next action."""
+    """Get current status, metadata, and artifacts for a specific project.
+
+    When to use: To check a project's progress, stage, and associated artifacts.
+    For listing all projects, use list_projects instead.
+
+    Returns: Project name, stage, category, review score, and artifact list.
+
+    Args:
+        project_id: Project UUID (from list_projects or create_project)
+    """
     try:
         project_id = _validate_mcp_input(project_id, label="project_id")
     except ValueError as e:
@@ -1550,8 +1717,18 @@ async def project_status(project_id: str) -> str:
 
 @server.tool()
 async def advance_project(project_id: str, target_stage: str | None = None) -> str:
-    """Advance a project to the next lifecycle stage. Stages: planning -> executing ->
-    reviewing -> learning -> complete. Specify target_stage to jump to a specific stage."""
+    """Move a project to the next lifecycle stage or jump to a specific stage.
+    Stages: planning -> executing -> reviewing -> learning -> complete.
+
+    When to use: When a project reaches a milestone and should move forward.
+    Omit target_stage to auto-advance to the next stage.
+
+    Returns: Confirmation with previous and new stage.
+
+    Args:
+        project_id: Project UUID
+        target_stage: Specific stage to jump to (optional — omit for auto-advance)
+    """
     try:
         project_id = _validate_mcp_input(project_id, label="project_id")
     except ValueError as e:
@@ -1588,12 +1765,17 @@ async def list_projects(
     category: str | None = None,
     limit: int = 20,
 ) -> str:
-    """List Second Brain projects with optional filters.
+    """List all Second Brain projects with optional stage and category filters.
+
+    When to use: To see all projects or filter by lifecycle stage or category.
+    For details on a specific project, use project_status instead.
+
+    Returns: Project list with name, stage, category, and description preview.
 
     Args:
-        lifecycle_stage: Filter by stage: planning, executing, reviewing, learning, done
-        category: Filter by category: content, prospects, clients, products, general
-        limit: Maximum number of projects to return (default 20)
+        lifecycle_stage: Filter by stage — planning, executing, reviewing, learning, complete
+        category: Filter by category — content, prospects, clients, products, general
+        limit: Maximum projects to return (default: 20)
     """
     deps = _get_deps()
     try:
@@ -1627,13 +1809,18 @@ async def update_project(
     description: str | None = None,
     category: str | None = None,
 ) -> str:
-    """Update a project's metadata (name, description, or category).
+    """Update a project's name, description, or category.
+
+    When to use: To correct or update project metadata. To change lifecycle stage,
+    use advance_project instead.
+
+    Returns: Updated project name and list of changed fields.
 
     Args:
-        project_id: The project UUID (from list_projects or create_project)
-        name: New project name (optional)
-        description: New project description (optional)
-        category: New category: content, prospects, clients, products, general (optional)
+        project_id: Project UUID (from list_projects or create_project)
+        name: New name (optional)
+        description: New description (optional)
+        category: New category — content, prospects, clients, products, general (optional)
     """
     try:
         project_id = _validate_mcp_input(project_id, label="project_id")
@@ -1662,11 +1849,13 @@ async def update_project(
 async def delete_project(project_id: str) -> str:
     """Permanently delete a project and all its artifacts.
 
-    WARNING: This is irreversible. All artifacts (plan, draft, review, output)
-    attached to the project will also be deleted.
+    When to use: To remove abandoned or duplicate projects. Deletion is permanent
+    with no undo. Consider archiving (advance to 'complete') instead.
+
+    Returns: Confirmation of deletion or error if not found.
 
     Args:
-        project_id: The project UUID to delete (from list_projects)
+        project_id: Project UUID to delete (from list_projects)
     """
     try:
         project_id = _validate_mcp_input(project_id, label="project_id")
@@ -1695,11 +1884,16 @@ async def add_artifact(
     title: str | None = None,
     content: str | None = None,
 ) -> str:
-    """Add an artifact to a project (plan, draft, review, output, note).
+    """Attach an artifact to a project — plans, drafts, reviews, outputs, or notes.
+
+    When to use: To associate deliverables with a project for lifecycle tracking.
+    Each artifact is typed and can hold content text.
+
+    Returns: Confirmation with artifact type and ID.
 
     Args:
-        project_id: The project UUID
-        artifact_type: Type of artifact: plan, draft, review, output, note
+        project_id: Project UUID
+        artifact_type: Artifact kind — plan, draft, review, output, or note
         title: Optional artifact title or label
         content: Optional artifact content text (e.g., the actual plan or draft)
     """
@@ -1732,10 +1926,15 @@ async def add_artifact(
 
 @server.tool()
 async def delete_artifact(artifact_id: str) -> str:
-    """Delete a project artifact by its ID.
+    """Remove a specific artifact from a project by its UUID.
+
+    When to use: To clean up outdated or incorrect artifacts. Get the
+    artifact_id from project_status output.
+
+    Returns: Confirmation of deletion or error if not found.
 
     Args:
-        artifact_id: The artifact UUID (from project_status output)
+        artifact_id: Artifact UUID (from project_status output)
     """
     try:
         artifact_id = _validate_mcp_input(artifact_id, label="artifact_id")
@@ -1757,14 +1956,18 @@ async def search_experiences(
     category: str | None = None,
     limit: int = 20,
 ) -> str:
-    """List work experiences from your Second Brain.
+    """Browse past work experiences — meeting outcomes, project learnings,
+    and client interactions stored in the brain.
 
-    Experiences are individual work events (client calls, launches, wins/losses)
-    that inform future decisions. Use category to filter.
+    When to use: When recalling specific past work events. Use category to
+    filter by type. For semantic search across experiences, use quick_recall
+    or recall instead. For pattern search, use search_patterns.
+
+    Returns: List of experiences with title, category, date, and description.
 
     Args:
         category: Filter by category (e.g., client-work, product-launch) or None for all
-        limit: Maximum experiences to return (default 20)
+        limit: Maximum experiences to return (default: 20)
     """
     deps = _get_deps()
     try:
@@ -1798,16 +2001,20 @@ async def search_patterns(
     keyword: str | None = None,
     limit: int = 30,
 ) -> str:
-    """Search your Second Brain patterns with optional filters.
+    """Search the pattern registry by keyword, topic, or confidence level.
+    Patterns are reusable strategies extracted from successful work.
 
-    More granular than pattern_registry — supports keyword search
-    and confidence filtering. Use pattern_registry for the full overview.
+    When to use: When you need specific writing patterns, content strategies,
+    or engagement approaches. Use keyword for text search, topic/confidence
+    for filtering. For the full registry view, use pattern_registry instead.
+
+    Returns: List of patterns with confidence level, topic, and preview text.
 
     Args:
         topic: Filter by topic (e.g., messaging, brand-voice, content, strategy)
-        confidence: Filter by level: HIGH, MEDIUM, or LOW
-        keyword: Text to match in pattern name or pattern_text (optional, case-insensitive)
-        limit: Maximum results (default 30)
+        confidence: Filter by confidence — HIGH, MEDIUM, or LOW
+        keyword: Text to match in pattern name or text (case-insensitive)
+        limit: Maximum results (default: 30)
     """
     deps = _get_deps()
     try:
@@ -1848,16 +2055,20 @@ async def ingest_example(
     content: str,
     notes: str | None = None,
 ) -> str:
-    """Add a content example directly to your Second Brain's example library.
+    """Store a content example in the brain for future reference during content
+    creation and review. Examples serve as quality benchmarks for their content type.
 
-    Previously this required running a migration script. Now you can add
-    examples inline from Claude Code.
+    When to use: When you have a good content sample (email, post, case study)
+    that should be used as reference. The content will be embedded for semantic
+    search.
+
+    Returns: Confirmation with the stored example ID.
 
     Args:
-        content_type: Content type slug (e.g., linkedin, email, case-study, newsletter)
-        title: Short title describing what makes this a good example
-        content: The example content text (the actual email, post, etc.)
-        notes: Optional notes about why this is a good example or what to learn from it
+        content_type: Format type — linkedin, email, case-study, newsletter, etc.
+        title: Example title (e.g., "Q4 Results LinkedIn Post")
+        content: Full text of the content example
+        notes: Optional notes about why this example is notable
     """
     try:
         content_type = _validate_mcp_input(content_type, label="content_type")
@@ -1894,16 +2105,20 @@ async def ingest_knowledge(
     content: str,
     tags: str | None = None,
 ) -> str:
-    """Add a knowledge entry directly to your Second Brain's knowledge repository.
+    """Store a knowledge entry in the brain — frameworks, methodologies,
+    research findings, playbooks, or tools. Embedded for semantic retrieval.
 
-    Knowledge entries capture audience insights, product info, competitive data,
-    and other reference material. Previously required a migration script.
+    When to use: When you have reference material to store for future use.
+    Unlike learn (which extracts patterns from raw text), ingest_knowledge
+    stores structured knowledge entries directly.
+
+    Returns: Confirmation with the stored knowledge entry ID.
 
     Args:
-        category: Knowledge category (e.g., audience, product, competitors, positioning)
-        title: Short title for this knowledge entry
-        content: The knowledge content text
-        tags: Optional comma-separated tags (e.g., "enterprise,saas,2026")
+        category: Entry type — audience, product, competitors, positioning, etc.
+        title: Entry title (e.g., "SPIN Selling Framework")
+        content: Full knowledge content text
+        tags: Comma-separated tags for filtering (e.g., "enterprise,saas,2026")
     """
     try:
         category = _validate_mcp_input(category, label="category")
@@ -1935,8 +2150,15 @@ async def ingest_knowledge(
 
 @server.tool()
 async def brain_setup() -> str:
-    """Check brain setup/onboarding status. Shows which memory categories are populated
-    and what steps remain to fully configure the brain."""
+    """Check brain onboarding/setup progress — which memory categories are
+    populated and what steps remain to fully configure the brain.
+
+    When to use: During initial setup to track onboarding progress. For
+    ongoing health monitoring, use brain_health instead.
+
+    Returns: Completion percentage, step-by-step checklist with status,
+    and next actions for missing categories.
+    """
     deps = _get_deps()
     try:
         from second_brain.services.health import HealthService
@@ -1964,7 +2186,15 @@ async def brain_setup() -> str:
 
 @server.tool()
 async def pattern_registry() -> str:
-    """View the full pattern registry -- all patterns with confidence, usage, and status."""
+    """View the full pattern registry — all patterns with confidence, usage count,
+    and status in a comprehensive overview.
+
+    When to use: For a complete picture of all patterns. For filtered search,
+    use search_patterns instead. For brain-wide health, use brain_health.
+
+    Returns: Formatted pattern registry with confidence levels, usage counts,
+    and topic groupings.
+    """
     deps = _get_deps()
     try:
         from second_brain.agents.utils import format_pattern_registry
@@ -1979,10 +2209,16 @@ async def pattern_registry() -> str:
 
 @server.tool()
 async def coaching_session(request: str, session_type: str = "morning") -> str:
-    """Get daily accountability coaching for planning and productivity.
+    """Get daily accountability coaching — planning, productivity, and work-life
+    management powered by your brain's context and patterns.
+
+    When to use: For daily planning (morning), reflection (evening), mid-day
+    check-ins, or when feeling overwhelmed (intervention).
+
+    Returns: Session summary, coaching notes, and next action.
 
     Args:
-        request: Your coaching request (e.g., "Help me plan today", "I'm overwhelmed")
+        request: Your coaching need (e.g., "Help me plan today", "I'm overwhelmed")
         session_type: Session type — morning, evening, check_in, or intervention
     """
     try:
@@ -2008,7 +2244,13 @@ async def coaching_session(request: str, session_type: str = "morning") -> str:
 
 @server.tool()
 async def prioritize_tasks(tasks: str) -> str:
-    """Score and prioritize tasks using PMO methodology.
+    """Score and prioritize tasks using PMO methodology — impact, urgency,
+    effort, and alignment scoring.
+
+    When to use: When you have multiple tasks and need to decide what to work
+    on first. Provides scored rankings with category labels.
+
+    Returns: Ranked task list with scores and category breakdown.
 
     Args:
         tasks: Comma-separated list of tasks to prioritize
@@ -2035,7 +2277,12 @@ async def prioritize_tasks(tasks: str) -> str:
 
 @server.tool()
 async def compose_email(request: str) -> str:
-    """Compose or manage emails with brand voice.
+    """Compose emails using your brand voice, patterns, and client context.
+
+    When to use: For drafting or managing emails. Uses brain context for
+    personalization. For general content creation, use create_content instead.
+
+    Returns: Email with subject line, body, and status.
 
     Args:
         request: Email request (e.g., "Draft a follow-up to John about the proposal")
@@ -2059,7 +2306,13 @@ async def compose_email(request: str) -> str:
 
 @server.tool()
 async def ask_claude_specialist(question: str) -> str:
-    """Ask a verified question about Claude Code, Pydantic AI, or AI development.
+    """Ask a verified question about Claude Code, Pydantic AI, or AI development
+    tools. Answers are confidence-rated.
+
+    When to use: For technical questions about Claude Code, Pydantic AI, or
+    AI development patterns. For general brain questions, use ask instead.
+
+    Returns: Confidence-rated answer ([HIGH/MEDIUM/LOW] + answer text).
 
     Args:
         question: Technical question about Claude Code or AI development
@@ -2085,14 +2338,20 @@ async def ask_claude_specialist(question: str) -> str:
 
 @server.tool()
 async def run_brain_pipeline(request: str, steps: str = "") -> str:
-    """Run a multi-agent pipeline. Steps is a comma-separated list of agent names.
+    """Run a multi-agent pipeline — chains multiple agents in sequence where
+    each agent's output feeds into the next. Auto-routes via Chief of Staff
+    if no steps specified.
 
-    If steps is empty, uses Chief of Staff to determine the optimal pipeline.
-    Example steps: "recall,create,review"
+    When to use: For multi-step workflows like content creation pipelines
+    (recall->create->review) or learn-from-content flows (review->learn).
+    For single-agent tasks, call the specific tool directly.
+
+    Returns: Final pipeline output (from the last agent in the chain).
 
     Args:
-        request: The user's request to process through the pipeline
-        steps: Comma-separated agent names (e.g., "recall,create,review"). Empty = auto-route.
+        request: The request to process through the pipeline.
+        steps: Comma-separated agent names (e.g., "recall,create,review").
+               Empty = auto-route via Chief of Staff.
     """
     try:
         request = _validate_mcp_input(request, label="request")
@@ -2131,7 +2390,18 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
 
 @server.tool()
 async def analyze_clarity(content: str) -> str:
-    """Analyze content for clarity and readability issues."""
+    """Analyze content for readability and clarity issues — jargon, complexity,
+    information density, and abstract language.
+
+    When to use: For focused readability analysis. Unlike review_content (which
+    scores across all quality dimensions), this specifically targets clarity.
+
+    Returns: Overall readability rating, critical issue count, and specific
+    findings with severity, location, and suggestions.
+
+    Args:
+        content: Text content to analyze for clarity issues
+    """
     try:
         content = _validate_mcp_input(content, label="content")
     except ValueError as e:
@@ -2154,7 +2424,17 @@ async def analyze_clarity(content: str) -> str:
 
 @server.tool()
 async def synthesize_feedback(findings: str) -> str:
-    """Consolidate review findings into actionable improvement themes."""
+    """Consolidate review findings into actionable improvement themes.
+
+    When to use: After running review_content or analyze_clarity, feed the
+    findings here to get prioritized improvement themes with effort estimates.
+
+    Returns: Theme count, total implementation hours, and prioritized themes
+    with effort estimates and specific actions.
+
+    Args:
+        findings: Review findings text (from review_content or analyze_clarity output)
+    """
     try:
         findings = _validate_mcp_input(findings, label="findings")
     except ValueError as e:
@@ -2177,7 +2457,17 @@ async def synthesize_feedback(findings: str) -> str:
 
 @server.tool()
 async def find_template_opportunities(deliverable: str) -> str:
-    """Analyze a deliverable for reusable template opportunities."""
+    """Analyze a deliverable for reusable template opportunities — identifies
+    repeatable structures that could be templatized for future use.
+
+    When to use: After completing a deliverable that might contain reusable
+    patterns or structures. Identifies template candidates with usage guidance.
+
+    Returns: Template opportunity count and list with names and usage guidance.
+
+    Args:
+        deliverable: Completed deliverable text to analyze for template patterns
+    """
     try:
         deliverable = _validate_mcp_input(deliverable, label="deliverable")
     except ValueError as e:
