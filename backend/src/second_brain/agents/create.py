@@ -32,16 +32,23 @@ create_agent = Agent(
         "- The 'notes' field is for editorial suggestions to the human reviewer.\n"
         "- The 'patterns_applied' and 'voice_elements' fields track what you used.\n"
         "- Set word_count to the actual word count of the draft.\n\n"
+        "VOICE (CRITICAL):\n"
+        "- Your prompt includes the user's VOICE GUIDE and REFERENCE EXAMPLES — study them carefully.\n"
+        "- Mirror the user's actual writing style, sentence rhythm, word choices, and personality.\n"
+        "- The voice guide IS the voice. Do not default to generic 'professional' or 'casual' tone.\n"
+        "- If no voice guide is provided, write in a clear, direct, conversational tone.\n\n"
         "PROCESS:\n"
-        "1. Load the voice guide and relevant examples before drafting.\n"
-        "2. Match the communication mode (casual/professional/formal) to the content type.\n"
+        "1. Study the voice guide and reference examples in your prompt.\n"
+        "2. Use find_applicable_patterns to find topic-specific writing patterns.\n"
         "3. Follow the Five Writing Laws: active voice, remove needless words, no adverbs, "
         "write simply, hit the reader with the first sentence.\n"
         "4. AVOID AI patterns: no em dashes for drama, no 'Here's the thing:', "
         "no fake enthusiasm ('amazing', 'incredible'), "
         "no generic intros ('In today's fast-paced world...').\n"
-        "5. Call validate_draft to check your draft meets content type requirements.\n"
-        "6. Produce a DRAFT for human editing, not final copy."
+        "5. Let the content be as long or short as it needs to be. "
+        "Follow the length guidance but don't pad or truncate artificially.\n"
+        "6. Call validate_draft to check structure requirements.\n"
+        "7. Produce a DRAFT for human editing, not final copy."
     ),
 )
 
@@ -107,13 +114,6 @@ async def validate_create(ctx: RunContext[BrainDeps], output: CreateResult) -> C
                 "publishable text that the user will copy and paste. Remove any meta-commentary "
                 "and write the actual content."
             )
-
-    # Check voice elements were loaded
-    if not output.voice_elements:
-        raise ModelRetry(
-            "No voice elements applied. Use the load_voice_guide tool to load "
-            "the brand voice guide, then apply those elements in the draft."
-        )
 
     # Set word_count if not already set
     if output.word_count == 0:
@@ -308,24 +308,26 @@ async def validate_draft(
         issues = []
         word_count = len(draft.split())
 
-        # Word count from max_words (existing check)
+        # Word count from max_words (soft advisory)
         if config.max_words and config.max_words > 0:
             if word_count > config.max_words:
                 issues.append(
-                    f"Word count ({word_count}) exceeds max ({config.max_words}). "
-                    f"Trim by {word_count - config.max_words} words."
+                    f"Consider tightening — the draft is {word_count} words "
+                    f"(typical max for {content_type} is {config.max_words}). "
+                    "Only trim if there's actual fluff."
                 )
-            elif word_count < config.max_words * 0.3:
+            elif word_count < config.max_words * 0.2:
                 issues.append(
-                    f"Word count ({word_count}) is very short for {content_type} "
-                    f"(target: {config.max_words}). Consider expanding."
+                    f"Draft is only {word_count} words — quite short for {content_type}. "
+                    "Make sure the content is complete, not just an outline."
                 )
 
         # Min words from validation_rules
         min_words = config.validation_rules.get("min_words", 0)
         if min_words and word_count < min_words:
             issues.append(
-                f"Word count ({word_count}) is below minimum ({min_words}) for {content_type}."
+                f"Draft is {word_count} words, below the suggested minimum of "
+                f"{min_words} for {content_type}. Ensure the content is complete."
             )
 
         # Required sections from validation_rules

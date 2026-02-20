@@ -219,6 +219,12 @@ class ContentTypeConfig(BaseModel):
         description="Type-specific validation rules applied by validate_draft tool. "
         "Keys: min_words (int), required_sections (list[str]), custom_checks (list[str]).",
     )
+    length_guidance: str = Field(
+        default="",
+        description="Natural-language length guidance for the agent. "
+        "Replaces rigid word count targets in the prompt. "
+        "Example: 'Short and punchy — typically 50-300 words, but let the content breathe.'",
+    )
     ui_config: dict[str, Any] = Field(
         default_factory=dict,
         description="Frontend UI metadata. Keys: icon (str), color (str), category (str), "
@@ -239,7 +245,8 @@ class CreateResult(BaseModel):
     )
     content_type: str = Field(description="Content type used (e.g., linkedin, email)")
     mode: str = Field(
-        description="Communication mode: casual, professional, or formal"
+        description="Writing register derived from voice guide and content type — "
+        "reflects the user's natural tone for this format"
     )
     voice_elements: list[str] = Field(
         default_factory=list,
@@ -654,6 +661,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "4. No hashtag spam — 3-5 relevant hashtags max\n"
             "5. Write conversationally, not corporately"
         ),
+        length_guidance=(
+            "Let it breathe — short posts (50-150 words) or long-form thought "
+            "leadership (300-800 words) both work. Match length to the depth of the idea."
+        ),
         validation_rules={"min_words": 30},
         ui_config={"icon": "linkedin", "color": "#0077b5", "category": "social"},
     ),
@@ -672,6 +683,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "3. One main ask per email\n"
             "4. End with clear next step and timeline\n"
             "5. Professional but warm — not robotic"
+        ),
+        length_guidance=(
+            "As short as possible, as long as necessary. Most emails are 100-300 words. "
+            "Complex topics may need more — but ruthlessly cut fluff."
         ),
         validation_rules={"min_words": 50},
         ui_config={"icon": "mail", "color": "#ea580c", "category": "communication"},
@@ -692,6 +707,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "4. Social proof with specific numbers\n"
             "5. Single clear CTA — no competing actions"
         ),
+        length_guidance=(
+            "Enough to persuade, not a word more. Typically 300-800 words "
+            "depending on the offer complexity."
+        ),
         validation_rules={"min_words": 200},
         ui_config={"icon": "layout", "color": "#0ea5e9", "category": "marketing"},
     ),
@@ -710,6 +729,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "3. Keep it concise — under 3 sentences\n"
             "4. Ask a follow-up question if natural\n"
             "5. Never be promotional"
+        ),
+        length_guidance=(
+            "Brief and high-signal. 1-3 sentences. Under 100 words "
+            "unless the thread warrants depth."
         ),
         validation_rules={"min_words": 10},
         ui_config={"icon": "message-circle", "color": "#22c55e", "category": "social"},
@@ -730,6 +753,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "4. Approach section shows methodology, not just actions\n"
             "5. Results MUST be quantified — no vague claims"
         ),
+        length_guidance=(
+            "Thorough but scannable. 800-1500 words. Use subheadings "
+            "so readers can skip to results."
+        ),
         validation_rules={"min_words": 500},
         ui_config={"icon": "bar-chart", "color": "#8b5cf6", "category": "long-form"},
     ),
@@ -748,6 +775,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "3. Solution maps directly to stated problems\n"
             "4. Deliverables are specific and measurable\n"
             "5. Investment section anchors on value, not cost"
+        ),
+        length_guidance=(
+            "Comprehensive. 1000-2000 words. Every section earns its place — "
+            "cut anything that doesn't advance the sale."
         ),
         validation_rules={"min_words": 800},
         ui_config={"icon": "file-text", "color": "#f59e0b", "category": "business"},
@@ -768,6 +799,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "4. One piece of social proof\n"
             "5. Single CTA with clear next step"
         ),
+        length_guidance=(
+            "One page when printed. 300-500 words. If it takes more "
+            "than 60 seconds to scan, it's too long."
+        ),
         validation_rules={"min_words": 100},
         ui_config={"icon": "file", "color": "#14b8a6", "category": "business"},
     ),
@@ -786,6 +821,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "3. Each point needs one supporting story or data point\n"
             "4. Transitions between points must be explicit\n"
             "5. End with a memorable closing, not just 'any questions?'"
+        ),
+        length_guidance=(
+            "Speaker notes, not a script. 400-800 words. "
+            "Each slide gets 2-3 bullet points max."
         ),
         validation_rules={"min_words": 200},
         ui_config={"icon": "monitor", "color": "#ec4899", "category": "communication"},
@@ -806,6 +845,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
             "4. CTA should feel natural, not salesy\n"
             "5. 5-10 relevant hashtags at the end"
         ),
+        length_guidance=(
+            "Micro-storytelling. 30-150 words before hashtags. "
+            "First line must hook before the 'more' cut."
+        ),
         validation_rules={"min_words": 20},
         ui_config={"icon": "instagram", "color": "#e1306c", "category": "social"},
     ),
@@ -817,6 +860,10 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         max_words=3000,
         description="Intellectually rigorous, stylistically compelling essay",
         is_builtin=True,
+        length_guidance=(
+            "As long as the argument requires. 1000-3000 words. "
+            "Depth over brevity — but every paragraph must advance the thesis."
+        ),
         writing_instructions=(
             "WRITING PROCESS (follow in order):\n"
             "1. Identify the topic and evaluate the angle using STIRC scoring\n"
@@ -1105,6 +1152,7 @@ def content_type_from_row(row: dict) -> ContentTypeConfig:
         review_dimensions=review_dims,
         is_builtin=row.get("is_builtin", False),
         writing_instructions=row.get("writing_instructions") or "",
+        length_guidance=row.get("length_guidance", ""),
         validation_rules=row.get("validation_rules") or {},
         ui_config=row.get("ui_config") or {},
     )

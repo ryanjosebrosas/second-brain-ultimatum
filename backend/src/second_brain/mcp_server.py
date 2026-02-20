@@ -569,19 +569,17 @@ async def multimodal_vector_search(
 
 @server.tool()
 async def create_content(
-    prompt: str, content_type: str = "linkedin", mode: str | None = None
+    prompt: str, content_type: str = "linkedin",
 ) -> str:
     """Draft content in your voice using brain knowledge.
-    The agent loads your voice guide, relevant examples, applicable patterns,
-    and audience context, then produces a draft for human editing.
+    The agent pre-loads your voice guide, relevant examples, and applicable patterns,
+    then produces a draft for human editing.
 
     Args:
         prompt: What to write about — e.g., "Announce our new AI automation product"
         content_type: Content type — linkedin, email, landing-page, comment,
                       case-study, proposal, one-pager, presentation, instagram,
                       or any custom type you've added.
-        mode: Communication mode — casual, professional, or formal.
-              Defaults to the content type's default mode.
     """
     try:
         prompt = _validate_mcp_input(prompt, label="prompt")
@@ -596,16 +594,69 @@ async def create_content(
         available = await registry.slugs()
         return f"Unknown content type '{content_type}'. Available: {', '.join(available)}"
 
-    effective_mode = mode or type_config.default_mode
+    # Pre-load voice guide
+    voice_sections = []
+    try:
+        voice_content = await deps.storage_service.get_memory_content("style-voice")
+        if voice_content:
+            for item in voice_content:
+                title = item.get("title", "Untitled")
+                text = item.get("content", "")[:deps.config.content_preview_limit]
+                voice_sections.append(f"### {title}\n{text}")
+    except Exception:
+        logger.debug("Failed to pre-load voice guide for create_content")
 
-    enhanced = (
-        f"Content type: {type_config.name} ({content_type})\n"
-        f"Communication mode: {effective_mode}\n"
-        f"Structure: {type_config.structure_hint}\n"
-    )
-    if type_config.max_words:
-        enhanced += f"Target length: ~{type_config.max_words} words\n"
-    enhanced += f"\nRequest: {prompt}"
+    # Pre-load content examples
+    example_sections = []
+    try:
+        examples = await deps.storage_service.get_examples(content_type=content_type)
+        if examples:
+            limit = deps.config.experience_limit
+            for ex in examples[:limit]:
+                title = ex.get("title", "Untitled")
+                text = ex.get("content", "")[:deps.config.content_preview_limit]
+                example_sections.append(f"### {title}\n{text}")
+    except Exception:
+        logger.debug("Failed to pre-load examples for create_content")
+
+    # Build enhanced prompt
+    enhanced_parts = [
+        f"Content type: {type_config.name} ({content_type})",
+        f"Structure: {type_config.structure_hint}",
+    ]
+
+    # Length guidance (flexible, not rigid)
+    if type_config.length_guidance:
+        enhanced_parts.append(f"Length: {type_config.length_guidance}")
+    elif type_config.max_words:
+        enhanced_parts.append(
+            f"Typical length: around {type_config.max_words} words, "
+            "but adjust to fit the content"
+        )
+
+    # Voice guide
+    if voice_sections:
+        enhanced_parts.append(
+            "\n## Your Voice & Tone Guide\n" + "\n\n".join(voice_sections)
+        )
+    else:
+        enhanced_parts.append(
+            "\nNo voice guide stored yet. Write in a clear, direct, conversational tone. "
+            "Avoid corporate speak and AI-sounding phrases."
+        )
+
+    # Content examples
+    if example_sections:
+        enhanced_parts.append(
+            f"\n## Reference Examples ({content_type})\nStudy these examples of your past "
+            f"{type_config.name} content — match the style, structure, and voice:\n"
+            + "\n\n".join(example_sections)
+        )
+
+    # The actual request
+    enhanced_parts.append(f"\n## Request\n{prompt}")
+
+    enhanced = "\n".join(enhanced_parts)
 
     timeout = deps.config.api_timeout_seconds
     try:
@@ -616,7 +667,7 @@ async def create_content(
     output = result.output
 
     parts = [
-        f"# Draft: {output.content_type} ({output.mode})\n",
+        f"# Draft: {output.content_type}\n",
         output.draft,
         f"\n---",
         f"**Words**: {output.word_count}",

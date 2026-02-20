@@ -119,7 +119,7 @@ graph LR
 
 | Agent | What It Does |
 |-------|-------------|
-| `create` | Generates content (posts, docs, emails, code comments) with awareness of your stored voice and style examples |
+| `create` | Generates content (posts, docs, emails, code comments) in your authentic voice — pre-loads your voice guide and past examples directly into the prompt so drafts always match your style |
 | `review` | Scores content across multiple dimensions: clarity, structure, impact, tone — returns dimension-by-dimension scores |
 | `clarity` | Readability analysis — identifies passive voice, jargon, complex sentences, and structural issues |
 | `synthesizer` | Consolidates feedback from multiple sources (review scores, clarity issues, your notes) into a single prioritized action list |
@@ -652,7 +652,7 @@ backend/
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~998 tests (one file per module)
+├── tests/                     # ~1004 tests (one file per module)
 ├── scripts/                   # Utility scripts
 ├── Dockerfile                 # Multi-stage uv build (Python 3.12)
 ├── docker-compose.yml         # Docker compose (HTTP transport, named network)
@@ -668,7 +668,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~998)
+pytest                              # All tests (~1004)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -688,7 +688,7 @@ One test file per source module. All async tests run without `@pytest.mark.async
 | Service layer modules | 9 |
 | Database migrations | 15 |
 | Test files | 20 |
-| Tests | ~998 |
+| Tests | ~1004 |
 | Python version | 3.11+ |
 
 ---

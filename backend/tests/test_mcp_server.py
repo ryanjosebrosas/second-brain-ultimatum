@@ -352,13 +352,14 @@ class TestMCPTools:
 
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
 
         result = await create_content(
             prompt="Announce our new AI automation product",
             content_type="linkedin",
-            mode="casual",
         )
         assert "AI automation" in result
         assert "85" in result
@@ -387,8 +388,8 @@ class TestMCPTools:
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
     @patch("second_brain.mcp_server.create_agent")
-    async def test_create_content_default_mode(self, mock_agent, mock_deps_fn, mock_model_fn):
-        """create_content uses type's default_mode when mode is None."""
+    async def test_create_content_voice_preload(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """create_content pre-loads voice guide into the enhanced prompt."""
         from second_brain.mcp_server import create_content
         mock_result = MagicMock()
         mock_result.output = CreateResult(
@@ -407,12 +408,126 @@ class TestMCPTools:
         mock_registry.get = AsyncMock(return_value=linkedin_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(
+            return_value=[{"title": "My Voice", "content": "Direct, punchy, no fluff"}]
+        )
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
+        mock_deps.config.content_preview_limit = 1000
+        mock_deps.config.experience_limit = 5
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
         result = await create_content(prompt="Write about AI", content_type="linkedin")
         assert "Test draft" in result
         call_args = mock_agent.run.call_args[0][0]
-        assert "Communication mode: casual" in call_args
+        assert "Your Voice & Tone Guide" in call_args
+        assert "Direct, punchy, no fluff" in call_args
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_preloads_voice_guide(
+        self, mock_agent, mock_deps_fn, mock_model_fn
+    ):
+        """create_content injects pre-loaded voice guide into the agent prompt."""
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Draft text here", content_type="linkedin",
+            mode="casual", word_count=50,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_deps = _mock_deps()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(
+            return_value=[{"title": "Brand Voice", "content": "Speak directly. Short sentences. No corporate buzzwords."}]
+        )
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
+        mock_deps.config.content_preview_limit = 1000
+        mock_deps.config.experience_limit = 5
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
+        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        assert "Draft text" in result
+        call_args = mock_agent.run.call_args[0][0]
+        assert "Brand Voice" in call_args
+        assert "Short sentences" in call_args
+        assert "No voice guide stored" not in call_args
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_preloads_examples(
+        self, mock_agent, mock_deps_fn, mock_model_fn
+    ):
+        """create_content injects pre-loaded examples into the agent prompt."""
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Draft text here", content_type="linkedin",
+            mode="casual", word_count=50,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_deps = _mock_deps()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_examples = AsyncMock(
+            return_value=[{"title": "Q3 Launch Post", "content": "We just shipped the thing everyone asked for..."}]
+        )
+        mock_deps.config.content_preview_limit = 1000
+        mock_deps.config.experience_limit = 5
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
+        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        assert "Draft text" in result
+        call_args = mock_agent.run.call_args[0][0]
+        assert "Q3 Launch Post" in call_args
+        assert "Reference Examples" in call_args
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_graceful_fallback_no_voice(
+        self, mock_agent, mock_deps_fn, mock_model_fn
+    ):
+        """create_content shows fallback message when no voice guide exists."""
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Draft text here", content_type="linkedin",
+            mode="casual", word_count=50,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_deps = _mock_deps()
+        mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
+        mock_deps_fn.return_value = mock_deps
+        mock_model_fn.return_value = MagicMock()
+        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        assert "Draft text" in result
+        call_args = mock_agent.run.call_args[0][0]
+        assert "No voice guide stored yet" in call_args
 
     def test_review_content_tool_exists(self):
         from second_brain.mcp_server import server
@@ -511,6 +626,8 @@ class TestMCPAgentFailures:
         mock_registry.get = AsyncMock(return_value=linkedin_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
+        mock_deps.storage_service.get_memory_content = AsyncMock(return_value=[])
+        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
 

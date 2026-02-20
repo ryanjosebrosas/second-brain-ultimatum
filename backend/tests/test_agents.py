@@ -355,6 +355,17 @@ class TestCreateResultSchema:
         assert config.name == "Test Type"
         assert config.max_words == 0
         assert config.description == ""
+        assert config.length_guidance == ""
+
+    def test_content_type_length_guidance(self):
+        config = ContentTypeConfig(
+            name="Test Type",
+            default_mode="casual",
+            structure_hint="Intro -> Body -> Close",
+            example_type="test",
+            length_guidance="50-300 words, flexible",
+        )
+        assert config.length_guidance == "50-300 words, flexible"
 
     def test_content_types_registry(self):
         assert "linkedin" in DEFAULT_CONTENT_TYPES
@@ -363,10 +374,15 @@ class TestCreateResultSchema:
         assert "comment" in DEFAULT_CONTENT_TYPES
         assert len(DEFAULT_CONTENT_TYPES) == 10
 
+    def test_content_types_have_length_guidance(self):
+        for slug, ct in DEFAULT_CONTENT_TYPES.items():
+            assert ct.length_guidance, f"{slug} missing length_guidance"
+
     def test_content_type_defaults(self):
         linkedin = DEFAULT_CONTENT_TYPES["linkedin"]
         assert linkedin.default_mode == "casual"
         assert linkedin.max_words == 300
+        assert "breathe" in linkedin.length_guidance.lower()
         email = DEFAULT_CONTENT_TYPES["email"]
         assert email.default_mode == "professional"
 
@@ -401,6 +417,17 @@ class TestCreateAgent:
         )
         assert "draft" in instructions.lower(), (
             "Create agent instructions must reference the draft field"
+        )
+
+    def test_agent_instructions_prioritize_voice(self):
+        """Instructions must direct agent to use pre-loaded voice guide."""
+        from second_brain.agents.create import create_agent
+        instructions = create_agent._instructions
+        assert "VOICE GUIDE" in instructions, (
+            "Create agent instructions must reference pre-loaded VOICE GUIDE"
+        )
+        assert "voice guide IS the voice" in instructions, (
+            "Create agent instructions must emphasize voice guide as primary voice source"
         )
 
 
