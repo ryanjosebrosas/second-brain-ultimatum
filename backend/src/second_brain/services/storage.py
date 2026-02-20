@@ -334,11 +334,19 @@ class StorageService:
             return []
 
     async def get_growth_event_counts(self, days: int = 30) -> dict[str, int]:
-        """Get counts of each event type within the last N days."""
+        """Get counts of each event type within the last N days.
+
+        Queries only the event_type column to minimize network transfer,
+        then aggregates in Python. A full SQL GROUP BY would require an RPC.
+        """
         try:
-            events = await self.get_growth_events(days=days)
+            cutoff = str(date.today() - timedelta(days=days))
+            query = self._client.table("growth_log").select("event_type")
+            query = query.eq("user_id", self.user_id)
+            query = query.gte("event_date", cutoff)
+            result = await asyncio.to_thread(query.execute)
             counts: dict[str, int] = {}
-            for e in events:
+            for e in result.data or []:
                 t = e.get("event_type", "unknown")
                 counts[t] = counts.get(t, 0) + 1
             return counts

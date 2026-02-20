@@ -673,6 +673,7 @@ backend/
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
 ├── supabase/migrations/       # 19 SQL migrations (001–019)
 ├── tests/                     # 1060+ tests across 24 files
+├── docs/                      # Operational runbooks and integration guides
 ├── scripts/                   # Utility scripts
 ├── Dockerfile                 # Multi-stage uv build (Python 3.12)
 ├── docker-compose.yml         # Docker compose (HTTP transport)

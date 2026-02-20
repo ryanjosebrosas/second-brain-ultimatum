@@ -63,7 +63,7 @@ class TestBrainConfigDefaults:
         assert config.content_preview_limit == 1000
         assert config.pattern_preview_limit == 200
         assert config.mcp_transport == "stdio"
-        assert config.mcp_host == "0.0.0.0"
+        assert config.mcp_host == "127.0.0.1"
         assert config.mcp_port == 8000
 
     def test_custom_values(self, tmp_path):
@@ -545,7 +545,7 @@ class TestGraphitiConfig:
         assert "secret" not in repr(config)
 
 
-class TestDataInfraConfig:
+class TestDataInfrastructureConfig:
     """Tests for data infrastructure config fields."""
 
     def test_hnsw_ef_search_default(self, tmp_path):
@@ -662,9 +662,9 @@ class TestSubscriptionConfig:
         monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
         monkeypatch.setenv("SUPABASE_KEY", "test-key")
         monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_OAUTH_TOKEN", "sk-ant-oat01-test")
+        monkeypatch.setenv("CLAUDE_OAUTH_TOKEN", "test-oauth-token-placeholder")
         config = BrainConfig(_env_file=None)
-        assert config.claude_oauth_token == "sk-ant-oat01-test"
+        assert config.claude_oauth_token == "test-oauth-token-placeholder"
 
     def test_oauth_token_not_in_repr(self, tmp_path):
         """OAuth token should be hidden in repr (security)."""
@@ -782,7 +782,7 @@ class TestMcpTransportConfig:
             brain_data_path=tmp_path,
             _env_file=None,
         )
-        assert config.mcp_host == "0.0.0.0"
+        assert config.mcp_host == "127.0.0.1"
 
     def test_mcp_port_default(self, tmp_path):
         config = BrainConfig(

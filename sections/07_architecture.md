@@ -47,7 +47,8 @@ backend/
       search_result.py     # Search result data structures
       abstract.py          # Abstract base classes for pluggable services
       __init__.py
-  supabase/migrations/     # Numbered SQL migrations (001–014)
+  docs/                    # Operational runbooks and integration guides
+  supabase/migrations/     # Numbered SQL migrations (001–019)
   tests/                   # One test file per source module
   scripts/                 # Utility scripts (e.g., reingest_graph.py)
   .env                     # Secrets (gitignored)

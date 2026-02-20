@@ -36,7 +36,7 @@ Think of it as a brain that any AI assistant can plug into.
 {
   "mcpServers": {
     "second-brain": {
-      "url": "http://localhost:3030"
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -63,7 +63,9 @@ You: "Switch back to uttam"
 AI:  → calls set_user("uttam")
 ```
 
-**Available users:** `uttam`, `robert`, `luke`, `brainforge` (shared)
+**Note:** Available user IDs are configured per deployment. The `brainforge` user contains shared company knowledge included in all searches.
+
+> **Security:** When using HTTP transport, the MCP server has no built-in authentication. In non-local deployments, place it behind a reverse proxy with access controls (e.g., nginx + basic auth, or a VPN). Never expose the MCP port directly to the internet.
 
 ---
 
@@ -192,7 +194,7 @@ You (natural language)
   ↓
 MCP Client (Claude Code / Cursor / Claude.ai)
   ↓
-Second Brain MCP Server (FastMCP, port 3030)
+Second Brain MCP Server (FastMCP, port 8000)
   ↓
 ┌─────────────────────────────────────┐
 │  Agent Layer (Pydantic AI)          │

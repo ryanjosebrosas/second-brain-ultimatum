@@ -300,8 +300,8 @@ class BrainConfig(BaseSettings):
         description="MCP transport mode: stdio (local, default) | sse (legacy) | http (Docker/network) | streamable-http (alias for http)",
     )
     mcp_host: str = Field(
-        default="0.0.0.0",
-        description="Host to bind when using HTTP/SSE transport (ignored for stdio)",
+        default="127.0.0.1",
+        description="Host to bind when using HTTP/SSE transport (ignored for stdio). Use 0.0.0.0 for Docker/network deployments.",
     )
     mcp_port: int = Field(
         default=8000,

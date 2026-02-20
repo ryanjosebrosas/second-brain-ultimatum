@@ -7,8 +7,13 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from second_brain.config import BrainConfig
+from second_brain.schemas import DEFAULT_CONTENT_TYPES
+from second_brain.services.abstract import MemoryServiceBase, StubMemoryService
+from second_brain.services.embeddings import EmbeddingService
+from second_brain.services.health import HealthService
 from second_brain.services.memory import MemoryService
-from second_brain.services.storage import StorageService
+from second_brain.services.search_result import SearchResult
+from second_brain.services.storage import ContentTypeRegistry, StorageService
 
 
 class TestMemoryService:
@@ -548,7 +553,7 @@ class TestContentTypeStorage:
 
 class TestContentTypeRegistry:
     async def test_registry_loads_from_db(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
@@ -562,7 +567,7 @@ class TestContentTypeRegistry:
         assert result["linkedin"].name == "LinkedIn Post"
 
     async def test_registry_caches_results(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
@@ -580,7 +585,7 @@ class TestContentTypeRegistry:
         assert mock_deps.storage_service.get_content_types.call_count == 1
 
     async def test_registry_invalidate_forces_reload(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
@@ -596,8 +601,8 @@ class TestContentTypeRegistry:
         assert mock_deps.storage_service.get_content_types.call_count == 2
 
     async def test_registry_falls_back_to_defaults_on_empty(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
-        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[])
         registry = ContentTypeRegistry(mock_deps.storage_service)
@@ -607,8 +612,8 @@ class TestContentTypeRegistry:
         assert "linkedin" in result
 
     async def test_registry_falls_back_on_error(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
-        from second_brain.schemas import DEFAULT_CONTENT_TYPES
+
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(
             side_effect=Exception("DB unavailable")
@@ -619,7 +624,7 @@ class TestContentTypeRegistry:
         assert len(result) == len(DEFAULT_CONTENT_TYPES)
 
     async def test_registry_get_single(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "linkedin", "name": "LinkedIn Post", "default_mode": "casual",
@@ -636,7 +641,7 @@ class TestContentTypeRegistry:
         assert missing is None
 
     async def test_registry_slugs(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "email", "name": "Email", "default_mode": "professional",
@@ -652,7 +657,7 @@ class TestContentTypeRegistry:
         assert slugs == ["email", "linkedin"]  # sorted alphabetically
 
     async def test_registry_parses_review_dimensions(self, mock_deps):
-        from second_brain.services.storage import ContentTypeRegistry
+
 
         mock_deps.storage_service.get_content_types = AsyncMock(return_value=[
             {"slug": "comment", "name": "Comment", "default_mode": "casual",
@@ -772,7 +777,7 @@ class TestDeleteOperations:
 
 class TestHealthService:
     async def test_compute_health(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
@@ -799,7 +804,7 @@ class TestHealthService:
         assert metrics.topics == {"content": 2, "messaging": 1}
 
     async def test_compute_health_memory_unavailable(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
@@ -816,7 +821,7 @@ class TestHealthService:
         assert metrics.status == "BUILDING"
 
     async def test_compute_health_growing_status(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"}
@@ -1086,7 +1091,6 @@ class TestGrowthLogStorage:
         mock_table.select.return_value = mock_table
         mock_table.eq.return_value = mock_table
         mock_table.gte.return_value = mock_table
-        mock_table.order.return_value = mock_table
         mock_table.execute.return_value = MagicMock(
             data=[
                 {"event_type": "pattern_created"},
@@ -1101,6 +1105,7 @@ class TestGrowthLogStorage:
         counts = await service.get_growth_event_counts(days=30)
 
         assert counts == {"pattern_created": 2, "pattern_reinforced": 1}
+        mock_table.select.assert_called_once_with("event_type")
 
 
 class TestReviewHistoryStorage:
@@ -1234,7 +1239,7 @@ class TestConfidenceHistoryStorage:
 
 class TestEnhancedHealthService:
     async def test_compute_growth_includes_base_metrics(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
@@ -1255,7 +1260,7 @@ class TestEnhancedHealthService:
         assert metrics.growth_events_total == 5
 
     async def test_compute_growth_review_trending(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
@@ -1276,7 +1281,7 @@ class TestEnhancedHealthService:
         assert metrics.review_score_trend == "improving"
 
     async def test_compute_growth_stale_patterns(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"name": "Old Pattern", "confidence": "LOW", "topic": "x",
@@ -1300,7 +1305,7 @@ class TestEnhancedHealthService:
         assert "Old HIGH" not in metrics.stale_patterns
 
     async def test_compute_growth_handles_failures(self, mock_deps):
-        from second_brain.services.health import HealthService
+
 
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
@@ -1443,21 +1448,21 @@ class TestHealthServiceGraphiti:
 
     async def test_health_without_graphiti(self, mock_deps):
         """Health compute when Graphiti is not configured."""
-        from second_brain.services.health import HealthService
+
         metrics = await HealthService().compute(mock_deps)
         assert metrics.graphiti_status == "disabled"
         assert metrics.graphiti_backend == "none"
 
     async def test_health_with_graphiti_healthy(self, mock_deps_with_graphiti):
         """Health compute when Graphiti is healthy."""
-        from second_brain.services.health import HealthService
+
         metrics = await HealthService().compute(mock_deps_with_graphiti)
         assert metrics.graphiti_status == "healthy"
         assert metrics.graphiti_backend == "neo4j"
 
     async def test_health_with_graphiti_error(self, mock_deps):
         """Health compute when Graphiti health check fails."""
-        from second_brain.services.health import HealthService
+
         mock_graphiti = AsyncMock()
         mock_graphiti.health_check = AsyncMock(side_effect=Exception("connection lost"))
         mock_deps.graphiti_service = mock_graphiti
@@ -1470,7 +1475,7 @@ class TestHealthServiceErrorTracking:
     """Test HealthService error tracking."""
 
     async def test_compute_tracks_pattern_errors(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_patterns = AsyncMock(
             side_effect=Exception("DB connection lost")
         )
@@ -1482,7 +1487,7 @@ class TestHealthServiceErrorTracking:
         assert "patterns" in metrics.errors[0]
 
     async def test_compute_tracks_experience_errors(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(
             side_effect=Exception("Timeout")
@@ -1493,7 +1498,7 @@ class TestHealthServiceErrorTracking:
         assert any("experiences" in e for e in metrics.errors)
 
     async def test_compute_growth_tracks_growth_event_errors(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
         mock_deps.memory_service.get_memory_count = AsyncMock(return_value=0)
@@ -1509,8 +1514,15 @@ class TestHealthServiceErrorTracking:
 class TestHealthMilestones:
     """Test brain milestone and quality trending computation."""
 
-    def _setup_base_mocks(self, mock_deps, patterns=None, experiences=None,
-                          memory_count=0, review_history=None, growth_counts=None):
+    def _setup_base_mocks(
+        self,
+        mock_deps: MagicMock,
+        patterns: list[dict] | None = None,
+        experiences: list[dict] | None = None,
+        memory_count: int = 0,
+        review_history: list[dict] | None = None,
+        growth_counts: dict[str, int] | None = None,
+    ) -> None:
         """Helper to set up common mocks for compute/compute_growth."""
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=patterns or [])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=experiences or [])
@@ -1524,7 +1536,7 @@ class TestHealthMilestones:
         )
 
     async def test_compute_milestones_empty_brain(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         self._setup_base_mocks(mock_deps)
         result = await HealthService().compute_milestones(mock_deps)
         assert result["level"] == "EMPTY"
@@ -1532,7 +1544,7 @@ class TestHealthMilestones:
         assert result["milestones_total"] == 9
 
     async def test_compute_milestones_foundation(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         self._setup_base_mocks(
             mock_deps,
             patterns=[
@@ -1547,7 +1559,7 @@ class TestHealthMilestones:
         assert result["milestones_completed"] >= 1
 
     async def test_compute_milestones_expert(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         patterns = (
             [{"confidence": "HIGH", "topic": "t", "date_updated": "2026-02-15"}] * 10
             + [{"confidence": "MEDIUM", "topic": "t", "date_updated": "2026-02-15"}] * 5
@@ -1566,7 +1578,7 @@ class TestHealthMilestones:
         assert result["milestones_completed"] >= 7
 
     async def test_compute_setup_status(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_setup_status = AsyncMock(return_value={
             "total_memory_entries": 5,
             "populated_categories": ["company", "personal"],
@@ -1580,7 +1592,7 @@ class TestHealthMilestones:
         assert result["total_steps"] == 8
 
     async def test_compute_setup_status_complete(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_setup_status = AsyncMock(return_value={
             "total_memory_entries": 20,
             "populated_categories": [
@@ -1596,7 +1608,7 @@ class TestHealthMilestones:
         assert result["completed_count"] == 8
 
     async def test_check_confidence_downgrades_no_failures(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.config.confidence_downgrade_consecutive = 2
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"id": "p1", "name": "Test", "confidence": "HIGH", "consecutive_failures": 0}
@@ -1605,7 +1617,7 @@ class TestHealthMilestones:
         assert len(result) == 0
 
     async def test_check_confidence_downgrades_triggers(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.config.confidence_downgrade_consecutive = 2
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"id": "p1", "name": "Failing", "confidence": "HIGH",
@@ -1622,7 +1634,7 @@ class TestHealthMilestones:
         assert result[0]["new_confidence"] == "MEDIUM"
 
     async def test_check_confidence_downgrades_skips_low(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.config.confidence_downgrade_consecutive = 2
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"id": "p1", "name": "Already Low", "confidence": "LOW",
@@ -1632,7 +1644,7 @@ class TestHealthMilestones:
         assert len(result) == 0
 
     async def test_compute_quality_trend(self, mock_deps):
-        from second_brain.services.health import HealthService
+
         mock_deps.storage_service.get_quality_trending = AsyncMock(return_value={
             "total_reviews": 5, "avg_score": 8.2,
             "by_dimension": {"Messaging": {"avg_score": 8.5, "count": 5}},
@@ -1650,8 +1662,8 @@ class TestHealthMilestones:
         assert len(result["by_dimension"]) == 1
 
 
-class TestStorageServiceNewMethods:
-    """Tests for gap-remediation service methods added in system-gap-remediation sub-plan 02."""
+class TestStorageServiceProjectOperations:
+    """Tests for project and artifact CRUD operations in StorageService."""
 
     @patch("second_brain.services.storage.create_client")
     async def test_update_project(self, mock_create, mock_config):
@@ -1809,35 +1821,59 @@ class TestStorageServiceNewMethods:
         assert mock_table.eq.call_count == 3  # once for category, once for subcategory, once for user_id
 
 
-class TestMemoryServiceNewMethods:
-    """Tests for get_by_id, delete_all, and search_by_category."""
+class TestMemoryServiceExtendedOperations:
+    """Tests for get_by_id, delete_all, and search_by_category on MemoryService."""
 
-    async def test_get_by_id_found(self, mock_memory):
-        mock_memory.get_by_id = AsyncMock(return_value={
-            "id": "mem-1", "memory": "Brand voice is direct"
-        })
-        result = await mock_memory.get_by_id("mem-1")
+    @patch("mem0.Memory")
+    async def test_get_by_id_found(self, mock_memory_cls, mock_config):
+        """get_by_id fetches all memories and filters by ID."""
+        mock_client = MagicMock()
+        mock_client.get_all.return_value = [
+            {"id": "mem-1", "memory": "Brand voice is direct"},
+            {"id": "mem-2", "memory": "Other memory"},
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.get_by_id("mem-1")
+        assert result is not None
         assert result["memory"] == "Brand voice is direct"
 
-    async def test_get_by_id_not_found(self, mock_memory):
-        mock_memory.get_by_id = AsyncMock(return_value=None)
-        result = await mock_memory.get_by_id("nonexistent")
+    @patch("mem0.Memory")
+    async def test_get_by_id_not_found(self, mock_memory_cls, mock_config):
+        """get_by_id returns None when ID not in memory list."""
+        mock_client = MagicMock()
+        mock_client.get_all.return_value = [
+            {"id": "mem-1", "memory": "Something"},
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.get_by_id("nonexistent")
         assert result is None
 
-    async def test_delete_all_returns_count(self, mock_memory):
-        mock_memory.delete_all = AsyncMock(return_value=3)
-        count = await mock_memory.delete_all()
+    @patch("mem0.Memory")
+    async def test_delete_all_returns_count(self, mock_memory_cls, mock_config):
+        """delete_all iterates all memories and deletes each one."""
+        mock_client = MagicMock()
+        mock_client.get_all.return_value = [
+            {"id": "mem-1"}, {"id": "mem-2"}, {"id": "mem-3"},
+        ]
+        mock_client.delete.return_value = None
+        mock_memory_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        count = await service.delete_all()
         assert count == 3
+        assert mock_client.delete.call_count == 3
 
-    async def test_search_by_category(self, mock_memory):
-        from second_brain.services.search_result import SearchResult
-        mock_memory.search_by_category = AsyncMock(
-            return_value=SearchResult(
-                memories=[{"memory": "voice pattern", "score": 0.9}],
-                relations=[],
-            )
-        )
-        result = await mock_memory.search_by_category("voice", query="brand")
+    @patch("mem0.Memory")
+    async def test_search_by_category(self, mock_memory_cls, mock_config):
+        """search_by_category calls search with category filter."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
+            {"memory": "voice pattern", "score": 0.9},
+        ]
+        mock_memory_cls.from_config.return_value = mock_client
+        service = MemoryService(mock_config)
+        result = await service.search_by_category("voice", query="brand")
         assert len(result.memories) == 1
         assert result.memories[0]["memory"] == "voice pattern"
 
@@ -2055,19 +2091,19 @@ class TestMemoryServiceAbstraction:
 
     def test_memory_service_base_cannot_be_instantiated(self):
         """MemoryServiceBase is abstract — direct instantiation raises TypeError."""
-        from second_brain.services.abstract import MemoryServiceBase
+
         with pytest.raises(TypeError):
             MemoryServiceBase()
 
     def test_memory_service_is_subclass(self):
         """MemoryService inherits from MemoryServiceBase."""
-        from second_brain.services.abstract import MemoryServiceBase
+
         assert issubclass(MemoryService, MemoryServiceBase)
 
     async def test_stub_search_returns_search_result(self):
         """StubMemoryService.search returns SearchResult, not list."""
-        from second_brain.services.abstract import StubMemoryService
-        from second_brain.services.search_result import SearchResult
+
+
         stub = StubMemoryService()
         result = await stub.search("test query")
         assert isinstance(result, SearchResult)
@@ -2075,29 +2111,29 @@ class TestMemoryServiceAbstraction:
 
     async def test_stub_search_with_filters_returns_search_result(self):
         """StubMemoryService.search_with_filters returns SearchResult."""
-        from second_brain.services.abstract import StubMemoryService
-        from second_brain.services.search_result import SearchResult
+
+
         stub = StubMemoryService()
         result = await stub.search_with_filters("test", {"category": "x"})
         assert isinstance(result, SearchResult)
 
     async def test_stub_add_returns_empty_dict(self):
         """StubMemoryService.add returns {} (not None, not a list)."""
-        from second_brain.services.abstract import StubMemoryService
+
         stub = StubMemoryService()
         result = await stub.add("some content")
         assert result == {}
 
     async def test_stub_get_all_returns_empty_list(self):
         """StubMemoryService.get_all returns []."""
-        from second_brain.services.abstract import StubMemoryService
+
         stub = StubMemoryService()
         result = await stub.get_all()
         assert result == []
 
     async def test_stub_get_memory_count_returns_zero(self):
         """StubMemoryService.get_memory_count returns 0."""
-        from second_brain.services.abstract import StubMemoryService
+
         stub = StubMemoryService()
         result = await stub.get_memory_count()
         assert result == 0
@@ -2108,7 +2144,7 @@ class TestEmbeddingServiceMultimodal:
 
     async def test_embed_multimodal_delegates_to_voyage(self, mock_voyage_service, brain_config):
         """Test embed_multimodal delegates to VoyageService."""
-        from second_brain.services.embeddings import EmbeddingService
+
         service = EmbeddingService.__new__(EmbeddingService)
         service.config = brain_config
         service._voyage = mock_voyage_service
@@ -2126,7 +2162,7 @@ class TestEmbeddingServiceMultimodal:
 
     async def test_embed_multimodal_raises_without_voyage(self, brain_config):
         """Test embed_multimodal raises ValueError without Voyage configured."""
-        from second_brain.services.embeddings import EmbeddingService
+
         service = EmbeddingService.__new__(EmbeddingService)
         service._voyage = None
 
@@ -2165,34 +2201,17 @@ class TestMemoryServiceMultimodal:
 
     async def test_add_multimodal_stub_returns_empty(self):
         """Test StubMemoryService.add_multimodal returns empty dict."""
-        from second_brain.services.abstract import StubMemoryService
+
         stub = StubMemoryService()
         result = await stub.add_multimodal([{"type": "text", "text": "test"}])
         assert result == {}
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Data Infrastructure Tests — Sub-plan 04
-# ──────────────────────────────────────────────────────────────────────
 
 
 class TestStorageBulkOperations:
     """Tests for StorageService bulk upsert methods."""
 
     @pytest.fixture
-    def mock_supabase_config(self, tmp_path):
-        return BrainConfig(
-            supabase_url="https://test.supabase.co",
-            supabase_key="test-key",
-            brain_user_id="ryan",
-            brain_data_path=tmp_path,
-            batch_upsert_chunk_size=500,
-            service_timeout_seconds=15,
-            _env_file=None,
-        )
-
-    @pytest.fixture
-    def storage(self, mock_supabase_config):
+    def storage(self, mock_config: BrainConfig) -> StorageService:
         with patch("second_brain.services.storage.create_client") as mock_create:
             mock_client = MagicMock()
             mock_result = MagicMock()
@@ -2201,7 +2220,7 @@ class TestStorageBulkOperations:
                 return_value=mock_result
             )
             mock_create.return_value = mock_client
-            svc = StorageService(mock_supabase_config)
+            svc = StorageService(mock_config)
         return svc
 
     async def test_bulk_upsert_patterns_single_chunk(self, storage):
@@ -2266,7 +2285,7 @@ class TestStorageTimeout:
     """Tests for StorageService timeout behavior."""
 
     @pytest.fixture
-    def storage(self, tmp_path):
+    def storage(self, tmp_path) -> StorageService:
         config = BrainConfig(
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",

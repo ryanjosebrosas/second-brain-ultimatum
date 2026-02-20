@@ -42,7 +42,8 @@ def brain_config(tmp_path):
     )
 
 
-# Alias for backward compatibility with existing tests
+# Alias for backward compatibility with existing tests.
+# Type is inferred as the same fixture (-> BrainConfig) by pytest.
 mock_config = brain_config
 
 

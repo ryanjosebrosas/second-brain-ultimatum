@@ -141,7 +141,7 @@ query = self._client.table("vault_transcripts").upsert(
 
 ## Environment
 
-- Supabase project: `umagqyjrvflkdvppkxnp`
+- Supabase project: `<your-supabase-project-ref>`
 - `supabase-py` version: latest (as of 2026-02-19)
 - PostgREST schema cache: stale after migration 016
 - Date: 2026-02-19
