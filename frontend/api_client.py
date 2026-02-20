@@ -185,6 +185,67 @@ def get_content_types() -> list[dict[str, Any]] | dict[str, Any]:
     return response.json()
 
 
+# --- Ingest methods ---
+
+
+def ingest_example(content_type: str, title: str, content: str, notes: str | None = None) -> dict[str, Any]:
+    """Add a content example to the example library."""
+    client = _get_client()
+    payload: dict[str, Any] = {
+        "content_type": content_type,
+        "title": title,
+        "content": content,
+    }
+    if notes:
+        payload["notes"] = notes
+    try:
+        response = client.post("/ingest/example", json=payload)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Ingest example failed: %s", e.response.status_code)
+        return {"error": str(e), "status_code": e.response.status_code}
+
+
+def ingest_knowledge(category: str, title: str, content: str, tags: str | None = None) -> dict[str, Any]:
+    """Add a knowledge entry to the knowledge repository."""
+    client = _get_client()
+    payload: dict[str, Any] = {
+        "category": category,
+        "title": title,
+        "content": content,
+    }
+    if tags:
+        payload["tags"] = tags
+    try:
+        response = client.post("/ingest/knowledge", json=payload)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Ingest knowledge failed: %s", e.response.status_code)
+        return {"error": str(e), "status_code": e.response.status_code}
+
+
+def upload_file(
+    file_bytes: bytes, filename: str, content_type: str,
+    context: str = "", category: str = "general",
+) -> dict[str, Any]:
+    """Upload a file for ingestion (image, PDF, or text document)."""
+    client = _get_client()
+    try:
+        response = client.post(
+            "/ingest/file",
+            files={"file": (filename, file_bytes, content_type)},
+            data={"context": context, "category": category},
+            timeout=180.0,
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("File upload failed: %s", e.response.status_code)
+        return {"error": str(e), "status_code": e.response.status_code}
+
+
 # --- Graph methods ---
 
 def graph_search(query: str, limit: int = 10) -> dict[str, Any]:

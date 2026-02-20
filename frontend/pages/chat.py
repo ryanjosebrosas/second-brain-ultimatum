@@ -5,7 +5,7 @@ from typing import Any
 
 import streamlit as st
 
-from config import AGENTS, DEFAULT_CONTENT_TYPES
+from config import AGENTS, DEFAULT_CONTENT_TYPES, group_content_types_by_category
 from api_client import call_agent, get_content_types
 from components.agent_formatters import format_agent_response
 
@@ -31,6 +31,20 @@ def _get_content_type_options() -> list[str]:
         return options if options else DEFAULT_CONTENT_TYPES
     except Exception:
         return DEFAULT_CONTENT_TYPES
+
+
+@st.cache_data(ttl=300)
+def _get_content_type_options_full() -> dict[str, dict]:
+    """Get content types as {slug: {full config}} for grouped selector."""
+    try:
+        ct_data = get_content_types()
+        if isinstance(ct_data, dict) and "content_types" in ct_data:
+            return {ct["slug"]: ct for ct in ct_data["content_types"] if "slug" in ct}
+        elif isinstance(ct_data, list):
+            return {ct.get("slug", ct.get("name", "unknown")): ct for ct in ct_data}
+    except Exception:
+        pass
+    return {}
 
 
 # --- Page header ---
@@ -67,16 +81,43 @@ if agent_config["extra_fields"]:
                     key=f"extra_{agent_key}_{field_name}",
                 )
             elif field_config["type"] == "select":
-                # Dynamic content type selector with caching
-                options = _get_content_type_options()
-                default_val = field_config["default"]
-                default_idx = options.index(default_val) if default_val and default_val in options else 0
-                extra_values[field_name] = st.selectbox(
-                    field_config["label"],
-                    options=options,
-                    index=default_idx,
-                    key=f"extra_{agent_key}_{field_name}",
-                )
+                # Grouped content type selector with cascade
+                full_options = _get_content_type_options_full()
+                if full_options:
+                    grouped = group_content_types_by_category(full_options)
+                    cat_col, type_col = st.columns(2)
+                    with cat_col:
+                        chat_category = st.selectbox(
+                            "Category",
+                            options=list(grouped.keys()),
+                            index=0,
+                            key=f"chat_{agent_key}_category",
+                        )
+                    with type_col:
+                        if chat_category and chat_category in grouped:
+                            type_items = grouped[chat_category]
+                            slugs = [s for s, n in type_items]
+                            names = [n for s, n in type_items]
+                            type_idx = st.selectbox(
+                                field_config["label"],
+                                range(len(slugs)),
+                                format_func=lambda i, n=names: n[i],
+                                key=f"chat_{agent_key}_{field_name}",
+                            ) or 0
+                            extra_values[field_name] = slugs[type_idx]
+                        else:
+                            extra_values[field_name] = field_config.get("default", "linkedin")
+                else:
+                    # Fallback to flat list if full options unavailable
+                    options = _get_content_type_options()
+                    default_val = field_config["default"]
+                    default_idx = options.index(default_val) if default_val and default_val in options else 0
+                    extra_values[field_name] = st.selectbox(
+                        field_config["label"],
+                        options=options,
+                        index=default_idx,
+                        key=f"chat_{agent_key}_{field_name}",
+                    )
             elif field_config["type"] == "select_fixed":
                 options = field_config["options"]
                 default_val = field_config["default"]

@@ -253,11 +253,109 @@ class TestMemoryEndpoints:
         mock_type.max_words = 300
         mock_type.is_builtin = True
         mock_type.structure_hint = "Hook -> Body -> CTA"
+        mock_type.description = "A LinkedIn post"
+        mock_type.writing_instructions = "Write with hooks"
+        mock_type.length_guidance = "50-300 words"
+        mock_type.ui_config = {"icon": "linkedin", "color": "#0077b5", "category": "social"}
         mock_registry.get_all = AsyncMock(return_value={"linkedin": mock_type})
         app.state.deps.get_content_type_registry.return_value = mock_registry
         response = client.get("/api/content-types")
         assert response.status_code == 200
-        assert response.json()["count"] == 1
+        data = response.json()
+        assert data["count"] == 1
+        ct = data["content_types"][0]
+        assert ct["description"] == "A LinkedIn post"
+        assert ct["writing_instructions"] == "Write with hooks"
+        assert ct["length_guidance"] == "50-300 words"
+        assert ct["ui_config"]["category"] == "social"
+
+    def test_list_content_types_empty(self, client, app):
+        mock_registry = MagicMock()
+        mock_registry.get_all = AsyncMock(return_value={})
+        app.state.deps.get_content_type_registry.return_value = mock_registry
+        response = client.get("/api/content-types")
+        assert response.status_code == 200
+        assert response.json()["count"] == 0
+        assert response.json()["content_types"] == []
+
+
+class TestFileIngest:
+    """Tests for /ingest/file endpoint."""
+
+    def test_ingest_image(self, client, app):
+        app.state.deps.memory_service.add_multimodal = AsyncMock(return_value={"id": "mem-1"})
+        app.state.deps.embedding_service = None
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("test.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 100, "image/png")},
+            data={"context": "A test image", "category": "visual"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "image"
+        assert data["memory_stored"] is True
+
+    def test_ingest_pdf(self, client, app):
+        app.state.deps.memory_service.add_multimodal = AsyncMock(return_value={"id": "mem-2"})
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("doc.pdf", b"%PDF-1.4 test content", "application/pdf")},
+            data={"context": "", "category": "document"},
+        )
+        assert response.status_code == 200
+        assert response.json()["type"] == "pdf"
+
+    def test_ingest_text_file(self, client, app):
+        app.state.deps.memory_service.add = AsyncMock(return_value={"id": "mem-3"})
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("notes.txt", b"Some text notes here", "text/plain")},
+            data={"context": "", "category": "general"},
+        )
+        assert response.status_code == 200
+        assert response.json()["type"] == "text"
+
+    def test_ingest_unsupported_type(self, client, app):
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("program.exe", b"\x00\x01", "application/octet-stream")},
+            data={"context": "", "category": "general"},
+        )
+        assert response.status_code == 400
+        assert "Unsupported file type" in response.json()["detail"]
+
+    def test_ingest_file_too_large(self, client, app):
+        # 21 MB of zeros
+        large_content = b"\x00" * (21 * 1024 * 1024)
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("big.png", large_content, "image/png")},
+            data={"context": "", "category": "general"},
+        )
+        assert response.status_code == 413
+        assert "too large" in response.json()["detail"]
+
+    def test_ingest_pdf_by_extension(self, client, app):
+        """Files with .pdf extension are treated as PDF even without PDF mime type."""
+        app.state.deps.memory_service.add_multimodal = AsyncMock(return_value={"id": "mem-4"})
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("report.pdf", b"fake pdf", "application/octet-stream")},
+            data={"context": "A report", "category": "document"},
+        )
+        assert response.status_code == 200
+        assert response.json()["type"] == "pdf"
+
+    def test_ingest_markdown_file(self, client, app):
+        """Markdown files are treated as text."""
+        app.state.deps.memory_service.add = AsyncMock(return_value={"id": "mem-5"})
+        response = client.post(
+            "/api/ingest/file",
+            files={"file": ("readme.md", b"# Hello\n\nWorld", "application/octet-stream")},
+            data={"context": "", "category": "general"},
+        )
+        assert response.status_code == 200
+        assert response.json()["type"] == "text"
 
     def test_pattern_registry(self, client, app):
         app.state.deps.storage_service.get_pattern_registry = AsyncMock(return_value=[])

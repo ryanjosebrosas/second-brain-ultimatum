@@ -1,6 +1,7 @@
 """Shared configuration for the Streamlit frontend."""
 
 import os
+from typing import Any
 from urllib.parse import urlparse
 
 # --- API Connection ---
@@ -207,3 +208,45 @@ DEFAULT_CONTENT_TYPES: list[str] = [
     "linkedin", "email", "landing-page", "comment", "case-study",
     "proposal", "one-pager", "presentation", "instagram", "essay",
 ]
+
+# Category display order and labels
+CONTENT_TYPE_CATEGORIES: dict[str, str] = {
+    "social": "Social Media",
+    "communication": "Communication",
+    "marketing": "Marketing",
+    "business": "Business",
+    "long-form": "Long-Form Writing",
+}
+
+# Knowledge categories for the ingest form
+KNOWLEDGE_CATEGORIES: list[str] = [
+    "audience", "product", "competitors", "industry",
+    "process", "values", "style-voice", "general",
+]
+
+
+def group_content_types_by_category(
+    content_types: dict[str, Any],
+) -> dict[str, list[tuple[str, str]]]:
+    """Group content types by their ui_config.category.
+
+    Returns: {"Social Media": [("linkedin", "LinkedIn Post"), ...], ...}
+    Uncategorized types go under "Other".
+    """
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for slug, ct in content_types.items():
+        ui = ct.get("ui_config", {}) if isinstance(ct, dict) else {}
+        raw_category = ui.get("category", "other")
+        display_category = CONTENT_TYPE_CATEGORIES.get(raw_category, raw_category.title())
+        name = ct.get("name", slug) if isinstance(ct, dict) else slug
+        groups.setdefault(display_category, []).append((slug, name))
+
+    # Sort groups by CONTENT_TYPE_CATEGORIES order, then alphabetically within
+    ordered: dict[str, list[tuple[str, str]]] = {}
+    for raw_key, display_label in CONTENT_TYPE_CATEGORIES.items():
+        if display_label in groups:
+            ordered[display_label] = sorted(groups.pop(display_label), key=lambda x: x[1])
+    # Append any remaining categories not in the predefined order
+    for label in sorted(groups.keys()):
+        ordered[label] = sorted(groups[label], key=lambda x: x[1])
+    return ordered

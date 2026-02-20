@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
 from second_brain.deps import BrainDeps
 from second_brain.api.deps import get_deps
@@ -145,6 +145,105 @@ async def ingest_knowledge(body: IngestKnowledgeRequest, deps: BrainDeps = Depen
     raise HTTPException(500, detail="Failed to ingest knowledge")
 
 
+@router.post("/ingest/file")
+async def ingest_file(
+    file: UploadFile,
+    context: str = Form(""),
+    category: str = Form("general"),
+    deps: BrainDeps = Depends(get_deps),
+):
+    """Upload and ingest a file (PDF, image, or text document)."""
+    if not file.filename:
+        raise HTTPException(400, detail="No file provided")
+
+    content_bytes = await file.read()
+    if len(content_bytes) > 20 * 1024 * 1024:  # 20 MB limit
+        raise HTTPException(413, detail="File too large. Maximum 20 MB.")
+
+    mime = file.content_type or ""
+    filename = file.filename or "unknown"
+
+    if mime.startswith("image/"):
+        import base64
+
+        b64 = base64.b64encode(content_bytes).decode("utf-8")
+        data_uri = f"data:{mime};base64,{b64}"
+        content_blocks = [{"type": "image_url", "image_url": {"url": data_uri}}]
+        if context.strip():
+            content_blocks.insert(0, {"type": "text", "text": context.strip()})
+        mem_result = await deps.memory_service.add_multimodal(
+            content_blocks,
+            metadata={"category": category, "source": "file_upload", "filename": filename},
+        )
+        embed_status = "skipped"
+        if deps.embedding_service:
+            try:
+                from PIL import Image as PILImage
+                from io import BytesIO
+
+                img = PILImage.open(BytesIO(content_bytes))
+                input_items = [context.strip(), img] if context.strip() else [img]
+                embeddings = await deps.embedding_service.embed_multimodal(
+                    [input_items], input_type="document"
+                )
+                if embeddings and embeddings[0]:
+                    await deps.storage_service.upsert_memory_content({
+                        "category": category,
+                        "title": filename,
+                        "content": context.strip() or f"Image: {filename}",
+                        "embedding": embeddings[0],
+                    })
+                    embed_status = f"stored ({len(embeddings[0])}d)"
+            except Exception as e:
+                logger.warning("Embedding generation failed: %s", type(e).__name__)
+                embed_status = f"failed: {type(e).__name__}"
+        return {
+            "message": f"Image ingested: {filename}",
+            "type": "image",
+            "memory_stored": bool(mem_result),
+            "embedding": embed_status,
+        }
+
+    elif mime == "application/pdf" or filename.lower().endswith(".pdf"):
+        import base64
+
+        b64 = base64.b64encode(content_bytes).decode("utf-8")
+        data_uri = f"data:application/pdf;base64,{b64}"
+        content_blocks = [{"type": "pdf_url", "pdf_url": {"url": data_uri}}]
+        if context.strip():
+            content_blocks.insert(0, {"type": "text", "text": context.strip()})
+        mem_result = await deps.memory_service.add_multimodal(
+            content_blocks,
+            metadata={"category": category, "source": "file_upload", "filename": filename},
+        )
+        return {
+            "message": f"PDF ingested: {filename}",
+            "type": "pdf",
+            "memory_stored": bool(mem_result),
+        }
+
+    elif mime.startswith("text/") or filename.lower().endswith((".txt", ".md", ".mdx")):
+        text_content = content_bytes.decode("utf-8", errors="replace")
+        if len(text_content) > 10000:
+            text_content = text_content[:10000]
+        mem_result = await deps.memory_service.add(
+            text_content,
+            metadata={"category": category, "source": "file_upload", "filename": filename},
+        )
+        return {
+            "message": f"Text document ingested: {filename}",
+            "type": "text",
+            "memory_stored": bool(mem_result),
+        }
+
+    else:
+        raise HTTPException(
+            400,
+            detail=f"Unsupported file type: {mime or filename}. "
+            "Supported: images (jpg/png/webp/gif), PDF, text (txt/md).",
+        )
+
+
 @router.delete("/items/{table}/{item_id}")
 async def delete_item(table: str, item_id: str, deps: BrainDeps = Depends(get_deps)):
     """Delete an item by table and ID."""
@@ -175,6 +274,10 @@ async def list_content_types(deps: BrainDeps = Depends(get_deps)):
             "max_words": config.max_words,
             "is_builtin": config.is_builtin,
             "structure_hint": config.structure_hint,
+            "description": config.description,
+            "writing_instructions": config.writing_instructions,
+            "length_guidance": config.length_guidance,
+            "ui_config": config.ui_config,
         }
         for slug, config in sorted(all_types.items())
     ] if all_types else []

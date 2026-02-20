@@ -1,12 +1,12 @@
-"""Content page — Content creation studio with type selector and review."""
+"""Content page — Content creation studio with type selector, review, and ingestion."""
 
-import html
 import logging
 from typing import Any
 
 import streamlit as st
 
-from components.copy_button import copyable_text, copyable_output
+from components.copy_button import copyable_text
+from config import group_content_types_by_category, KNOWLEDGE_CATEGORIES
 import api_client
 
 logger = logging.getLogger(__name__)
@@ -25,17 +25,17 @@ _STATUS_ICONS: dict[str, str] = {
 
 st.title(":material/edit: Content Studio")
 
-tab_create, tab_review = st.tabs(["Create", "Review"])
+tab_create, tab_review, tab_ingest = st.tabs(["Create", "Review", "Ingest"])
 
 
 @st.cache_data(ttl=300)
 def _get_cached_content_types() -> dict[str, Any]:
     """Fetch content types with 5-minute cache to avoid API calls on every rerun."""
     ct_response = api_client.get_content_types()
-    if isinstance(ct_response, list):
+    if isinstance(ct_response, dict) and "content_types" in ct_response:
+        return {ct.get("slug", ct.get("name", "unknown")): ct for ct in ct_response["content_types"]}
+    elif isinstance(ct_response, list):
         return {ct.get("slug", ct.get("name", "unknown")): ct for ct in ct_response}
-    elif isinstance(ct_response, dict):
-        return ct_response
     return {}
 
 
@@ -53,26 +53,35 @@ with tab_create:
     if not content_types:
         st.warning("No content types available. Check API connection.")
     else:
-        # Content type selector with colored badges
         st.markdown("#### Select Content Type")
-        type_keys = list(content_types.keys())
-        type_labels = []
-        for key in type_keys:
-            ct = content_types[key]
-            name = ct.get("name", key)
-            ui = ct.get("ui_config", {})
-            category = ui.get("category", "")
-            label = f"{name} ({category})" if category else name
-            type_labels.append(label)
 
-        selected_idx = st.selectbox(
-            "Content Type",
-            range(len(type_keys)),
-            format_func=lambda i: type_labels[i],
-            label_visibility="collapsed",
-        ) or 0
-        selected_key = type_keys[selected_idx]
-        selected_type = content_types[selected_key]
+        # Grouped cascade selector
+        grouped = group_content_types_by_category(content_types)
+        col_cat, col_type = st.columns(2)
+        with col_cat:
+            category_options = list(grouped.keys())
+            selected_category = st.selectbox(
+                "Category",
+                options=category_options,
+                index=0,
+                key="create_category",
+            )
+        with col_type:
+            if selected_category and selected_category in grouped:
+                type_options = grouped[selected_category]
+                type_slugs = [slug for slug, name in type_options]
+                type_names = [name for slug, name in type_options]
+                selected_type_idx = st.selectbox(
+                    "Content Type",
+                    range(len(type_slugs)),
+                    format_func=lambda i: type_names[i],
+                    key="create_type",
+                ) or 0
+                selected_key = type_slugs[selected_type_idx]
+                selected_type = content_types[selected_key]
+            else:
+                selected_key = list(content_types.keys())[0] if content_types else "linkedin"
+                selected_type = content_types.get(selected_key, {})
 
         # Show type details
         type_name = selected_type.get("name", selected_key)
@@ -168,14 +177,22 @@ with tab_review:
         placeholder="Paste content to review...",
     )
 
-    # Optional content type for review context
+    # Grouped content type selector with Auto-detect
     review_type = None
     if content_types:
-        type_options = ["Auto-detect"] + list(content_types.keys())
-        review_type_idx = st.selectbox("Content Type (optional)", range(len(type_options)),
-                                       format_func=lambda i: type_options[i]) or 0
-        if review_type_idx > 0:
-            review_type = type_options[review_type_idx]
+        review_options: list[tuple[str, str]] = [("auto", "Auto-detect")]
+        for cat_label, items in group_content_types_by_category(content_types).items():
+            review_options.extend(items)
+        review_slugs = [s for s, n in review_options]
+        review_names = [n for s, n in review_options]
+        review_idx = st.selectbox(
+            "Content Type (optional)",
+            range(len(review_slugs)),
+            format_func=lambda i: review_names[i],
+            key="review_type",
+        ) or 0
+        if review_slugs[review_idx] != "auto":
+            review_type = review_slugs[review_idx]
 
     if st.button("Review", type="primary", disabled=not review_content):
         with st.spinner("Reviewing content..."):
@@ -267,3 +284,200 @@ with tab_review:
             except Exception:
                 logger.exception("Content review failed")
                 st.error("Review failed. Please try again.")
+
+
+# --- Ingest Tab ---
+with tab_ingest:
+    st.subheader("Ingest Content")
+    st.caption("Add examples, knowledge, and files to your brain.")
+
+    sub_examples, sub_knowledge, sub_files, sub_text = st.tabs(
+        ["Examples", "Knowledge", "Files", "Text / Learn"]
+    )
+
+    # --- Examples sub-tab ---
+    with sub_examples:
+        st.markdown("**Add a content example** — pre-filled templates you can edit.")
+
+        # Grouped content type selector
+        ex_grouped = group_content_types_by_category(content_types)
+        ex_col_cat, ex_col_type = st.columns(2)
+        with ex_col_cat:
+            ex_categories = list(ex_grouped.keys())
+            ex_category = st.selectbox(
+                "Category",
+                options=ex_categories,
+                index=0,
+                key="ingest_ex_category",
+            ) if ex_categories else None
+        with ex_col_type:
+            if ex_category and ex_category in ex_grouped:
+                ex_type_options = ex_grouped[ex_category]
+                ex_slugs = [s for s, n in ex_type_options]
+                ex_names = [n for s, n in ex_type_options]
+                ex_type_idx = st.selectbox(
+                    "Content Type",
+                    range(len(ex_slugs)),
+                    format_func=lambda i: ex_names[i],
+                    key="ingest_ex_type",
+                ) or 0
+                ex_selected_slug = ex_slugs[ex_type_idx]
+                ex_selected_ct = content_types.get(ex_selected_slug, {})
+            else:
+                ex_selected_slug = ""
+                ex_selected_ct = {}
+
+        ex_title = st.text_input("Title", placeholder="e.g., Q4 Product Launch Post", key="ingest_ex_title")
+
+        # Pre-fill template from structure_hint + writing_instructions
+        template_parts = []
+        hint = ex_selected_ct.get("structure_hint", "")
+        if hint:
+            template_parts.append(f"# Structure\n{hint}\n")
+        instructions = ex_selected_ct.get("writing_instructions", "")
+        if instructions:
+            template_parts.append(f"# Guidelines\n{instructions}\n")
+        template_text = "\n".join(template_parts) if template_parts else ""
+
+        ex_content = st.text_area(
+            "Content",
+            value=template_text,
+            height=300,
+            key=f"ingest_ex_content_{ex_selected_slug}",
+            help="Edit the template above with your actual content.",
+        )
+
+        ex_notes = st.text_input("Notes (optional)", key="ingest_ex_notes")
+
+        if st.button("Save Example", type="primary", key="btn_save_example",
+                      disabled=not (ex_selected_slug and ex_title and ex_content)):
+            result = api_client.ingest_example(
+                content_type=ex_selected_slug,
+                title=ex_title,
+                content=ex_content,
+                notes=ex_notes or None,
+            )
+            if "error" not in result:
+                st.success(f"Example saved: {ex_title} (ID: {result.get('id', 'unknown')})")
+            else:
+                st.error(f"Failed to save example: {result.get('error', 'Unknown error')}")
+
+    # --- Knowledge sub-tab ---
+    with sub_knowledge:
+        st.markdown("**Add knowledge** — audience info, product details, competitor intel, etc.")
+
+        kn_category = st.selectbox(
+            "Knowledge Category",
+            options=KNOWLEDGE_CATEGORIES,
+            index=0,
+            key="ingest_kn_category",
+        )
+        kn_title = st.text_input("Title", placeholder="e.g., Ideal Customer Profile", key="ingest_kn_title")
+        kn_content = st.text_area("Content", height=250, key="ingest_kn_content",
+                                   placeholder="Write or paste your knowledge entry here...")
+        kn_tags = st.text_input("Tags (comma-separated, optional)", key="ingest_kn_tags",
+                                 placeholder="e.g., audience, B2B, enterprise")
+
+        if st.button("Save Knowledge", type="primary", key="btn_save_knowledge",
+                      disabled=not (kn_category and kn_title and kn_content)):
+            result = api_client.ingest_knowledge(
+                category=kn_category,
+                title=kn_title,
+                content=kn_content,
+                tags=kn_tags or None,
+            )
+            if "error" not in result:
+                st.success(f"Knowledge saved: {kn_title} (ID: {result.get('id', 'unknown')})")
+            else:
+                st.error(f"Failed to save knowledge: {result.get('error', 'Unknown error')}")
+
+    # --- Files sub-tab ---
+    with sub_files:
+        st.markdown("**Upload files** — PDFs, images, or text documents.")
+
+        file_category = st.selectbox(
+            "Category",
+            options=["document", "visual", "reference", "general"],
+            index=0,
+            key="ingest_file_category",
+        )
+        file_context = st.text_input(
+            "Context (optional)",
+            placeholder="Describe what this file contains...",
+            key="ingest_file_context",
+        )
+
+        uploaded = st.file_uploader(
+            "Choose a file",
+            type=["pdf", "jpg", "jpeg", "png", "webp", "gif", "txt", "md"],
+            key="ingest_file_uploader",
+            help="Supported: PDF, images (JPG/PNG/WebP/GIF), text files (TXT/MD). Max 20 MB.",
+        )
+
+        if uploaded:
+            # Preview
+            if uploaded.type and uploaded.type.startswith("image/"):
+                st.image(uploaded, caption=uploaded.name, width=400)
+            else:
+                st.info(f"File: **{uploaded.name}** ({uploaded.size // 1024} KB, {uploaded.type})")
+
+            if st.button("Upload & Ingest", type="primary", key="btn_upload_file"):
+                file_bytes = uploaded.read()
+                with st.spinner(f"Ingesting {uploaded.name}..."):
+                    result = api_client.upload_file(
+                        file_bytes=file_bytes,
+                        filename=uploaded.name,
+                        content_type=uploaded.type or "application/octet-stream",
+                        context=file_context,
+                        category=file_category,
+                    )
+                if "error" not in result:
+                    st.success(
+                        f"{result.get('message', 'File ingested')} "
+                        f"| Type: {result.get('type', 'unknown')} "
+                        f"| Memory: {'Yes' if result.get('memory_stored') else 'No'}"
+                    )
+                    if result.get("embedding"):
+                        st.caption(f"Embedding: {result['embedding']}")
+                else:
+                    st.error(f"Upload failed: {result.get('error', 'Unknown error')}")
+
+    # --- Text / Learn sub-tab ---
+    with sub_text:
+        st.markdown("**Paste text content** — the Learn agent will extract patterns and insights.")
+
+        learn_category = st.selectbox(
+            "Category",
+            options=["general", "content", "prospects", "clients", "personal"],
+            index=0,
+            key="ingest_learn_category",
+        )
+        learn_content = st.text_area(
+            "Content to learn from",
+            height=300,
+            key="ingest_learn_content",
+            placeholder="Paste your work session notes, meeting transcripts, or any content...",
+        )
+
+        if st.button("Learn", type="primary", key="btn_learn",
+                      disabled=not learn_content):
+            with st.spinner("Extracting patterns and insights..."):
+                result = api_client.call_agent("/learn", {
+                    "content": learn_content,
+                    "category": learn_category,
+                })
+            if "error" not in result:
+                st.success("Learning complete!")
+                if result.get("patterns_extracted"):
+                    st.markdown("**Patterns extracted:**")
+                    for p in result["patterns_extracted"]:
+                        name = p.get("name", "Unnamed") if isinstance(p, dict) else str(p)
+                        st.markdown(f"- {name}")
+                if result.get("insights"):
+                    with st.expander("Insights"):
+                        for insight in result["insights"]:
+                            st.markdown(f"- {insight}")
+                if result.get("storage_summary"):
+                    st.caption(result["storage_summary"])
+            else:
+                st.error(f"Learning failed: {result.get('error', 'Unknown error')}")
