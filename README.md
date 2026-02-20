@@ -200,16 +200,17 @@ graph TD
 
 | Service | Purpose |
 |---------|---------|
-| `memory.py` | Wraps Mem0 — add, search, and retrieve semantic memories with embedding-based similarity. Supports multimodal content (images, PDFs, documents) |
+| `memory.py` | Wraps Mem0 — add, search, and retrieve semantic memories with embedding-based similarity. Supports multimodal content (images, PDFs, documents). Retry/timeout hardening via Tenacity (3 attempts, exponential backoff) |
 | `storage.py` | Wraps Supabase — CRUD for all structured data + `ContentTypeRegistry` for content type configs |
 | `embeddings.py` | Generates embeddings via Voyage AI (primary) or OpenAI (fallback) for vector search. Supports multimodal inputs (text + images) via `embed_multimodal()` |
 | `voyage.py` | Voyage AI reranking + multimodal embeddings — `voyage-multimodal-3.5` embeds text, images, and video into a shared 1024-dim vector space |
 | `graphiti.py` | Optional knowledge graph via Graphiti + FalkorDB — entity and relationship extraction |
-| `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — drop-in replacement for Mem0 |
+| `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — complete drop-in replacement for Mem0, implements all 14 methods |
 | `health.py` | Brain metrics, growth milestones, and system health checks |
 | `retry.py` | Tenacity retry decorators for transient failures |
 | `search_result.py` | Shared data structures for search results across all retrieval methods |
 | `abstract.py` | Abstract base classes (`MemoryServiceBase`, etc.) for pluggable service implementations + stub services for testing |
+| `__init__.py` | Package initialization and service exports |
 
 ---
 
@@ -229,7 +230,7 @@ The memory layer is defined by an abstract interface (`MemoryServiceBase`) with 
 | **Graphiti** | `graphiti` | FalkorDB graph database | Knowledge graphs — entity/relationship extraction with graph-native search |
 | **None** | `none` | In-memory stub | Testing and CI — zero external dependencies, instant startup |
 
-All three providers implement the same 13-method interface. Agents never know which backend is active — they call `memory_service.search()` and get back a `SearchResult` regardless. If a provider fails to initialize (e.g., Graphiti packages not installed), it falls back to Mem0 automatically. Search errors return empty results instead of crashing.
+All three providers implement the same 14-method interface. Agents never know which backend is active — they call `memory_service.search()` and get back a `SearchResult` regardless. The Graphiti adapter is a complete drop-in replacement implementing all 14 methods. If a provider fails to initialize (e.g., Graphiti packages not installed), it falls back to Mem0 automatically. Search errors return empty results instead of crashing.
 
 ---
 
@@ -322,6 +323,7 @@ graph TD
 | Embeddings | Voyage AI `voyage-multimodal-3.5` (primary, text + images + video), OpenAI (text fallback) |
 | Image processing | Pillow (PIL) — decodes base64 images for Voyage multimodal embeddings |
 | Knowledge graph | Graphiti + FalkorDB (optional, `GRAPHITI_ENABLED=false`) |
+| LLM providers | Provider registry — Anthropic, OpenAI, Groq, Ollama (local + cloud) with fallback chains |
 | CLI | Click (`brain` entrypoint) |
 | Retries | Tenacity |
 | Config | Pydantic Settings (loads `.env` via `BrainConfig`) |
@@ -366,15 +368,25 @@ GRAPH_PROVIDER=mem0         # mem0 (default), graphiti, or none
 BRAIN_USER_ID=ryan          # Optional — isolates data per user (default: ryan)
 ```
 
-### LLM Backend (choose one)
+### LLM Backend
 
-The agents need an LLM to think. You have three options:
+The agents use a **provider registry** in `providers/` for flexible LLM selection with fallback chains. Configure your preferred provider via environment variables:
 
-| Option | Env Vars | Cost | Quality |
-|--------|---------|------|---------|
-| **Anthropic API** | `ANTHROPIC_API_KEY=sk-ant-...` | Pay per token | Best |
-| **Claude Subscription** | `USE_SUBSCRIPTION=true` | Included in Claude Pro/Max | Best (same models) |
-| **Ollama Cloud** | `OLLAMA_BASE_URL=https://...` + `OLLAMA_API_KEY=...` + `OLLAMA_MODEL=...` | Varies | Good |
+```bash
+MODEL_PROVIDER=anthropic         # auto|anthropic|ollama-local|ollama-cloud|openai|groq
+MODEL_NAME=claude-sonnet-4-5     # Optional model override
+MODEL_FALLBACK_CHAIN=ollama-local  # Optional comma-separated fallback providers
+```
+
+`MODEL_PROVIDER=auto` (default) infers from available API keys: Anthropic > Ollama Cloud > Ollama Local. Old `.env` files with just `ANTHROPIC_API_KEY` work unchanged.
+
+| Provider | `MODEL_PROVIDER=` | Env Vars Required | Default Model |
+|----------|-------------------|-------------------|---------------|
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5` |
+| Ollama Local | `ollama-local` | `OLLAMA_BASE_URL` (optional) | `llama3.1:8b` |
+| Ollama Cloud | `ollama-cloud` | `OLLAMA_BASE_URL`, `OLLAMA_API_KEY` | `llama3.1:8b` |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
+| Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
 
 **Claude Subscription setup** (recommended if you have Claude Pro/Max):
 
@@ -388,9 +400,10 @@ The subscription auth works with any MCP client (Claude Code, Cursor, Windsurf, 
 **Ollama Cloud setup** (for non-Anthropic models):
 
 ```bash
+MODEL_PROVIDER=ollama-cloud
 OLLAMA_BASE_URL=https://your-ollama-endpoint.com
 OLLAMA_API_KEY=your-api-key
-OLLAMA_MODEL=gpt-oss:120b-cloud
+MODEL_NAME=llama3.1:8b
 ```
 
 Any OpenAI-compatible API endpoint works here (Ollama, Together AI, OpenRouter, etc.).
@@ -412,7 +425,7 @@ pip install -e ".[dev,ollama]"        # + Ollama local model support
 
 ### 4. Database Migrations
 
-Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations are in `backend/supabase/migrations/`, numbered `001` through `015`.
+Apply migrations in order via the Supabase dashboard or CLI. All 18 migrations are in `backend/supabase/migrations/`, numbered `001` through `018`.
 
 ```
 001_initial_schema.sql            — Core tables
@@ -430,6 +443,9 @@ Apply migrations in order via the Supabase dashboard or CLI. All 15 migrations a
 013_quality_trending.sql          — Quality score trending
 014_content_type_instructions.sql — Content type prompt instructions
 015_user_id_isolation.sql         — Multi-user data isolation (user_id column + indexes)
+016_hnsw_indexes.sql              — HNSW vector indexes for fast similarity search
+017_rls_hardening.sql             — Strengthened Row Level Security policies
+018_vector_search_hnsw.sql        — Vector search RPC with HNSW ef_search tuning
 ```
 
 ### 5. Start the MCP Server
@@ -625,6 +641,12 @@ backend/
 │   ├── auth.py                # Authentication helpers
 │   ├── migrate.py             # Data migration utilities
 │   ├── cli.py                 # Click CLI ("brain" command)
+│   ├── providers/
+│   │   ├── __init__.py        # BaseProvider ABC + provider registry
+│   │   ├── anthropic.py       # Anthropic Claude (API key + subscription)
+│   │   ├── ollama.py          # Ollama local + cloud providers
+│   │   ├── openai.py          # OpenAI GPT provider
+│   │   └── groq.py            # Groq fast inference provider
 │   ├── agents/
 │   │   ├── chief_of_staff.py  # Routing orchestrator
 │   │   ├── recall.py
@@ -651,8 +673,8 @@ backend/
 │       ├── retry.py           # Tenacity retry helpers
 │       ├── search_result.py   # Search result data structures
 │       └── abstract.py        # ABCs + stub services (MemoryServiceBase, etc.)
-├── supabase/migrations/       # 15 SQL migrations (001–015)
-├── tests/                     # ~1004 tests (one file per module)
+├── supabase/migrations/       # 18 SQL migrations (001–018)
+├── tests/                     # ~1037 tests across 24 files (one file per module)
 ├── scripts/                   # Utility scripts
 ├── Dockerfile                 # Multi-stage uv build (Python 3.12)
 ├── docker-compose.yml         # Docker compose (HTTP transport, named network)
@@ -668,7 +690,7 @@ backend/
 
 ```bash
 cd backend
-pytest                              # All tests (~1004)
+pytest                              # All tests (~1037)
 pytest tests/test_agents.py         # Single file
 pytest -k "test_recall"             # Filter by name
 pytest -x                           # Stop on first failure
@@ -685,10 +707,11 @@ One test file per source module. All async tests run without `@pytest.mark.async
 |-----------|-------|
 | Pydantic AI agents | 13 |
 | MCP tools | 42 |
-| Service layer modules | 9 |
-| Database migrations | 15 |
-| Test files | 20 |
-| Tests | ~1004 |
+| Service layer modules | 11 |
+| LLM providers | 5 |
+| Database migrations | 18 |
+| Test files | 24 |
+| Tests | ~1037 |
 | Python version | 3.11+ |
 
 ---

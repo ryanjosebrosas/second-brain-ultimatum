@@ -1,5 +1,8 @@
 """Unit tests for MemoryService, StorageService, and HealthService."""
 
+import asyncio
+import time
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -2046,4 +2049,201 @@ class TestMemoryServiceMultimodal:
         from second_brain.services.abstract import StubMemoryService
         stub = StubMemoryService()
         result = await stub.add_multimodal([{"type": "text", "text": "test"}])
+        assert result == {}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Data Infrastructure Tests — Sub-plan 04
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestStorageBulkOperations:
+    """Tests for StorageService bulk upsert methods."""
+
+    @pytest.fixture
+    def mock_supabase_config(self, tmp_path):
+        return BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            batch_upsert_chunk_size=500,
+            service_timeout_seconds=15,
+            _env_file=None,
+        )
+
+    @pytest.fixture
+    def storage(self, mock_supabase_config):
+        with patch("second_brain.services.storage.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_result = MagicMock()
+            mock_result.data = [{"id": "1"}, {"id": "2"}]
+            mock_client.table.return_value.upsert.return_value.execute = MagicMock(
+                return_value=mock_result
+            )
+            mock_create.return_value = mock_client
+            svc = StorageService(mock_supabase_config)
+        return svc
+
+    async def test_bulk_upsert_patterns_single_chunk(self, storage):
+        patterns = [
+            {"name": f"pattern-{i}", "pattern_text": f"text-{i}"}
+            for i in range(5)
+        ]
+        result = await storage.bulk_upsert_patterns(patterns, chunk_size=500)
+        assert result["inserted"] == 2  # mock returns 2 items
+        assert result["errors"] == 0
+        # Verify user_id was set on all patterns
+        call_args = storage._client.table.return_value.upsert.call_args
+        for p in call_args[0][0]:
+            assert p["user_id"] == "ryan"
+
+    async def test_bulk_upsert_patterns_multiple_chunks(self, storage):
+        patterns = [{"name": f"p-{i}"} for i in range(10)]
+        result = await storage.bulk_upsert_patterns(patterns, chunk_size=3)
+        # 10 items / 3 per chunk = 4 chunks → 4 upsert calls
+        assert storage._client.table.return_value.upsert.call_count == 4
+
+    async def test_bulk_upsert_patterns_empty_list(self, storage):
+        result = await storage.bulk_upsert_patterns([])
+        assert result["inserted"] == 0
+        assert result["errors"] == 0
+
+    async def test_bulk_upsert_patterns_error_recovery(self, storage):
+        """Partial failure: one chunk errors, others succeed."""
+        call_count = 0
+        mock_result = MagicMock()
+        mock_result.data = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+
+        def side_effect(*args):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise ConnectionError("Supabase unavailable")
+            return mock_result
+
+        storage._client.table.return_value.upsert.return_value.execute = MagicMock(
+            side_effect=side_effect
+        )
+        patterns = [{"name": f"p-{i}"} for i in range(9)]
+        result = await storage.bulk_upsert_patterns(patterns, chunk_size=3)
+        assert result["errors"] == 3  # one chunk of 3 failed
+        assert result["inserted"] > 0  # other chunks succeeded
+
+    async def test_bulk_upsert_memory_content_uses_correct_table(self, storage):
+        await storage.bulk_upsert_memory_content([{"title": "test"}])
+        storage._client.table.assert_called_with("memory_content")
+
+    async def test_bulk_upsert_examples_uses_correct_table(self, storage):
+        await storage.bulk_upsert_examples([{"title": "test"}])
+        storage._client.table.assert_called_with("examples")
+
+    async def test_bulk_upsert_knowledge_uses_correct_table(self, storage):
+        await storage.bulk_upsert_knowledge([{"title": "test"}])
+        storage._client.table.assert_called_with("knowledge_repo")
+
+
+class TestStorageTimeout:
+    """Tests for StorageService timeout behavior."""
+
+    @pytest.fixture
+    def storage(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            service_timeout_seconds=1,
+            _env_file=None,
+        )
+        with patch("second_brain.services.storage.create_client") as mock_create:
+            mock_create.return_value = MagicMock()
+            svc = StorageService(config)
+        return svc
+
+    async def test_with_timeout_success(self, storage):
+        """Fast operation should succeed."""
+        result = await storage._with_timeout(asyncio.sleep(0))
+        assert result is None  # asyncio.sleep returns None
+
+    async def test_with_timeout_raises_on_slow_operation(self, storage):
+        """Slow operation should raise TimeoutError."""
+        with pytest.raises(TimeoutError):
+            await storage._with_timeout(asyncio.sleep(10))
+
+    async def test_vector_search_timeout_returns_empty(self, storage):
+        """vector_search should catch TimeoutError and return empty list."""
+        async def slow_coro():
+            await asyncio.sleep(10)
+
+        # Patch _with_timeout to raise TimeoutError
+        storage._with_timeout = AsyncMock(side_effect=TimeoutError("timed out"))
+        result = await storage.vector_search([0.1] * 1024, "patterns")
+        assert result == []
+
+
+class TestMemoryServiceResilience:
+    """Tests for MemoryService retry, timeout, and idle detection."""
+
+    @pytest.fixture
+    def mock_config(self, tmp_path):
+        return BrainConfig(
+            mem0_api_key="test-mem0-key",
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            model_provider="anthropic",
+            service_timeout_seconds=5,
+            _env_file=None,
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_idle_detection_triggers_reconnect(self, mock_mem0_cls, mock_config):
+        """After idle threshold, client should be re-instantiated."""
+        service = MemoryService(mock_config)
+        original_client = service._client
+
+        # Simulate idle period
+        service._last_activity = time.monotonic() - 300  # 5 min ago
+        service._check_idle_reconnect()
+
+        # Client should have been re-created (cloud client)
+        assert service._client is not original_client
+
+    @patch("mem0.MemoryClient")
+    async def test_idle_detection_skips_when_recent(self, mock_mem0_cls, mock_config):
+        """Within idle threshold, client should NOT be re-instantiated."""
+        service = MemoryService(mock_config)
+        original_client = service._client
+
+        service._last_activity = time.monotonic() - 10  # 10 sec ago
+        service._check_idle_reconnect()
+
+        assert service._client is original_client
+
+    @patch("mem0.MemoryClient")
+    async def test_retry_on_connection_error(self, mock_mem0_cls, mock_config):
+        """Mem0 cloud calls should retry on ConnectionError."""
+        service = MemoryService(mock_config)
+        # Simulate: first call fails, second succeeds
+        call_count = 0
+
+        def _add_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Network error")
+            return {"id": "success"}
+
+        service._client.add = MagicMock(side_effect=_add_side_effect)
+        result = await service.add("test content")
+        assert result.get("id") == "success"
+        assert call_count == 2  # retried once
+
+    @patch("mem0.MemoryClient")
+    async def test_retry_exhaustion_returns_empty(self, mock_mem0_cls, mock_config):
+        """After all retries exhausted, should return empty dict."""
+        service = MemoryService(mock_config)
+        service._client.add = MagicMock(
+            side_effect=ConnectionError("Persistent failure")
+        )
+        result = await service.add("test content")
         assert result == {}
