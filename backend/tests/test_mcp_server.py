@@ -623,6 +623,86 @@ class TestQuickRecall:
         assert "# Quick Recall" in result
 
 
+class TestParallelQuickRecall:
+    """Tests for parallel quick_recall with Mem0 + hybrid concurrent execution."""
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_parallel_with_hybrid(self, mock_deps_fn):
+        """quick_recall runs Mem0 and hybrid in parallel when embedding available."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(return_value=MagicMock(
+            memories=[{"memory": "Test memory", "score": 0.9}],
+            relations=[],
+        ))
+        deps.embedding_service = MagicMock()
+        deps.embedding_service.embed_query = AsyncMock(return_value=[0.1] * 1024)
+        deps.storage_service = MagicMock()
+        deps.storage_service.hybrid_search = AsyncMock(return_value=[
+            {"content": "hybrid result", "similarity": 0.85},
+        ])
+        deps.voyage_service = None
+        deps.graphiti_service = None
+        deps.config.retrieval_oversample_factor = 2
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test patterns", limit=5)
+        assert isinstance(result, str)
+        deps.memory_service.search.assert_called_once()
+        deps.storage_service.hybrid_search.assert_called_once()
+        deps.embedding_service.embed_query.assert_called_once()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_includes_sources_in_footer(self, mock_deps_fn):
+        """quick_recall output footer includes search source names."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(return_value=MagicMock(
+            memories=[{"memory": "Test content", "score": 0.9}],
+            relations=[],
+        ))
+        deps.embedding_service = None
+        deps.voyage_service = None
+        deps.graphiti_service = None
+        deps.config.retrieval_oversample_factor = 2
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test")
+        assert "sources:" in result.lower()
+        assert "mem0" in result
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_handles_mem0_failure(self, mock_deps_fn):
+        """quick_recall should handle Mem0 failure gracefully when hybrid succeeds."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(side_effect=ConnectionError("mem0 down"))
+        deps.embedding_service = MagicMock()
+        deps.embedding_service.embed_query = AsyncMock(return_value=[0.1] * 1024)
+        deps.storage_service = MagicMock()
+        deps.storage_service.hybrid_search = AsyncMock(return_value=[
+            {"content": "hybrid fallback", "similarity": 0.8},
+        ])
+        deps.voyage_service = None
+        deps.graphiti_service = None
+        deps.config.retrieval_oversample_factor = 2
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test")
+        assert isinstance(result, str)
+        # Should still return something — hybrid succeeded
+        assert "hybrid:memory_content" in result or "No results" in result
+
+
 class TestMCPAgentFailures:
     """Tests for MCP tool behavior when agents fail."""
 

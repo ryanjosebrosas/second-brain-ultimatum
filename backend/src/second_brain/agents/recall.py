@@ -5,8 +5,10 @@ import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
+    deduplicate_results,
     format_memories,
     format_relations,
+    normalize_results,
     rerank_memories,
     search_with_graph_fallback,
     tool_error,
@@ -54,18 +56,53 @@ async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> R
 async def search_semantic_memory(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
-    """Search Mem0 semantic memory for relevant content."""
+    """Search Mem0 semantic memory and pgvector in parallel for relevant content."""
     try:
+        import asyncio as _asyncio
         from second_brain.agents.utils import expand_query
 
         expanded = expand_query(query)
         oversample = ctx.deps.config.retrieval_oversample_factor
-        result = await ctx.deps.memory_service.search(
-            expanded,
-            limit=ctx.deps.config.memory_search_limit * oversample,
+        search_limit = ctx.deps.config.memory_search_limit * oversample
+
+        # Build parallel searches
+        mem0_coro = ctx.deps.memory_service.search(expanded, limit=search_limit)
+        hybrid_coro = None
+
+        if ctx.deps.embedding_service:
+            embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            hybrid_coro = ctx.deps.storage_service.hybrid_search(
+                query_text=query,
+                query_embedding=embedding,
+                table="memory_content",
+                limit=search_limit,
+            )
+
+        # Execute concurrently
+        if hybrid_coro:
+            mem0_result, hybrid_result = await _asyncio.gather(
+                mem0_coro, hybrid_coro, return_exceptions=True,
+            )
+        else:
+            mem0_result = await mem0_coro
+            hybrid_result = None
+
+        # Collect results
+        all_memories: list[dict] = []
+        if not isinstance(mem0_result, BaseException):
+            all_memories.extend(normalize_results(mem0_result.memories, source="mem0"))
+        if hybrid_result and not isinstance(hybrid_result, BaseException):
+            all_memories.extend(
+                normalize_results(hybrid_result, source="hybrid:memory_content",
+                                  content_key="content", score_key="similarity")
+            )
+
+        all_memories = deduplicate_results(all_memories)
+        memories = await rerank_memories(ctx.deps, query, all_memories)
+        relations = await search_with_graph_fallback(
+            ctx.deps, query,
+            mem0_result.relations if not isinstance(mem0_result, BaseException) else [],
         )
-        memories = await rerank_memories(ctx.deps, query, result.memories)
-        relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
         if not memories and not relations:
             return "No semantic matches found."
@@ -83,52 +120,74 @@ async def search_semantic_memory(
 async def search_patterns(
     ctx: RunContext[BrainDeps], topic: str | None = None
 ) -> str:
-    """Search the pattern registry using hybrid search (semantic + keyword)."""
+    """Search the pattern registry using hybrid + semantic search in parallel."""
     try:
+        import asyncio as _asyncio
         from second_brain.agents.utils import expand_query
 
         formatted = []
+        query_text = topic or "patterns"
+        expanded = expand_query(query_text)
+
+        # Build parallel searches
+        coros = {}
 
         # Path A: Hybrid search (semantic + keyword via pgvector + FTS)
         if ctx.deps.embedding_service:
-            query_text = topic or "patterns"
-            expanded = expand_query(query_text)
             embedding = await ctx.deps.embedding_service.embed_query(expanded)
-            try:
-                hybrid_results = await ctx.deps.storage_service.hybrid_search(
-                    query_text=query_text,
-                    query_embedding=embedding,
-                    table="patterns",
-                    limit=ctx.deps.config.memory_search_limit,
-                )
-                if hybrid_results:
-                    formatted.append("## Pattern Matches (hybrid)")
-                    for p in hybrid_results:
-                        title = p.get("title", "Unknown")
-                        content = p.get("content", "")[:ctx.deps.config.pattern_preview_limit]
-                        sim = p.get("similarity", 0)
-                        search_type = p.get("search_type", "semantic")
-                        formatted.append(f"- [{sim:.3f}|{search_type}] {title}: {content}")
-            except Exception:
-                logger.debug("Hybrid pattern search failed, using fallback")
+            coros["hybrid"] = ctx.deps.storage_service.hybrid_search(
+                query_text=query_text,
+                query_embedding=embedding,
+                table="patterns",
+                limit=ctx.deps.config.memory_search_limit,
+            )
 
         # Path B: Semantic memory search (Mem0 with pattern filter)
+        filters = {"category": "pattern"}
+        if topic:
+            filters = {"AND": [{"category": "pattern"}, {"topic": topic}]}
+        coros["mem0"] = ctx.deps.memory_service.search_with_filters(
+            topic or "patterns",
+            metadata_filters=filters,
+            limit=10,
+            enable_graph=True,
+        )
+
+        # Execute in parallel
+        if len(coros) >= 2:
+            results = await _asyncio.gather(
+                *coros.values(), return_exceptions=True,
+            )
+            result_map = dict(zip(coros.keys(), results))
+        else:
+            result_map = {}
+            for key, coro in coros.items():
+                try:
+                    result_map[key] = await coro
+                except Exception as exc:
+                    result_map[key] = exc
+
+        # Process hybrid results
+        hybrid_result = result_map.get("hybrid")
+        if hybrid_result and not isinstance(hybrid_result, BaseException):
+            if hybrid_result:
+                formatted.append("## Pattern Matches (hybrid)")
+                for p in hybrid_result:
+                    title = p.get("title", "Unknown")
+                    content = p.get("content", "")[:ctx.deps.config.pattern_preview_limit]
+                    sim = p.get("similarity", 0)
+                    search_type = p.get("search_type", "semantic")
+                    formatted.append(f"- [{sim:.3f}|{search_type}] {title}: {content}")
+
+        # Process Mem0 results
         semantic_results = []
         semantic_relations = []
-        try:
-            filters = {"category": "pattern"}
-            if topic:
-                filters = {"AND": [{"category": "pattern"}, {"topic": topic}]}
-            result = await ctx.deps.memory_service.search_with_filters(
-                topic or "patterns",
-                metadata_filters=filters,
-                limit=10,
-                enable_graph=True,
-            )
-            semantic_results = result.memories
-            semantic_relations = result.relations
-        except Exception:
-            logger.debug("Semantic pattern search failed, skipping")
+        mem0_result = result_map.get("mem0")
+        if mem0_result and not isinstance(mem0_result, BaseException):
+            semantic_results = mem0_result.memories
+            semantic_relations = mem0_result.relations
+        elif isinstance(mem0_result, BaseException):
+            logger.debug("Semantic pattern search failed: %s", mem0_result)
 
         semantic_results = await rerank_memories(ctx.deps, topic or "patterns", semantic_results)
 

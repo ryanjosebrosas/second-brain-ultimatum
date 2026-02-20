@@ -192,6 +192,8 @@ async def recall(query: str) -> str:
             parts.append(f"- {rel.source} --[{rel.relationship}]--> {rel.target}")
     if output.summary:
         parts.append(f"\n## Summary\n{output.summary}")
+    if output.search_sources:
+        parts.append(f"\n_Sources: {', '.join(output.search_sources)}_")
     return "\n".join(parts)
 
 
@@ -220,42 +222,66 @@ async def quick_recall(query: str, limit: int = 10) -> str:
                 deduplicate_results,
                 format_memories,
                 format_relations,
+                normalize_results,
                 rerank_memories,
                 search_with_graph_fallback,
             )
+            import asyncio as _asyncio
 
             # Step 1: Expand query with domain synonyms
             expanded = expand_query(query)
+            oversample = deps.config.retrieval_oversample_factor
 
-            # Step 2: Mem0 semantic + keyword search
-            result = await deps.memory_service.search(expanded, limit=limit * deps.config.retrieval_oversample_factor)
+            # Step 2: Run Mem0 + hybrid pgvector in parallel
+            mem0_coro = deps.memory_service.search(expanded, limit=limit * oversample)
 
-            # Step 3: Optional hybrid pgvector search (if embedding service available)
-            vector_results = []
+            hybrid_coro = None
             if deps.embedding_service:
-                try:
-                    embedding = await deps.embedding_service.embed_query(query)
-                    vector_results = await deps.storage_service.hybrid_search(
-                        query_text=query,
-                        query_embedding=embedding,
-                        table="memory_content",
-                        limit=limit * deps.config.retrieval_oversample_factor,
-                    )
-                except Exception:
-                    pass  # hybrid search is supplementary
+                embedding = await deps.embedding_service.embed_query(query)
+                hybrid_coro = deps.storage_service.hybrid_search(
+                    query_text=query,
+                    query_embedding=embedding,
+                    table="memory_content",
+                    limit=limit * oversample,
+                )
 
-            # Step 4: Merge and deduplicate
-            all_memories = result.memories + [
-                {"memory": r.get("content", ""), "score": r.get("similarity", 0)}
-                for r in vector_results
-            ]
+            # Execute concurrently
+            if hybrid_coro:
+                mem0_result, hybrid_result = await _asyncio.gather(
+                    mem0_coro, hybrid_coro, return_exceptions=True,
+                )
+            else:
+                mem0_result = await mem0_coro
+                hybrid_result = None
+
+            # Step 3: Collect and normalize results
+            search_sources = []
+            all_memories: list[dict] = []
+
+            if not isinstance(mem0_result, BaseException):
+                all_memories.extend(
+                    normalize_results(mem0_result.memories, source="mem0")
+                )
+                search_sources.append("mem0")
+            else:
+                logger.debug("Mem0 search failed in quick_recall: %s", mem0_result)
+
+            if hybrid_result and not isinstance(hybrid_result, BaseException):
+                all_memories.extend(
+                    normalize_results(hybrid_result, source="hybrid:memory_content",
+                                      content_key="content", score_key="similarity")
+                )
+                search_sources.append("hybrid:memory_content")
+            elif isinstance(hybrid_result, BaseException):
+                logger.debug("Hybrid search failed in quick_recall: %s", hybrid_result)
+
+            # Step 4: Deduplicate and rerank
             all_memories = deduplicate_results(all_memories)
-
-            # Step 5: Rerank combined results
             memories = await rerank_memories(deps, query, all_memories, top_k=limit)
 
-            # Step 6: Graph relations
-            relations = await search_with_graph_fallback(deps, query, result.relations)
+            # Step 5: Graph relations
+            base_relations = mem0_result.relations if not isinstance(mem0_result, BaseException) else []
+            relations = await search_with_graph_fallback(deps, query, base_relations)
 
     except TimeoutError:
         return f"Quick recall timed out after {timeout}s. Try a simpler query."
@@ -272,7 +298,8 @@ async def quick_recall(query: str, limit: int = 10) -> str:
     rel_text = format_relations(relations)
     if rel_text:
         parts.append(rel_text)
-    parts.append(f"\n---\n_Fast path ({len(memories)} results). Use recall() for full multi-source search._")
+    source_str = ", ".join(search_sources) if search_sources else "none"
+    parts.append(f"\n---\n_Fast path ({len(memories)} results, sources: {source_str}). Use recall() for deeper search._")
     return "\n".join(parts)
 
 

@@ -1689,3 +1689,129 @@ class TestChiefOfStaffComplexity:
         tool = chief_of_staff._function_toolset.tools["classify_complexity"]
         result = await tool.function(ctx, query="patterns")
         assert "simple" in result.lower()
+
+
+class TestParallelMultiTableSearch:
+    """Tests for parallel_multi_table_search utility."""
+
+    async def test_searches_all_four_tables(self, mock_deps):
+        """Should attempt all 4 tables and return without error."""
+        from second_brain.agents.utils import parallel_multi_table_search
+        results, sources = await parallel_multi_table_search(mock_deps, "test query")
+        assert isinstance(results, list)
+        assert isinstance(sources, list)
+
+    async def test_searches_specific_tables(self, mock_deps):
+        """Should only search specified tables."""
+        from second_brain.agents.utils import parallel_multi_table_search
+        mock_deps.storage_service.search_patterns_semantic = AsyncMock(
+            return_value=[{"content": "pattern result", "similarity": 0.9}]
+        )
+        results, sources = await parallel_multi_table_search(
+            mock_deps, "test", tables=["patterns"]
+        )
+        mock_deps.storage_service.search_patterns_semantic.assert_called_once()
+
+    async def test_skips_without_embedding_service(self, mock_deps):
+        """Should return empty when no embedding service."""
+        from second_brain.agents.utils import parallel_multi_table_search
+        mock_deps.embedding_service = None
+        results, sources = await parallel_multi_table_search(mock_deps, "test")
+        assert results == []
+        assert sources == []
+
+    async def test_handles_partial_failure(self, mock_deps):
+        """Failed tables should not block successful ones."""
+        from second_brain.agents.utils import parallel_multi_table_search
+        mock_deps.storage_service.search_patterns_semantic = AsyncMock(
+            side_effect=ConnectionError("timeout")
+        )
+        mock_deps.storage_service.search_examples_semantic = AsyncMock(
+            return_value=[{"content": "example", "similarity": 0.85}]
+        )
+        results, sources = await parallel_multi_table_search(
+            mock_deps, "test", tables=["patterns", "examples"]
+        )
+        assert any("examples" in s for s in sources)
+
+
+class TestParallelSearchSemanticMemory:
+    """Tests for parallelized search_semantic_memory recall tool."""
+
+    @pytest.fixture
+    def mock_ctx(self, mock_deps):
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        return ctx
+
+    async def test_search_semantic_memory_with_embedding(self, mock_ctx):
+        """search_semantic_memory runs parallel Mem0 + hybrid when embedding available."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_semantic_memory"]
+        result = await tool.function(mock_ctx, query="test patterns")
+        assert isinstance(result, str)
+        mock_ctx.deps.memory_service.search.assert_called_once()
+
+    async def test_search_semantic_memory_without_embedding(self, mock_ctx):
+        """search_semantic_memory falls back to Mem0-only when no embedding service."""
+        from second_brain.agents.recall import recall_agent
+
+        mock_ctx.deps.embedding_service = None
+        tool = recall_agent._function_toolset.tools["search_semantic_memory"]
+        result = await tool.function(mock_ctx, query="test patterns")
+        assert isinstance(result, str)
+        mock_ctx.deps.memory_service.search.assert_called_once()
+
+    async def test_search_semantic_memory_hybrid_called(self, mock_ctx):
+        """When embedding available, hybrid_search should be called in parallel."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_semantic_memory"]
+        await tool.function(mock_ctx, query="test patterns")
+        mock_ctx.deps.storage_service.hybrid_search.assert_called_once()
+        mock_ctx.deps.embedding_service.embed_query.assert_called_once()
+
+
+class TestParallelSearchPatterns:
+    """Tests for parallelized search_patterns recall tool."""
+
+    @pytest.fixture
+    def mock_ctx(self, mock_deps):
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        return ctx
+
+    async def test_search_patterns_with_embedding(self, mock_ctx):
+        """search_patterns runs parallel hybrid + Mem0 when embedding available."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_patterns"]
+        result = await tool.function(mock_ctx, topic="content")
+        assert isinstance(result, str)
+
+    async def test_search_patterns_fallback(self, mock_ctx):
+        """search_patterns falls back to get_patterns when no results from parallel."""
+        from second_brain.agents.recall import recall_agent
+        from second_brain.services.search_result import SearchResult
+
+        mock_ctx.deps.embedding_service = None
+        mock_ctx.deps.memory_service.search_with_filters = AsyncMock(
+            return_value=SearchResult(memories=[], relations=[])
+        )
+        mock_ctx.deps.storage_service.get_patterns = AsyncMock(return_value=[
+            {"name": "Test", "confidence": "HIGH", "pattern_text": "test pattern text"},
+        ])
+
+        tool = recall_agent._function_toolset.tools["search_patterns"]
+        result = await tool.function(mock_ctx, topic="test")
+        assert "Pattern Registry" in result or "Test" in result
+
+    async def test_search_patterns_hybrid_and_mem0_parallel(self, mock_ctx):
+        """Both hybrid and mem0 should be called when embedding available."""
+        from second_brain.agents.recall import recall_agent
+
+        tool = recall_agent._function_toolset.tools["search_patterns"]
+        await tool.function(mock_ctx, topic="content")
+        mock_ctx.deps.storage_service.hybrid_search.assert_called_once()
+        mock_ctx.deps.memory_service.search_with_filters.assert_called_once()

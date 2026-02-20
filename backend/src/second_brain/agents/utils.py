@@ -278,6 +278,57 @@ async def parallel_search_gather(
     return all_results, contributing_sources
 
 
+async def parallel_multi_table_search(
+    deps: "BrainDeps",
+    query: str,
+    tables: list[str] | None = None,
+    limit: int = 10,
+) -> tuple[list[dict], list[str]]:
+    """Search multiple Supabase tables in parallel via semantic search.
+
+    Medium-complexity path: searches patterns, examples, knowledge, and
+    experiences tables concurrently. Requires embedding service.
+
+    Args:
+        deps: BrainDeps with embedding_service and storage_service.
+        query: Search query string.
+        tables: Tables to search. Defaults to all 4 semantic search tables.
+        limit: Max results per table.
+
+    Returns:
+        Tuple of (normalized_results, contributing_sources).
+    """
+    if not deps.embedding_service:
+        return [], []
+
+    all_tables = tables or ["patterns", "examples", "knowledge", "experiences"]
+    embedding = await deps.embedding_service.embed_query(query)
+
+    table_method_map = {
+        "patterns": ("search_patterns_semantic", "pgvector:patterns"),
+        "examples": ("search_examples_semantic", "pgvector:examples"),
+        "knowledge": ("search_knowledge_semantic", "pgvector:knowledge"),
+        "experiences": ("search_experiences_semantic", "pgvector:experiences"),
+    }
+
+    searches = []
+    for table in all_tables:
+        if table not in table_method_map:
+            continue
+        method_name, source_label = table_method_map[table]
+        method = getattr(deps.storage_service, method_name, None)
+        if method:
+            searches.append((
+                source_label,
+                method(embedding=embedding, limit=limit),
+            ))
+
+    if not searches:
+        return [], []
+
+    return await parallel_search_gather(searches)
+
+
 async def search_with_graph_fallback(
     deps: "BrainDeps",
     query: str,
