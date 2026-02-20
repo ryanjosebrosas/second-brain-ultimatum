@@ -4,15 +4,24 @@ Wraps Streamlit widgets with consistent styling for metrics,
 progress bars, badges, checklists, and charts.
 """
 
+import html
+from typing import Any
+
+import pandas as pd
 import streamlit as st
 
 
-def metric_card(label: str, value, delta=None, help_text: str | None = None):
+def metric_card(
+    label: str,
+    value: int | float | str,
+    delta: int | float | str | None = None,
+    help_text: str | None = None,
+) -> None:
     """Styled st.metric wrapper."""
     st.metric(label=label, value=value, delta=delta, help=help_text)
 
 
-def progress_bar(label: str, current: int, total: int):
+def progress_bar(label: str, current: int, total: int) -> None:
     """Labeled progress bar."""
     pct = current / total if total > 0 else 0
     st.markdown(f"**{label}**: {current} / {total}")
@@ -28,18 +37,24 @@ LEVEL_COLORS = {
 }
 
 
-def brain_level_badge(level: str):
-    """Colored badge HTML for brain level."""
-    color = LEVEL_COLORS.get(level, "#6B7280")
+def _render_badge(text: str, color: str) -> None:
+    """Render a colored badge with HTML-escaped text."""
+    safe_text = html.escape(text)
     st.markdown(
         f'<span style="background-color:{color}22;color:{color};'
         f'padding:4px 12px;border-radius:12px;font-weight:600;">'
-        f"{level}</span>",
+        f"{safe_text}</span>",
         unsafe_allow_html=True,
     )
 
 
-def setup_checklist(setup_data: dict):
+def brain_level_badge(level: str) -> None:
+    """Colored badge HTML for brain level."""
+    color = LEVEL_COLORS.get(level, "#6B7280")
+    _render_badge(level, color)
+
+
+def setup_checklist(setup_data: dict[str, Any]) -> None:
     """Render setup steps as a checklist.
 
     setup_data keys: is_complete, steps (list of step dicts),
@@ -66,10 +81,8 @@ def setup_checklist(setup_data: dict):
         st.caption(f"Total memory entries: {mem_entries}")
 
 
-def quality_trend_chart(quality_data: dict):
+def quality_trend_chart(quality_data: dict[str, Any]) -> None:
     """Line chart from /health/quality response."""
-    import pandas as pd
-
     dimensions = quality_data.get("by_dimension", [])
     if not dimensions:
         st.info("No quality data yet. Review some content to see trends.")
@@ -86,23 +99,16 @@ def quality_trend_chart(quality_data: dict):
     st.caption(f"{total} reviews | Avg: {avg:.1f} | Trend: {trend}")
 
 
-def dimension_breakdown(quality_data: dict):
-    """Bar chart of per-dimension scores."""
-    import pandas as pd
-
+def dimension_breakdown(quality_data: dict[str, Any]) -> None:
+    """Per-dimension score breakdown with progress bars."""
     dimensions = quality_data.get("by_dimension", [])
     if not dimensions:
         st.info("No dimension data available.")
         return
 
-    df = pd.DataFrame(dimensions)
-    if "dimension" not in df.columns or "avg_score" not in df.columns:
-        st.warning("Unexpected quality data format.")
-        return
-
-    for _, row in df.iterrows():
-        dim = row["dimension"]
-        score = row["avg_score"]
+    for row in dimensions:
+        dim = row.get("dimension", "")
+        score = row.get("avg_score", 0)
         count = row.get("review_count", 0)
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -121,7 +127,7 @@ GRAPH_STATUS_COLORS = {
 }
 
 
-def graph_status_card(health_data: dict):
+def graph_status_card(health_data: dict[str, Any]) -> None:
     """Display graphiti_status, graphiti_backend, and graph_provider."""
     status = health_data.get("graphiti_status", "disabled")
     backend = health_data.get("graphiti_backend", "none")
@@ -130,12 +136,7 @@ def graph_status_card(health_data: dict):
     color = GRAPH_STATUS_COLORS.get(status, "#6B7280")
 
     st.markdown("#### Knowledge Graph")
-    st.markdown(
-        f'<span style="background-color:{color}22;color:{color};'
-        f'padding:4px 12px;border-radius:12px;font-weight:600;">'
-        f"{status.upper()}</span>",
-        unsafe_allow_html=True,
-    )
+    _render_badge(status.upper(), color)
     col1, col2 = st.columns(2)
     with col1:
         st.caption(f"Provider: {provider}")

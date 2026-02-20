@@ -1,7 +1,10 @@
 """Dashboard page — Brain health metrics and growth tracking."""
 
+import logging
+
 import streamlit as st
 
+from api_client import get_health, get_milestones, get_growth, get_quality, get_setup
 from components.charts import (
     metric_card,
     progress_bar,
@@ -11,7 +14,34 @@ from components.charts import (
     dimension_breakdown,
     graph_status_card,
 )
-import api_client
+
+logger = logging.getLogger(__name__)
+
+
+@st.cache_data(ttl=60)
+def _cached_get_health() -> dict:
+    return get_health()
+
+
+@st.cache_data(ttl=60)
+def _cached_get_milestones() -> dict:
+    return get_milestones()
+
+
+@st.cache_data(ttl=60)
+def _cached_get_growth() -> dict:
+    return get_growth()
+
+
+@st.cache_data(ttl=60)
+def _cached_get_quality() -> dict:
+    return get_quality()
+
+
+@st.cache_data(ttl=300)
+def _cached_get_setup() -> dict:
+    return get_setup()
+
 
 st.title(":material/dashboard: Dashboard")
 
@@ -22,9 +52,10 @@ tab_overview, tab_growth, tab_quality, tab_setup = st.tabs(
 # --- Overview Tab ---
 with tab_overview:
     try:
-        health = api_client.get_health()
-    except Exception as e:
-        st.error(f"Failed to load health metrics: {e}")
+        health = _cached_get_health()
+    except Exception:
+        logger.exception("Failed to load health metrics")
+        st.error("Failed to load health metrics. Please try again.")
         health = {}
 
     if health:
@@ -88,9 +119,10 @@ with tab_overview:
     st.divider()
     st.markdown("#### Brain Level & Milestones")
     try:
-        milestones = api_client.get_milestones()
-    except Exception as e:
-        st.error(f"Failed to load milestones: {e}")
+        milestones = _cached_get_milestones()
+    except Exception:
+        logger.exception("Failed to load milestones")
+        st.error("Failed to load milestones. Please try again.")
         milestones = {}
 
     if milestones:
@@ -120,15 +152,20 @@ with tab_overview:
             with st.expander("All Milestones", expanded=False):
                 for m in milestone_list:
                     icon = ":material/check_circle:" if m.get("completed") else ":material/radio_button_unchecked:"
-                    st.markdown(f"{icon} **{m.get('name', '')}** — {m.get('description', '')}")
+                    name = m.get("name", "")
+                    desc = m.get("description", "")
+                    st.markdown(f"{icon} **{name}**")
+                    if desc:
+                        st.caption(desc)
 
 
 # --- Growth Tab ---
 with tab_growth:
     try:
-        growth = api_client.get_growth()
-    except Exception as e:
-        st.error(f"Failed to load growth data: {e}")
+        growth = _cached_get_growth()
+    except Exception:
+        logger.exception("Failed to load growth data")
+        st.error("Failed to load growth data. Please try again.")
         growth = {}
 
     if growth:
@@ -159,15 +196,16 @@ with tab_growth:
             st.markdown("#### Stale Patterns")
             st.caption("Not reinforced in 30+ days and below HIGH confidence")
             for name in stale:
-                st.markdown(f"- {name}")
+                st.text(f"  \u2022 {name}")
 
 
 # --- Quality Tab ---
 with tab_quality:
     try:
-        quality = api_client.get_quality()
-    except Exception as e:
-        st.error(f"Failed to load quality data: {e}")
+        quality = _cached_get_quality()
+    except Exception:
+        logger.exception("Failed to load quality data")
+        st.error("Failed to load quality data. Please try again.")
         quality = {}
 
     if quality:
@@ -193,7 +231,7 @@ with tab_quality:
             st.divider()
             st.markdown("#### By Content Type")
             for ct, data in by_type.items():
-                st.markdown(f"**{ct}**: {data}")
+                st.text(f"{ct}: {data}")
 
         # Recurring issues
         issues = quality.get("recurring_issues", [])
@@ -213,9 +251,10 @@ with tab_quality:
 # --- Setup Tab ---
 with tab_setup:
     try:
-        setup = api_client.get_setup()
-    except Exception as e:
-        st.error(f"Failed to load setup status: {e}")
+        setup = _cached_get_setup()
+    except Exception:
+        logger.exception("Failed to load setup status")
+        st.error("Failed to load setup status. Please try again.")
         setup = {}
 
     if setup:
