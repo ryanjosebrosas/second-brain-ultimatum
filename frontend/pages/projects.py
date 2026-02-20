@@ -1,6 +1,8 @@
 """Projects page — Project lifecycle management."""
 
+import html
 import logging
+from typing import Any
 
 import streamlit as st
 
@@ -8,6 +10,32 @@ from components.copy_button import copyable_output
 import api_client
 
 logger = logging.getLogger(__name__)
+
+STAGE_COLORS: dict[str, str] = {
+    "planning": "#3B82F6",
+    "executing": "#22C55E",
+    "reviewing": "#A855F7",
+    "learning": "#F59E0B",
+    "complete": "#6B7280",
+    "archived": "#EF4444",
+}
+
+STAGE_ICONS: dict[str, str] = {
+    "planning": ":material/edit_note:",
+    "executing": ":material/play_circle:",
+    "reviewing": ":material/rate_review:",
+    "learning": ":material/school:",
+    "complete": ":material/check_circle:",
+    "archived": ":material/archive:",
+}
+
+
+@st.cache_data(ttl=30)
+def _cached_list_projects(
+    lifecycle_stage: str | None = None,
+    category: str | None = None,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    return api_client.list_projects(lifecycle_stage=lifecycle_stage, category=category)
 
 st.title(":material/folder: Projects")
 
@@ -50,7 +78,7 @@ with col_filter2:
 try:
     filter_stage = stage_filter if stage_filter != "All" else None
     filter_cat = cat_filter if cat_filter else None
-    projects_response = api_client.list_projects(
+    projects_response = _cached_list_projects(
         lifecycle_stage=filter_stage,
         category=filter_cat,
     )
@@ -81,21 +109,13 @@ else:
         created = proj.get("created_at", proj.get("date_created", ""))
 
         # Stage indicator
-        stage_icons = {
-            "planning": ":material/edit_note:",
-            "executing": ":material/play_circle:",
-            "reviewing": ":material/rate_review:",
-            "learning": ":material/school:",
-            "complete": ":material/check_circle:",
-            "archived": ":material/archive:",
-        }
-        stage_icon = stage_icons.get(stage, ":material/circle:")
+        stage_icon = STAGE_ICONS.get(stage, ":material/circle:")
 
         with st.expander(f"{name}  {category}", expanded=False):
             st.caption(f"{stage_icon} **{stage.upper()}**")
 
             if description:
-                st.markdown(description)
+                st.text(description)
 
             col1, col2 = st.columns(2)
             with col1:

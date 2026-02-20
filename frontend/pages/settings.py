@@ -1,7 +1,11 @@
 """Settings — system configuration and provider status."""
 
+import logging
+
 import streamlit as st
 from api_client import get_settings_config, get_settings_providers, get_health
+
+logger = logging.getLogger(__name__)
 
 st.title("Settings")
 
@@ -12,8 +16,9 @@ with tab_providers:
 
     try:
         providers = get_settings_providers()
-    except Exception as e:
-        st.error(f"Failed to load providers: {e}")
+    except Exception:
+        logger.exception("Failed to load providers")
+        st.error("Failed to load providers. Please try again.")
         providers = {}
 
     if providers:
@@ -64,8 +69,9 @@ with tab_config:
 
     try:
         config = get_settings_config()
-    except Exception as e:
-        st.error(f"Failed to load config: {e}")
+    except Exception:
+        logger.exception("Failed to load config")
+        st.error("Failed to load configuration. Please try again.")
         config = {}
 
     if config:
@@ -107,8 +113,9 @@ with tab_status:
 
     try:
         health = get_health()
-    except Exception as e:
-        st.error(f"Failed to load health data: {e}")
+    except Exception:
+        logger.exception("Failed to load health data")
+        st.error("Failed to load health data. Please try again.")
         health = {}
 
     if health:

@@ -1,7 +1,11 @@
-"""frontend/test_integration.py — Smoke test for API connectivity.
+"""Manual integration smoke test for API connectivity.
 
-Run with: python test_integration.py
+Run with: python tests/test_integration.py
 Requires: FastAPI server running on port 8001
+
+NOTE: This is NOT a pytest test — it's a standalone script for manual
+live-server validation. The function is named run_integration_checks()
+(not test_*) to prevent pytest collection.
 """
 
 import httpx
@@ -10,8 +14,8 @@ import sys
 API_BASE = "http://localhost:8001/api"
 
 
-def test_endpoints():
-    """Test that all key endpoints respond."""
+def run_integration_checks():
+    """Check that all key endpoints respond."""
     client = httpx.Client(base_url=API_BASE, timeout=10.0)
     results = []
 
@@ -58,4 +62,4 @@ def test_endpoints():
 
 
 if __name__ == "__main__":
-    test_endpoints()
+    run_integration_checks()

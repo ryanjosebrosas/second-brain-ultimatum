@@ -27,24 +27,14 @@ def progress_bar(label: str, current: int, total: int) -> None:
     st.progress(min(pct, 1.0))
 
 
-LEVEL_COLORS = {
-    "EMPTY": "#6B7280",
-    "FOUNDATION": "#3B82F6",
-    "GROWTH": "#22C55E",
-    "COMPOUND": "#A855F7",
-    "EXPERT": "#F59E0B",
-}
-
-
-def _render_badge(text: str, color: str) -> None:
+def _render_badge(text: str) -> None:
     """Render a badge using Streamlit-native caption with bold text."""
     st.caption(f"**{text}**")
 
 
 def brain_level_badge(level: str) -> None:
-    """Colored badge HTML for brain level."""
-    color = LEVEL_COLORS.get(level, "#6B7280")
-    _render_badge(level, color)
+    """Badge for brain level."""
+    _render_badge(level)
 
 
 def setup_checklist(setup_data: dict[str, Any]) -> None:
@@ -112,24 +102,14 @@ def dimension_breakdown(quality_data: dict[str, Any]) -> None:
             st.caption(f"{count} reviews")
 
 
-GRAPH_STATUS_COLORS = {
-    "healthy": "#22C55E",
-    "degraded": "#F59E0B",
-    "unavailable": "#EF4444",
-    "disabled": "#6B7280",
-}
-
-
 def graph_status_card(health_data: dict[str, Any]) -> None:
     """Display graphiti_status, graphiti_backend, and graph_provider."""
     status = health_data.get("graphiti_status", "disabled")
     backend = health_data.get("graphiti_backend", "none")
     provider = health_data.get("graph_provider", "disabled")
 
-    color = GRAPH_STATUS_COLORS.get(status, "#6B7280")
-
     st.markdown("#### Knowledge Graph")
-    _render_badge(status.upper(), color)
+    _render_badge(status.upper())
     col1, col2 = st.columns(2)
     with col1:
         st.caption(f"Provider: {provider}")

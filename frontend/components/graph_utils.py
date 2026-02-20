@@ -4,7 +4,10 @@ Transforms GraphitiService search results (list of relationship dicts)
 into nodes + edges for st-link-analysis (Cytoscape.js-based).
 """
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def relationships_to_graph(relationships: list[dict[str, Any]]) -> dict[str, Any]:
@@ -59,8 +62,9 @@ def episodes_to_graph(episodes: list[dict[str, Any]]) -> dict[str, Any]:
     """
     nodes = []
     for ep in episodes:
+        content = ep.get("content", "")
         ep_id = ep.get("id", f"ep-{len(nodes)}")
-        label = ep.get("content", "")[:50] + ("..." if len(ep.get("content", "")) > 50 else "")
+        label = content[:50] + ("..." if len(content) > 50 else "")
         source = ep.get("source", "unknown")
         nodes.append({
             "id": ep_id,

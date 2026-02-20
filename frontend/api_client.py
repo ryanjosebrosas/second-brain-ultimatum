@@ -71,11 +71,16 @@ def semantic_search(query: str) -> dict[str, Any]:
 def vector_search(query: str, table: str = "memory_content", limit: int = 10) -> dict[str, Any]:
     """Search using vector similarity (pgvector)."""
     client = _get_client()
-    response = client.post("/search/vector", json={
-        "query": query, "table": table, "limit": limit,
-    })
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = client.post("/search/vector", json={
+            "query": query, "table": table, "limit": limit,
+        })
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as exc:
+        return {"error": f"Vector search failed: {exc.response.status_code}"}
+    except httpx.RequestError as exc:
+        return {"error": f"Vector search connection error: {exc}"}
 
 
 def delete_item(table: str, item_id: str) -> dict[str, Any]:
@@ -130,7 +135,7 @@ def get_setup() -> dict[str, Any]:
 
 # --- Project methods ---
 
-def list_projects(lifecycle_stage: str | None = None, category: str | None = None) -> dict[str, Any]:
+def list_projects(lifecycle_stage: str | None = None, category: str | None = None) -> list[dict[str, Any]] | dict[str, Any]:
     """List projects with optional filters."""
     client = _get_client()
     params = {}
@@ -172,7 +177,7 @@ def delete_project(project_id: str) -> dict[str, Any]:
 
 # --- Content type methods ---
 
-def get_content_types() -> dict[str, Any]:
+def get_content_types() -> list[dict[str, Any]] | dict[str, Any]:
     """List all available content types."""
     client = _get_client()
     response = client.get("/content-types")

@@ -1,5 +1,6 @@
 """Content page — Content creation studio with type selector and review."""
 
+import html
 import logging
 from typing import Any
 
@@ -9,6 +10,18 @@ from components.copy_button import copyable_text, copyable_output
 import api_client
 
 logger = logging.getLogger(__name__)
+
+_VERDICT_ICONS: dict[str, str] = {
+    "READY TO SEND": ":material/check_circle:",
+    "NEEDS REVISION": ":material/warning:",
+    "MAJOR REWORK": ":material/error:",
+}
+
+_STATUS_ICONS: dict[str, str] = {
+    "pass": ":material/check_circle:",
+    "warning": ":material/warning:",
+    "issue": ":material/error:",
+}
 
 st.title(":material/edit: Content Studio")
 
@@ -57,7 +70,7 @@ with tab_create:
             range(len(type_keys)),
             format_func=lambda i: type_labels[i],
             label_visibility="collapsed",
-        )
+        ) or 0
         selected_key = type_keys[selected_idx]
         selected_type = content_types[selected_key]
 
@@ -160,7 +173,7 @@ with tab_review:
     if content_types:
         type_options = ["Auto-detect"] + list(content_types.keys())
         review_type_idx = st.selectbox("Content Type (optional)", range(len(type_options)),
-                                       format_func=lambda i: type_options[i])
+                                       format_func=lambda i: type_options[i]) or 0
         if review_type_idx > 0:
             review_type = type_options[review_type_idx]
 
@@ -175,12 +188,7 @@ with tab_review:
 
                 # Verdict banner
                 verdict = result.get("verdict", "")
-                verdict_icons = {
-                    "READY TO SEND": ":material/check_circle:",
-                    "NEEDS REVISION": ":material/warning:",
-                    "MAJOR REWORK": ":material/error:",
-                }
-                verdict_icon = verdict_icons.get(verdict, ":material/info:")
+                verdict_icon = _VERDICT_ICONS.get(verdict, ":material/info:")
                 if verdict == "READY TO SEND":
                     st.success(f"{verdict_icon} **{verdict}**")
                 elif verdict == "NEEDS REVISION":
@@ -197,7 +205,7 @@ with tab_review:
                 # Summary
                 summary = result.get("summary", "")
                 if summary:
-                    st.markdown(summary)
+                    st.text(summary)
 
                 # Per-dimension scores
                 scores = result.get("scores", [])
@@ -208,16 +216,11 @@ with tab_review:
                         score = dim_score.get("score", 0)
                         status = dim_score.get("status", "")
 
-                        status_icons = {
-                            "pass": ":material/check_circle:",
-                            "warning": ":material/warning:",
-                            "issue": ":material/error:",
-                        }
-                        s_icon = status_icons.get(status, "")
+                        s_icon = _STATUS_ICONS.get(status, "")
 
                         col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.markdown(f"**{dim_name}**")
+                            st.markdown(f"{s_icon} **{dim_name}**")
                             st.progress(min(score / 10.0, 1.0))
                         with col2:
                             st.metric(

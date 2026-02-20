@@ -1,7 +1,11 @@
 """Knowledge Graph Explorer — interactive visualization of brain relationships."""
 
+import logging
+
 import streamlit as st
 from api_client import graph_search, graph_health, graph_episodes
+
+logger = logging.getLogger(__name__)
 from components.copy_button import copyable_text
 from components.graph_utils import relationships_to_graph
 
@@ -10,8 +14,9 @@ st.title("Knowledge Graph")
 # Check graph availability
 try:
     health = graph_health()
-except Exception as e:
-    st.error(f"Failed to check graph status: {e}")
+except Exception:
+    logger.exception("Failed to check graph status")
+    st.error("Failed to check graph status. Please try again.")
     health = {"status": "unavailable"}
 
 status = health.get("status", "unavailable")
@@ -30,7 +35,8 @@ st.markdown(
 )
 
 if health.get("error"):
-    st.warning(f"Graph error: {health['error']}")
+    logger.warning("Graph health error: %s", health["error"])
+    st.warning("Graph service reported an error. Check logs for details.")
 
 st.divider()
 
@@ -104,8 +110,9 @@ with tab_search:
                 else:
                     st.info("No relationships found. Try a different query.")
 
-            except Exception as e:
-                st.error(f"Graph search failed: {e}")
+            except Exception:
+                logger.exception("Graph search failed")
+                st.error("Graph search failed. Please try again.")
 
 with tab_episodes:
     st.subheader("Graph Episodes")
@@ -145,5 +152,6 @@ with tab_episodes:
                 else:
                     st.info("No episodes found. Ingest some content first.")
 
-            except Exception as e:
-                st.error(f"Failed to load episodes: {e}")
+            except Exception:
+                logger.exception("Failed to load episodes")
+                st.error("Failed to load episodes. Please try again.")

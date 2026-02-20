@@ -1,5 +1,6 @@
 """Memory Browser page — Search, filter, and browse brain memory."""
 
+import html
 import logging
 from typing import Any
 
@@ -93,9 +94,10 @@ if search_mode == "Browse Tables":
                                     st.markdown(f"**{label}**:")
                                     copyable_text(value)
                                 elif isinstance(value, list):
-                                    st.markdown(f"**{label}**: {', '.join(str(v) for v in value)}")
+                                    escaped_values = ", ".join(html.escape(str(v)) for v in value)
+                                    st.markdown(f"**{label}**: {escaped_values}")
                                 else:
-                                    st.markdown(f"**{label}**: {value}")
+                                    st.markdown(f"**{label}**: {html.escape(str(value))}")
 
                         # Delete button
                         item_id = item.get("id")
@@ -129,7 +131,7 @@ elif search_mode == "Semantic Search":
                 try:
                     data = semantic_search(query)
                     if data.get("summary"):
-                        st.markdown(f"**Summary**: {data['summary']}")
+                        st.markdown(f"**Summary**: {html.escape(str(data['summary']))}")
                     matches = data.get("matches", [])
                     st.info(f"Found {len(matches)} matches")
                     for i, m in enumerate(matches):
