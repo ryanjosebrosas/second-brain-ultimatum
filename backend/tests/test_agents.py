@@ -320,6 +320,140 @@ class TestAskValidatorResilience:
         assert result.error == ""
 
 
+class TestLearnValidatorResilience:
+    """Tests for learn validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, empty results should NOT trigger ModelRetry."""
+        from second_brain.agents.learn import learn_agent
+        output = LearnResult(
+            input_summary="test",
+            error="Supabase storage unavailable",
+        )
+        ctx = MagicMock()
+        validator = learn_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Supabase storage unavailable"
+        assert result.patterns_extracted == []
+
+    @pytest.mark.asyncio
+    async def test_empty_results_no_error_retries(self):
+        """When no patterns, no insights, no error → retry."""
+        from second_brain.agents.learn import learn_agent
+        output = LearnResult(input_summary="test")
+        ctx = MagicMock()
+        validator = learn_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(ctx, output)
+
+    @pytest.mark.asyncio
+    async def test_retry_message_mentions_error_field(self):
+        """Retry message should tell the agent about the error field."""
+        from second_brain.agents.learn import learn_agent
+        output = LearnResult(input_summary="test")
+        ctx = MagicMock()
+        validator = learn_agent._output_validators[0]
+        with pytest.raises(ModelRetry, match="error field"):
+            await validator.function(ctx, output)
+
+    def test_learn_result_error_field_default(self):
+        """Error field should default to empty string."""
+        result = LearnResult(input_summary="test")
+        assert result.error == ""
+
+
+class TestCreateValidatorResilience:
+    """Tests for create validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, short drafts should NOT trigger ModelRetry."""
+        from second_brain.agents.create import create_agent
+        output = CreateResult(
+            draft="Short draft",
+            content_type="linkedin",
+            mode="conversational",
+            error="Voice guide unavailable — brain context services down",
+        )
+        ctx = MagicMock()
+        validator = create_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error.startswith("Voice guide unavailable")
+
+    @pytest.mark.asyncio
+    async def test_short_draft_no_error_retries(self):
+        """When draft is too short and no error → retry."""
+        from second_brain.agents.create import create_agent
+        output = CreateResult(
+            draft="Too short",
+            content_type="linkedin",
+            mode="conversational",
+        )
+        ctx = MagicMock()
+        validator = create_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(ctx, output)
+
+    @pytest.mark.asyncio
+    async def test_retry_message_mentions_error_field(self):
+        """Retry message should tell the agent about the error field."""
+        from second_brain.agents.create import create_agent
+        output = CreateResult(
+            draft="Too short",
+            content_type="linkedin",
+            mode="conversational",
+        )
+        ctx = MagicMock()
+        validator = create_agent._output_validators[0]
+        with pytest.raises(ModelRetry, match="error field"):
+            await validator.function(ctx, output)
+
+    def test_create_result_error_field_default(self):
+        """Error field should default to empty string."""
+        result = CreateResult(
+            draft="test draft content",
+            content_type="linkedin",
+            mode="casual",
+        )
+        assert result.error == ""
+
+
+class TestInjectExistingPatternsResilience:
+    """Tests for inject_existing_patterns graceful degradation."""
+
+    @pytest.mark.asyncio
+    async def test_handles_storage_failure(self):
+        """inject_existing_patterns should return fallback when storage fails."""
+        from second_brain.agents.learn import inject_existing_patterns
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_patterns = AsyncMock(
+            side_effect=Exception("Supabase connection error")
+        )
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        result = await inject_existing_patterns(ctx)
+        assert "unavailable" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_returns_patterns_on_success(self):
+        """inject_existing_patterns should return pattern names normally."""
+        from second_brain.agents.learn import inject_existing_patterns
+        mock_deps = MagicMock()
+        mock_deps.storage_service.get_patterns = AsyncMock(
+            return_value=[
+                {"name": "Hook-First Pattern"},
+                {"name": "Value-Stack Pattern"},
+            ]
+        )
+        mock_deps.config.pattern_context_limit = 10
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        result = await inject_existing_patterns(ctx)
+        assert "Hook-First Pattern" in result
+        assert "Value-Stack Pattern" in result
+
+
 class TestRunAgentErrorHandling:
     """Tests for _run_agent HTTP status code differentiation."""
 
@@ -1120,7 +1254,8 @@ class TestGraphIntegration:
         assert "Recorded experience" in result
         mock_deps.storage_service.add_experience.assert_called_once()
 
-    async def test_recall_search_patterns_requests_graph(self, mock_deps):
+    async def test_recall_search_patterns_no_enable_graph(self, mock_deps):
+        """search_patterns should not pass enable_graph (removed in Mem0 v1.0.0 cleanup)."""
         from second_brain.agents.recall import recall_agent
         tool_fn = recall_agent._function_toolset.tools["search_patterns"]
         mock_ctx = MagicMock()
@@ -1128,12 +1263,12 @@ class TestGraphIntegration:
 
         await tool_fn.function(mock_ctx, topic="Content")
 
-        # Verify search_with_filters was called with enable_graph=True
         mock_deps.memory_service.search_with_filters.assert_called_once()
         call_kwargs = mock_deps.memory_service.search_with_filters.call_args[1]
-        assert call_kwargs.get("enable_graph") is True
+        assert "enable_graph" not in call_kwargs, "enable_graph is not valid on Mem0 search endpoint"
 
-    async def test_create_find_patterns_requests_graph(self, mock_deps):
+    async def test_create_find_patterns_no_enable_graph(self, mock_deps):
+        """find_applicable_patterns should not pass enable_graph (removed in Mem0 v1.0.0 cleanup)."""
         from second_brain.agents.create import create_agent
         tool_fn = create_agent._function_toolset.tools["find_applicable_patterns"]
         mock_ctx = MagicMock()
@@ -1141,10 +1276,9 @@ class TestGraphIntegration:
 
         await tool_fn.function(mock_ctx, topic="hooks", content_type="linkedin")
 
-        # Verify search_with_filters was called with enable_graph=True
         mock_deps.memory_service.search_with_filters.assert_called_once()
         call_kwargs = mock_deps.memory_service.search_with_filters.call_args[1]
-        assert call_kwargs.get("enable_graph") is True
+        assert "enable_graph" not in call_kwargs, "enable_graph is not valid on Mem0 search endpoint"
 
     async def test_ask_find_experiences_passes_graph(self, mock_deps):
         from second_brain.agents.ask import ask_agent

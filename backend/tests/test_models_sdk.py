@@ -582,7 +582,12 @@ class TestClaudeSDKModelStructuredOutput:
 
         model = ClaudeSDKModel()
 
-        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+        mock_errors = MagicMock()
+        mock_errors.MessageParseError = type("MessageParseError", (Exception,), {})
+        with patch.dict('sys.modules', {
+            'claude_agent_sdk': mock_sdk,
+            'claude_agent_sdk._errors': mock_errors,
+        }):
             result = await model._sdk_query("system", "user", output_schema=schema)
 
         # Verify output_format was passed to ClaudeAgentOptions
@@ -613,7 +618,12 @@ class TestClaudeSDKModelStructuredOutput:
 
         model = ClaudeSDKModel()
 
-        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+        mock_errors = MagicMock()
+        mock_errors.MessageParseError = type("MessageParseError", (Exception,), {})
+        with patch.dict('sys.modules', {
+            'claude_agent_sdk': mock_sdk,
+            'claude_agent_sdk._errors': mock_errors,
+        }):
             result = await model._sdk_query("system", "user", output_schema=schema)
 
         assert isinstance(result, str)
@@ -635,7 +645,12 @@ class TestClaudeSDKModelStructuredOutput:
 
         model = ClaudeSDKModel()
 
-        with patch.dict('sys.modules', {'claude_agent_sdk': mock_sdk}):
+        mock_errors = MagicMock()
+        mock_errors.MessageParseError = type("MessageParseError", (Exception,), {})
+        with patch.dict('sys.modules', {
+            'claude_agent_sdk': mock_sdk,
+            'claude_agent_sdk._errors': mock_errors,
+        }):
             result = await model._sdk_query("system", "user")
 
         assert isinstance(result, str)

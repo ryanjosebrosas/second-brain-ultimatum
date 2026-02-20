@@ -49,7 +49,11 @@ create_agent = Agent(
         "5. Let the content be as long or short as it needs to be. "
         "Follow the length guidance but don't pad or truncate artificially.\n"
         "6. Call validate_draft to check structure requirements.\n"
-        "7. Produce a DRAFT for human editing, not final copy."
+        "7. Produce a DRAFT for human editing, not final copy.\n\n"
+        "ERROR HANDLING: If brain context tools (voice guide, patterns, examples) "
+        "return 'BACKEND_ERROR:' messages, write the best draft you can without that "
+        "context. Set the error field to describe which services were unavailable. "
+        "A draft without voice matching is better than no draft at all."
     ),
 )
 
@@ -94,14 +98,19 @@ async def inject_content_types(ctx: RunContext[BrainDeps]) -> str:
 
 @create_agent.output_validator
 async def validate_create(ctx: RunContext[BrainDeps], output: CreateResult) -> CreateResult:
-    """Validate draft completeness and quality."""
+    """Validate draft completeness and quality — accept degraded output on backend errors."""
+    # Backend error signaled — accept as-is (draft may be minimal)
+    if output.error:
+        return output
     # Draft must be substantial
     word_count = len(output.draft.split())
     if word_count < 20:
         raise ModelRetry(
             f"Draft is only {word_count} words. The draft field MUST contain the "
             "COMPLETE written text — the actual post, email, or document. "
-            "NOT a summary or description. Write the full content."
+            "NOT a summary or description. Write the full content.\n"
+            "If brain context tools return errors, set the error field and "
+            "write the best draft you can without brain context."
         )
 
     # Detect summary-instead-of-draft anti-pattern
@@ -187,7 +196,6 @@ async def find_applicable_patterns(
                 topic,
                 metadata_filters=filters,
                 limit=10,
-                enable_graph=True,
             )
             pattern_memories = pattern_result.memories
             pattern_relations = pattern_result.relations

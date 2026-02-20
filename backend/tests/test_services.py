@@ -2556,7 +2556,7 @@ class TestMem0FilterConstruction:
         assert "filters" in kwargs
         assert "AND" in kwargs["filters"]
         assert {"user_id": "ryan"} in kwargs["filters"]["AND"]
-        assert kwargs.get("version") == "v2"
+        assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
 
     @patch("mem0.MemoryClient")
     async def test_search_with_filters_flattens_nested_and(self, mock_mem0_cls, cloud_config):
@@ -2619,8 +2619,8 @@ class TestMem0FilterConstruction:
         assert kwargs["filters"] == {"AND": [{"user_id": "ryan"}]}
 
     @patch("mem0.MemoryClient")
-    async def test_get_all_cloud_no_top_level_user_id(self, mock_mem0_cls, cloud_config):
-        """Cloud get_all must not send user_id as top-level kwarg."""
+    async def test_get_all_cloud_uses_top_level_user_id(self, mock_mem0_cls, cloud_config):
+        """Cloud get_all must use user_id as top-level kwarg (Mem0 v1.0.0 API)."""
         mock_client = MagicMock()
         mock_client.get_all.return_value = []
         mock_mem0_cls.return_value = mock_client
@@ -2631,9 +2631,9 @@ class TestMem0FilterConstruction:
 
         call_kwargs = mock_client.get_all.call_args
         _, kwargs = call_kwargs
-        assert "user_id" not in kwargs
-        assert "filters" in kwargs
-        assert kwargs["filters"] == {"AND": [{"user_id": "ryan"}]}
+        assert kwargs.get("user_id") == "ryan", "get_all must pass user_id as top-level kwarg"
+        assert "filters" not in kwargs, "get_all does not support filters kwarg"
+        assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
 
     @patch("mem0.Memory")
     async def test_search_local_uses_top_level_user_id(self, mock_memory_cls, tmp_path):
@@ -2658,6 +2658,21 @@ class TestMem0FilterConstruction:
         _, kwargs = call_kwargs
         assert kwargs.get("user_id") == "ryan"
         assert "filters" not in kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_no_version_kwarg(self, mock_mem0_cls, cloud_config):
+        """search_with_filters must not pass 'version' kwarg to Mem0 v1.0.0+."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": [], "relations": []}
+        mock_mem0_cls.return_value = mock_client
+
+        service = MemoryService(cloud_config)
+        with patch.object(MemoryService, "_is_cloud", new_callable=lambda: property(lambda self: True)):
+            await service.search_with_filters("test", metadata_filters={"category": "pattern"})
+
+        call_kwargs = mock_client.search.call_args
+        _, kwargs = call_kwargs
+        assert "version" not in kwargs, "version kwarg must not be passed to Mem0 v1.0.0+"
 
 
 class TestWrapMetadataFilter:

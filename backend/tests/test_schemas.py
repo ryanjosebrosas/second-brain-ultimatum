@@ -167,6 +167,21 @@ class TestLearnResult:
         assert result.patterns_new == 0
         assert result.patterns_reinforced == 0
 
+    def test_error_field_default(self):
+        """LearnResult.error defaults to empty string."""
+        result = LearnResult(input_summary="test")
+        assert result.error == ""
+
+    def test_error_field_set(self):
+        """LearnResult.error accepts error messages."""
+        result = LearnResult(
+            input_summary="test",
+            error="Backend unavailable",
+        )
+        assert result.error == "Backend unavailable"
+        dumped = result.model_dump()
+        assert "error" in dumped
+
 
 class TestCreateResult:
     """Tests for CreateResult output schema."""
@@ -202,6 +217,25 @@ class TestCreateResult:
         field_info = CreateResult.model_fields["notes"]
         desc = field_info.description.lower()
         assert "note" in desc or "editorial" in desc or "suggestion" in desc
+
+    def test_error_field_default(self):
+        """CreateResult.error defaults to empty string."""
+        result = CreateResult(
+            draft="Test draft content",
+            content_type="linkedin",
+            mode="conversational",
+        )
+        assert result.error == ""
+
+    def test_error_field_set(self):
+        """CreateResult.error accepts error messages."""
+        result = CreateResult(
+            draft="Minimal draft — brain context unavailable",
+            content_type="linkedin",
+            mode="conversational",
+            error="Voice guide and patterns unavailable",
+        )
+        assert result.error == "Voice guide and patterns unavailable"
 
 
 class TestDimensionScore:

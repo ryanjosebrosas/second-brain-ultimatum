@@ -32,7 +32,12 @@ learn_agent = Agent(
         "Create an experience entry if the input describes a complete work session with outcomes. "
         "When creating patterns, consider which content types they apply to. "
         "Set applicable_content_types to a list of slugs (e.g., ['linkedin', 'email']) "
-        "if the pattern is specific to certain types. Leave it as None for universal patterns."
+        "if the pattern is specific to certain types. Leave it as None for universal patterns.\n\n"
+        "ERROR HANDLING: If storage tools return 'BACKEND_ERROR:' messages indicating "
+        "backend service failures, do NOT keep retrying the same failing tools. Instead, "
+        "set the error field to describe which services are down and return whatever "
+        "partial results you have (even if empty). This prevents unnecessary retries "
+        "when the problem is infrastructure, not your analysis."
     ),
 )
 
@@ -40,28 +45,39 @@ learn_agent = Agent(
 @learn_agent.instructions
 async def inject_existing_patterns(ctx: RunContext[BrainDeps]) -> str:
     """Inject existing pattern names to prevent duplicate extraction."""
-    patterns = await ctx.deps.storage_service.get_patterns()
-    if not patterns:
-        return "No existing patterns in the brain yet. All extractions will be new."
-    names = [p["name"] for p in patterns[:ctx.deps.config.pattern_context_limit]]
-    return (
-        f"Existing patterns (check for reinforcement before creating new): "
-        f"{', '.join(names)}"
-    )
+    try:
+        patterns = await ctx.deps.storage_service.get_patterns()
+        if not patterns:
+            return "No existing patterns in the brain yet. All extractions will be new."
+        names = [p["name"] for p in patterns[:ctx.deps.config.pattern_context_limit]]
+        return (
+            f"Existing patterns (check for reinforcement before creating new): "
+            f"{', '.join(names)}"
+        )
+    except Exception:
+        return (
+            "Pattern registry unavailable. Proceed with extraction — "
+            "all patterns will be treated as new. If storage tools also fail, "
+            "set the error field and return partial results."
+        )
 
 
 @learn_agent.output_validator
 async def validate_learn(ctx: RunContext[BrainDeps], output: LearnResult) -> LearnResult:
-    """Validate pattern extraction quality."""
+    """Validate pattern extraction quality — accept degraded output on backend errors."""
+    # Backend error signaled — accept as-is
+    if output.error:
+        return output
     # Must extract something from the input
     if not output.patterns_extracted and not output.insights and not output.experience_recorded:
         raise ModelRetry(
             "You didn't extract any patterns, insights, or experiences. "
             "Analyze the input more carefully. Look for:\n"
             "1. Recurring approaches or techniques (patterns)\n"
-            "2. Key takeaways that don't fit a pattern (insights)\n"
+            "2. Key takeaways that don't fit a pattern structure (insights)\n"
             "3. Work sessions or projects worth recording (experiences)\n"
-            "Search existing patterns first to check for reinforcement opportunities."
+            "Search existing patterns first to check for reinforcement opportunities.\n"
+            "If storage tools return errors, set the error field and return partial results."
         )
 
     # Validate pattern names aren't generic

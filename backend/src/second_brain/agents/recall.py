@@ -188,7 +188,6 @@ async def search_patterns(
             topic or "patterns",
             metadata_filters=filters,
             limit=10,
-            enable_graph=True,
         )
 
         if embed_coro:

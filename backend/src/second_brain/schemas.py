@@ -202,6 +202,11 @@ class LearnResult(BaseModel):
         default=0,
         description="Count of existing patterns reinforced",
     )
+    error: str = Field(
+        default="",
+        description="Error message when backend services are degraded or unavailable. "
+        "When set, empty patterns/insights are expected and should not trigger retries.",
+    )
 
 
 class ReviewDimensionConfig(BaseModel):
@@ -287,6 +292,11 @@ class CreateResult(BaseModel):
             "Editorial notes for the human reviewer — suggestions about what to polish, "
             "verify, or adjust. Meta-commentary about the draft goes here, NOT in the draft field."
         ),
+    )
+    error: str = Field(
+        default="",
+        description="Error message when backend services are degraded or unavailable. "
+        "When set, a minimal draft with explanation is expected and should not trigger retries.",
     )
 
 

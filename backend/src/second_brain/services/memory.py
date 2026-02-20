@@ -255,7 +255,6 @@ class MemoryService(MemoryServiceBase):
             kwargs: dict = {
                 "filters": {"AND": [{"user_id": self.user_id}]},
                 "top_k": limit,
-                "version": "v2",
             }
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
@@ -326,7 +325,6 @@ class MemoryService(MemoryServiceBase):
             kwargs: dict = {
                 "filters": {"AND": conditions},
                 "top_k": limit,
-                "version": "v2",
             }
             if self.config.mem0_keyword_search:
                 kwargs["keyword_search"] = True
@@ -424,8 +422,7 @@ class MemoryService(MemoryServiceBase):
         try:
             if self._is_cloud:
                 kwargs: dict = {
-                    "version": "v2",
-                    "filters": {"AND": [{"user_id": self.user_id}]},
+                    "user_id": self.user_id,
                 }
             else:
                 kwargs: dict = {"user_id": self.user_id}
