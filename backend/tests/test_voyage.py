@@ -333,7 +333,7 @@ class TestVoyageConfig:
         )
         assert config.voyage_api_key is None
         assert config.voyage_embedding_model == "voyage-multimodal-3.5"
-        assert config.voyage_rerank_model == "rerank-2-lite"
+        assert config.voyage_rerank_model == "rerank-2.5-lite"
         assert config.voyage_rerank_top_k == 10
         assert config.embedding_dimensions == 1024
         assert config.embedding_model == "voyage-multimodal-3.5"

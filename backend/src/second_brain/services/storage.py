@@ -733,7 +733,7 @@ class StorageService:
         Returns:
             List of matching rows with similarity score added.
         """
-        valid_tables = {"patterns", "memory_content", "examples", "knowledge_repo"}
+        valid_tables = {"patterns", "memory_content", "examples", "knowledge_repo", "experiences"}
         if table not in valid_tables:
             raise ValueError(f"Invalid table '{table}'. Must be one of: {valid_tables}")
 

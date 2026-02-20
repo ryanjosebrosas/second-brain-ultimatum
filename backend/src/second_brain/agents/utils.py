@@ -25,7 +25,7 @@ def format_memories(memories: list[dict], limit: int | None = None) -> str:
     lines = []
     for m in items:
         content = m.get("memory", m.get("result", ""))
-        score = m.get("score", 0)
+        score = m.get("rerank_score", m.get("score", 0))
         lines.append(f"- [{score:.2f}] {content}")
     return "\n".join(lines)
 
@@ -68,6 +68,81 @@ def format_search_result(
     if rel_text:
         parts.append(rel_text)
     return "\n".join(parts) if parts else ""
+
+
+# Domain-specific synonym map for query expansion
+_QUERY_SYNONYMS: dict[str, list[str]] = {
+    "pattern": ["template", "framework", "approach"],
+    "client": ["customer", "account", "prospect"],
+    "voice": ["tone", "style", "brand voice"],
+    "email": ["message", "outreach", "correspondence"],
+    "linkedin": ["social", "post", "content"],
+    "review": ["feedback", "critique", "score"],
+    "project": ["initiative", "engagement", "work"],
+    "experience": ["past work", "case study", "example"],
+}
+
+
+def expand_query(query: str, max_expansions: int = 3) -> str:
+    """Expand a search query with domain-specific synonyms.
+
+    Zero-latency expansion — no LLM call needed. Appends up to max_expansions
+    synonym terms to improve recall for domain-specific vocabulary.
+
+    Args:
+        query: Original search query.
+        max_expansions: Maximum synonym terms to append.
+
+    Returns:
+        Expanded query string. Returns original if no synonyms match.
+    """
+    tokens = query.lower().split()
+    expansions: list[str] = []
+    for token in tokens:
+        if token in _QUERY_SYNONYMS:
+            for syn in _QUERY_SYNONYMS[token]:
+                if syn.lower() not in query.lower():
+                    expansions.append(syn)
+    if expansions:
+        return query + " " + " ".join(expansions[:max_expansions])
+    return query
+
+
+def deduplicate_results(
+    results: list[dict],
+    content_key: str = "memory",
+    fallback_key: str = "result",
+) -> list[dict]:
+    """Remove duplicate results by content hash.
+
+    Used when merging results from multiple sources (Mem0 + Supabase vector +
+    Supabase full-text). Preserves the first occurrence and drops later duplicates.
+
+    Args:
+        results: List of result dicts from any search source.
+        content_key: Primary key for content text.
+        fallback_key: Fallback key if primary is missing.
+
+    Returns:
+        Deduplicated list preserving original order.
+    """
+    if not results:
+        return results
+
+    import hashlib
+
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for r in results:
+        content = r.get(content_key, r.get(fallback_key, ""))
+        if not content:
+            deduped.append(r)
+            continue
+        content_hash = hashlib.md5(content.encode()).hexdigest()
+        if content_hash not in seen:
+            seen.add(content_hash)
+            deduped.append(r)
+    return deduped
 
 
 async def search_with_graph_fallback(

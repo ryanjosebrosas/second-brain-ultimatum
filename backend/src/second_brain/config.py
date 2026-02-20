@@ -82,7 +82,7 @@ class BrainConfig(BaseSettings):
         description="Voyage embedding model. Options: voyage-multimodal-3.5, voyage-4-large, voyage-4, voyage-4-lite",
     )
     voyage_rerank_model: str = Field(
-        default="rerank-2-lite",
+        default="rerank-2.5-lite",
         description="Voyage rerank model. Options: rerank-2.5, rerank-2.5-lite, rerank-2-lite",
     )
     voyage_rerank_top_k: int = Field(
@@ -264,6 +264,48 @@ class BrainConfig(BaseSettings):
     hnsw_ef_search: int = Field(
         default=100, ge=10, le=500,
         description="HNSW ef_search parameter for vector queries. Higher = better recall, more latency.",
+    )
+
+    # Hybrid search
+    similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity for vector search results. Range: 0.0-1.0.",
+    )
+    hybrid_search_semantic_weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=5.0,
+        description="Weight for semantic (vector) results in hybrid RRF fusion. Range: 0.0-5.0.",
+    )
+    hybrid_search_keyword_weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=5.0,
+        description="Weight for keyword (full-text) results in hybrid RRF fusion. Range: 0.0-5.0.",
+    )
+    hybrid_search_rrf_k: int = Field(
+        default=50,
+        ge=10,
+        le=200,
+        description="RRF smoothing constant. Standard: 50. Lower = more weight to top positions.",
+    )
+    mem0_keyword_search: bool = Field(
+        default=True,
+        description="Enable Mem0 Cloud hybrid keyword+semantic search. +10ms latency, better recall.",
+    )
+    retrieval_oversample_factor: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Oversample factor for retrieval before reranking. E.g., 3 = retrieve 3x top_k candidates.",
+    )
+    dedup_similarity_threshold: float = Field(
+        default=0.87,
+        ge=0.5,
+        le=1.0,
+        description="Cosine similarity threshold for deduplicating results across sources. Range: 0.5-1.0.",
     )
 
     # Service-level timeouts (used in sub-plan 02)

@@ -51,6 +51,7 @@ class MemoryMatch(BaseModel):
     content: str = Field(description="The memory content")
     source: str = Field(default="", description="Source file or category")
     relevance: str = Field(default="MEDIUM", description="HIGH/MEDIUM/LOW relevance")
+    score: float = Field(default=0.0, description="Numeric relevance score (0.0-1.0) from reranking or similarity")
 
 
 class RecallResult(BaseModel):
