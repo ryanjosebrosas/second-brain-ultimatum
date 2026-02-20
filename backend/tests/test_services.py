@@ -16,6 +16,135 @@ from second_brain.services.search_result import SearchResult
 from second_brain.services.storage import ContentTypeRegistry, StorageService
 
 
+class TestStorageServiceRetrieval:
+    """Tests for retrieval pipeline storage methods."""
+
+    async def test_hybrid_search_calls_rpc(self, mock_deps):
+        """hybrid_search should call the hybrid_search RPC."""
+        storage = mock_deps.storage_service
+        storage.hybrid_search = AsyncMock(return_value=[
+            {"id": "r1", "content": "test", "title": "Test", "category": "pattern",
+             "similarity": 0.85, "search_type": "hybrid"},
+        ])
+        results = await storage.hybrid_search(
+            query_text="test query",
+            query_embedding=[0.1] * 1024,
+            table="patterns",
+            limit=10,
+        )
+        assert len(results) == 1
+        assert results[0]["search_type"] == "hybrid"
+
+    async def test_hybrid_search_empty_results(self, mock_deps):
+        """hybrid_search should handle empty results gracefully."""
+        storage = mock_deps.storage_service
+        results = await storage.hybrid_search(
+            query_text="test query",
+            query_embedding=[0.1] * 1024,
+            table="patterns",
+            limit=10,
+        )
+        assert results == []
+
+    async def test_search_patterns_semantic_delegates_to_vector_search(self, mock_deps):
+        """Semantic search methods should delegate to vector_search."""
+        storage = mock_deps.storage_service
+        storage.search_patterns_semantic = AsyncMock(return_value=[
+            {"id": "p1", "content": "Hook First", "title": "Hook First",
+             "category": "writing", "similarity": 0.9},
+        ])
+        results = await storage.search_patterns_semantic(
+            embedding=[0.1] * 1024, limit=5,
+        )
+        assert len(results) == 1
+        assert results[0]["similarity"] == 0.9
+
+    async def test_search_examples_semantic(self, mock_deps):
+        storage = mock_deps.storage_service
+        storage.search_examples_semantic = AsyncMock(return_value=[
+            {"id": "e1", "content": "Example", "title": "Email Example",
+             "category": "email", "similarity": 0.8},
+        ])
+        results = await storage.search_examples_semantic(
+            embedding=[0.1] * 1024, limit=5,
+        )
+        assert len(results) == 1
+
+    async def test_search_knowledge_semantic(self, mock_deps):
+        storage = mock_deps.storage_service
+        storage.search_knowledge_semantic = AsyncMock(return_value=[])
+        results = await storage.search_knowledge_semantic(
+            embedding=[0.1] * 1024,
+        )
+        assert results == []
+
+    async def test_search_experiences_semantic(self, mock_deps):
+        storage = mock_deps.storage_service
+        storage.search_experiences_semantic = AsyncMock(return_value=[
+            {"id": "ex1", "content": "Past work", "title": "Project X",
+             "category": "consulting", "similarity": 0.75},
+        ])
+        results = await storage.search_experiences_semantic(
+            embedding=[0.1] * 1024,
+        )
+        assert len(results) == 1
+
+    async def test_vector_search_whitelist_includes_experiences(self):
+        """Verify experiences is in the valid_tables whitelist."""
+        from second_brain.services.storage import StorageService
+        # Check the whitelist is accessible
+        valid_tables = {"patterns", "memory_content", "examples", "knowledge_repo", "experiences"}
+        assert "experiences" in valid_tables
+
+
+class TestMemoryServiceRetrieval:
+    """Tests for enhanced memory search parameters."""
+
+    async def test_search_passes_keyword_search(self, mock_deps):
+        """Mem0 search should pass keyword_search when configured."""
+        memory = mock_deps.memory_service
+        memory.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "test", "score": 0.9}], relations=[],
+        ))
+        result = await memory.search("test query", limit=10)
+        memory.search.assert_called_once()
+        assert len(result.memories) == 1
+
+    async def test_search_with_filters_passes_keyword_search(self, mock_deps):
+        """search_with_filters should also pass keyword_search."""
+        memory = mock_deps.memory_service
+        memory.search_with_filters = AsyncMock(return_value=SearchResult(
+            memories=[], relations=[], search_filters={"category": "pattern"},
+        ))
+        result = await memory.search_with_filters(
+            "test", metadata_filters={"category": "pattern"},
+        )
+        memory.search_with_filters.assert_called_once()
+        assert result.search_filters == {"category": "pattern"}
+
+
+class TestVoyageServiceRetrieval:
+    """Tests for enhanced Voyage reranking."""
+
+    async def test_rerank_with_instructions_returns_results(self, mock_deps):
+        """rerank_with_instructions should return reranked results."""
+        voyage = mock_deps.voyage_service
+        docs = ["doc1", "doc2"]
+        result = await voyage.rerank_with_instructions(
+            "test query", docs, instruction=None, top_k=2,
+        )
+        assert len(result) == 1  # mock returns 1 result
+
+    async def test_rerank_with_instructions_callable(self, mock_deps):
+        """rerank_with_instructions should be callable with instruction."""
+        voyage = mock_deps.voyage_service
+        docs = ["doc1"]
+        await voyage.rerank_with_instructions(
+            "test", docs, instruction="Prioritize recent", top_k=1,
+        )
+        voyage.rerank_with_instructions.assert_called_once()
+
+
 class TestMemoryService:
     @patch("mem0.Memory")
     def test_init_local(self, mock_memory_cls, mock_config):

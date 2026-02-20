@@ -566,6 +566,83 @@ class TestMCPTools:
         assert "Clear value prop" in result
 
 
+class TestQuickRecall:
+    """Tests for the quick_recall MCP tool."""
+
+    async def test_quick_recall_exists(self):
+        """Verify quick_recall is registered as an MCP tool."""
+        from second_brain.mcp_server import server
+        tools = server._tool_manager._tools
+        assert "quick_recall" in tools
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_returns_string(self, mock_deps_fn):
+        """quick_recall should return a formatted string result."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(return_value=MagicMock(
+            memories=[{"memory": "Test memory content", "score": 0.9}],
+            relations=[],
+        ))
+        deps.embedding_service = None  # skip hybrid search
+        deps.voyage_service = None  # skip reranking
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="test query")
+        assert isinstance(result, str)
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_empty_query_rejected(self, mock_deps_fn):
+        """Empty query should return validation error."""
+        from second_brain.mcp_server import quick_recall
+
+        mock_deps_fn.return_value = _mock_deps()
+        result = await quick_recall(query="")
+        assert "empty" in result.lower() or "cannot be empty" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_no_results_message(self, mock_deps_fn):
+        """When no results found, should suggest using recall() instead."""
+        from second_brain.mcp_server import quick_recall
+        from second_brain.services.search_result import SearchResult
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[], relations=[],
+        ))
+        deps.embedding_service = None
+        deps.voyage_service = None
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="nonexistent topic")
+        assert "no results" in result.lower() or "recall()" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_quick_recall_includes_header(self, mock_deps_fn):
+        """Results should include the Quick Recall header."""
+        from second_brain.mcp_server import quick_recall
+
+        deps = _mock_deps()
+        deps.memory_service = MagicMock()
+        deps.memory_service.search = AsyncMock(return_value=MagicMock(
+            memories=[{"memory": "content patterns", "score": 0.9}],
+            relations=[],
+        ))
+        deps.embedding_service = None
+        deps.voyage_service = None
+        mock_deps_fn.return_value = deps
+
+        result = await quick_recall(query="content patterns")
+        assert "# Quick Recall" in result
+
+
 class TestMCPAgentFailures:
     """Tests for MCP tool behavior when agents fail."""
 

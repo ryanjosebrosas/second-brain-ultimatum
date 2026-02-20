@@ -822,6 +822,70 @@ class TestMcpTransportConfig:
             )
 
 
+class TestRetrievalConfig:
+    """Tests for retrieval pipeline config fields."""
+
+    def test_rerank_model_default_upgraded(self, tmp_path):
+        """Verify rerank model default changed from rerank-2-lite to rerank-2.5-lite."""
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.voyage_rerank_model == "rerank-2.5-lite"
+
+    def test_similarity_threshold_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.similarity_threshold == 0.7
+
+    def test_similarity_threshold_validation(self, tmp_path):
+        """Similarity threshold must be between 0.0 and 1.0."""
+        with pytest.raises(ValidationError):
+            BrainConfig(
+                supabase_url="x", supabase_key="y",
+                brain_data_path=tmp_path,
+                similarity_threshold=1.5, _env_file=None,
+            )
+
+    def test_hybrid_search_weights_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.hybrid_search_semantic_weight == 1.0
+        assert config.hybrid_search_keyword_weight == 1.0
+
+    def test_hybrid_search_rrf_k_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.hybrid_search_rrf_k == 50
+
+    def test_mem0_keyword_search_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.mem0_keyword_search is True
+
+    def test_retrieval_oversample_factor_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.retrieval_oversample_factor == 3
+
+    def test_dedup_similarity_threshold_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="x", supabase_key="x",
+            brain_data_path=tmp_path, _env_file=None,
+        )
+        assert config.dedup_similarity_threshold == 0.87
+
+
 class TestAgentModelOverrides:
     """Tests for AGENT_MODEL_OVERRIDES config field and validator."""
 

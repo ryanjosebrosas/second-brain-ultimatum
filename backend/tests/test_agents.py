@@ -1138,6 +1138,101 @@ class TestAgentEnhancements:
         assert "ValueError" in result
 
 
+class TestRetrievalUtils:
+    """Tests for retrieval utility functions."""
+
+    def test_expand_query_with_synonyms(self):
+        from second_brain.agents.utils import expand_query
+        result = expand_query("client patterns")
+        assert "client" in result
+        # Should include at least one synonym
+        assert any(syn in result for syn in ["customer", "account", "prospect"])
+
+    def test_expand_query_no_match(self):
+        from second_brain.agents.utils import expand_query
+        result = expand_query("random unrecognized words")
+        assert result == "random unrecognized words"
+
+    def test_expand_query_max_expansions(self):
+        from second_brain.agents.utils import expand_query
+        result = expand_query("client voice pattern", max_expansions=2)
+        # Original words are still there
+        assert "client" in result
+        assert "voice" in result
+        assert "pattern" in result
+        # Count expansion terms (words not in original)
+        original_words = {"client", "voice", "pattern"}
+        extra_words = [w for w in result.split() if w.lower() not in original_words]
+        assert len(extra_words) <= 2
+
+    def test_expand_query_no_duplicates(self):
+        """Synonyms already in query should not be re-added."""
+        from second_brain.agents.utils import expand_query
+        result = expand_query("customer patterns")  # "customer" is a synonym for "client"
+        assert result.count("customer") == 1
+
+    def test_deduplicate_results_removes_exact_dupes(self):
+        from second_brain.agents.utils import deduplicate_results
+        results = [
+            {"memory": "fact A", "score": 0.9},
+            {"memory": "fact B", "score": 0.8},
+            {"memory": "fact A", "score": 0.7},  # duplicate
+        ]
+        deduped = deduplicate_results(results)
+        assert len(deduped) == 2
+
+    def test_deduplicate_results_preserves_order(self):
+        from second_brain.agents.utils import deduplicate_results
+        results = [
+            {"memory": "first", "score": 0.5},
+            {"memory": "second", "score": 0.9},
+            {"memory": "first", "score": 0.3},
+        ]
+        deduped = deduplicate_results(results)
+        assert deduped[0]["memory"] == "first"
+        assert deduped[1]["memory"] == "second"
+
+    def test_deduplicate_results_empty(self):
+        from second_brain.agents.utils import deduplicate_results
+        assert deduplicate_results([]) == []
+
+    def test_deduplicate_results_custom_keys(self):
+        from second_brain.agents.utils import deduplicate_results
+        results = [
+            {"content": "A", "similarity": 0.9},
+            {"content": "B", "similarity": 0.8},
+            {"content": "A", "similarity": 0.7},
+        ]
+        deduped = deduplicate_results(results, content_key="content")
+        assert len(deduped) == 2
+
+    def test_format_memories_shows_rerank_score(self):
+        """format_memories should prefer rerank_score over score."""
+        from second_brain.agents.utils import format_memories
+        memories = [
+            {"memory": "test content", "score": 0.7, "rerank_score": 0.95},
+        ]
+        result = format_memories(memories)
+        assert "0.95" in result
+        assert "0.70" not in result
+
+    def test_format_memories_fallback_to_score(self):
+        """When no rerank_score, should use original score."""
+        from second_brain.agents.utils import format_memories
+        memories = [
+            {"memory": "test content", "score": 0.7},
+        ]
+        result = format_memories(memories)
+        assert "0.70" in result
+
+    def test_format_memories_no_score(self):
+        """When no score at all, should show 0.00."""
+        from second_brain.agents.utils import format_memories
+        memories = [{"memory": "test content"}]
+        result = format_memories(memories)
+        assert "0.00" in result
+
+
 class TestAgentFunctionalBehavior:
     """Functional tests that invoke agent tool functions with mocked deps.
 
@@ -1315,3 +1410,142 @@ class TestAgentFunctionalBehavior:
 
         mock_ctx.deps.storage_service.get_examples.assert_called_once()
         assert isinstance(result, str)
+
+
+class TestRecallAgentRetrieval:
+    """Tests for updated recall agent tools with semantic search."""
+
+    def test_search_examples_accepts_query_param(self):
+        """search_examples should accept a query parameter for semantic search."""
+        from second_brain.agents.recall import recall_agent
+        import inspect
+        tool = recall_agent._function_toolset.tools["search_examples"]
+        sig = inspect.signature(tool.function)
+        assert "query" in sig.parameters
+
+    def test_search_experiences_accepts_query_param(self):
+        """search_experiences should accept a query parameter for semantic search."""
+        from second_brain.agents.recall import recall_agent
+        import inspect
+        tool = recall_agent._function_toolset.tools["search_experiences"]
+        sig = inspect.signature(tool.function)
+        assert "query" in sig.parameters
+
+    @pytest.fixture
+    def mock_ctx(self, mock_deps):
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        return ctx
+
+    async def test_search_examples_semantic_path(self, mock_ctx):
+        """With query + embedding service, should use semantic search."""
+        from second_brain.agents.recall import recall_agent
+        tool = recall_agent._function_toolset.tools["search_examples"]
+        mock_ctx.deps.storage_service.search_examples_semantic = AsyncMock(return_value=[
+            {"id": "e1", "content": "Example", "title": "Good Email",
+             "category": "email", "similarity": 0.85},
+        ])
+        result = await tool.function(mock_ctx, query="email writing", content_type=None)
+        assert isinstance(result, str)
+        assert "Good Email" in result
+        mock_ctx.deps.storage_service.search_examples_semantic.assert_called_once()
+
+    async def test_search_examples_fallback_no_embedding(self, mock_ctx):
+        """Without embedding service, should fall back to get_examples."""
+        from second_brain.agents.recall import recall_agent
+        tool = recall_agent._function_toolset.tools["search_examples"]
+        mock_ctx.deps.embedding_service = None
+        mock_ctx.deps.storage_service.get_examples = AsyncMock(return_value=[
+            {"content_type": "email", "title": "Fallback Email", "content": "text"},
+        ])
+        result = await tool.function(mock_ctx, query="email", content_type="email")
+        assert "Fallback Email" in result
+
+    async def test_search_experiences_semantic_path(self, mock_ctx):
+        """With query + embedding service, should use semantic search."""
+        from second_brain.agents.recall import recall_agent
+        tool = recall_agent._function_toolset.tools["search_experiences"]
+        mock_ctx.deps.storage_service.search_experiences_semantic = AsyncMock(return_value=[
+            {"id": "ex1", "content": "Project", "title": "Consulting Gig",
+             "category": "consulting", "similarity": 0.78},
+        ])
+        result = await tool.function(mock_ctx, query="consulting work", category=None)
+        assert isinstance(result, str)
+        assert "Consulting Gig" in result
+
+    async def test_search_semantic_memory_uses_expand_query(self, mock_ctx):
+        """search_semantic_memory should expand the query before searching."""
+        from second_brain.agents.recall import recall_agent
+        from second_brain.services.search_result import SearchResult
+        tool = recall_agent._function_toolset.tools["search_semantic_memory"]
+        mock_ctx.deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "test result", "score": 0.9}], relations=[],
+        ))
+        mock_ctx.deps.voyage_service = None  # skip reranking
+        mock_ctx.deps.graphiti_service = None
+        result = await tool.function(mock_ctx, query="client patterns")
+        assert isinstance(result, str)
+        mock_ctx.deps.memory_service.search.assert_called_once()
+
+    async def test_search_patterns_hybrid_path(self, mock_ctx):
+        """search_patterns should try hybrid search first."""
+        from second_brain.agents.recall import recall_agent
+        from second_brain.services.search_result import SearchResult
+        tool = recall_agent._function_toolset.tools["search_patterns"]
+        mock_ctx.deps.storage_service.hybrid_search = AsyncMock(return_value=[
+            {"id": "p1", "content": "Hook First", "title": "Hook First",
+             "category": "writing", "similarity": 0.9, "search_type": "hybrid"},
+        ])
+        mock_ctx.deps.memory_service.search_with_filters = AsyncMock(return_value=SearchResult(
+            memories=[], relations=[],
+        ))
+        mock_ctx.deps.voyage_service = None
+        mock_ctx.deps.graphiti_service = None
+        result = await tool.function(mock_ctx, topic="writing")
+        assert isinstance(result, str)
+        assert "Hook First" in result
+
+
+class TestAskAgentRetrieval:
+    """Tests for consolidated ask agent search."""
+
+    def test_find_relevant_patterns_exists(self):
+        from second_brain.agents.ask import ask_agent
+        tools = list(ask_agent._function_toolset.tools)
+        assert "find_relevant_patterns" in tools
+
+    @pytest.fixture
+    def mock_ctx(self, mock_deps):
+        ctx = MagicMock()
+        ctx.deps = mock_deps
+        return ctx
+
+    async def test_find_relevant_patterns_returns_string(self, mock_ctx):
+        from second_brain.agents.ask import ask_agent
+        from second_brain.services.search_result import SearchResult
+        tool = ask_agent._function_toolset.tools["find_relevant_patterns"]
+        mock_ctx.deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "hook pattern", "score": 0.8}], relations=[],
+        ))
+        mock_ctx.deps.voyage_service = None
+        mock_ctx.deps.graphiti_service = None
+        result = await tool.function(mock_ctx, query="content writing")
+        assert isinstance(result, str)
+
+    async def test_find_relevant_patterns_hybrid_search_called(self, mock_ctx):
+        """When embedding service available, should call hybrid_search."""
+        from second_brain.agents.ask import ask_agent
+        from second_brain.services.search_result import SearchResult
+        tool = ask_agent._function_toolset.tools["find_relevant_patterns"]
+        mock_ctx.deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[], relations=[],
+        ))
+        mock_ctx.deps.storage_service.hybrid_search = AsyncMock(return_value=[
+            {"content": "Test pattern", "title": "Pattern A",
+             "category": "writing", "similarity": 0.88, "search_type": "semantic"},
+        ])
+        mock_ctx.deps.voyage_service = None
+        mock_ctx.deps.graphiti_service = None
+        result = await tool.function(mock_ctx, query="writing patterns")
+        # hybrid_search should have been called for patterns table
+        mock_ctx.deps.storage_service.hybrid_search.assert_called_once()
