@@ -163,7 +163,8 @@ async def recall(query: str) -> str:
     if output.matches:
         parts.append("## Matches\n")
         for m in output.matches:
-            parts.append(f"- [{m.relevance}] {m.content}")
+            score_str = f" ({m.score:.2f})" if m.score > 0 else ""
+            parts.append(f"- [{m.relevance}]{score_str} {m.content}")
             if m.source:
                 parts.append(f"  Source: {m.source}")
     if output.patterns:
@@ -176,6 +177,87 @@ async def recall(query: str) -> str:
             parts.append(f"- {rel.source} --[{rel.relationship}]--> {rel.target}")
     if output.summary:
         parts.append(f"\n## Summary\n{output.summary}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def quick_recall(query: str, limit: int = 10) -> str:
+    """Fast memory search — skips LLM agent for simple queries.
+    Uses Mem0 semantic + keyword search with Voyage reranking.
+    For complex multi-source queries, use recall() instead.
+
+    Args:
+        query: What to search for (e.g., "content patterns", "client feedback")
+        limit: Maximum results (default: 10)
+    """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
+
+    try:
+        async with asyncio.timeout(timeout):
+            from second_brain.agents.utils import (
+                expand_query,
+                deduplicate_results,
+                format_memories,
+                format_relations,
+                rerank_memories,
+                search_with_graph_fallback,
+            )
+
+            # Step 1: Expand query with domain synonyms
+            expanded = expand_query(query)
+
+            # Step 2: Mem0 semantic + keyword search
+            result = await deps.memory_service.search(expanded, limit=limit * deps.config.retrieval_oversample_factor)
+
+            # Step 3: Optional hybrid pgvector search (if embedding service available)
+            vector_results = []
+            if deps.embedding_service:
+                try:
+                    embedding = await deps.embedding_service.embed_query(query)
+                    vector_results = await deps.storage_service.hybrid_search(
+                        query_text=query,
+                        query_embedding=embedding,
+                        table="memory_content",
+                        limit=limit * deps.config.retrieval_oversample_factor,
+                    )
+                except Exception:
+                    pass  # hybrid search is supplementary
+
+            # Step 4: Merge and deduplicate
+            all_memories = result.memories + [
+                {"memory": r.get("content", ""), "score": r.get("similarity", 0)}
+                for r in vector_results
+            ]
+            all_memories = deduplicate_results(all_memories)
+
+            # Step 5: Rerank combined results
+            memories = await rerank_memories(deps, query, all_memories, top_k=limit)
+
+            # Step 6: Graph relations
+            relations = await search_with_graph_fallback(deps, query, result.relations)
+
+    except TimeoutError:
+        return f"Quick recall timed out after {timeout}s. Try a simpler query."
+
+    if not memories and not relations:
+        return "No results found. Try recall() for a deeper multi-source search."
+
+    # Format output
+    parts = [f"# Quick Recall: {query}\n"]
+    mem_text = format_memories(memories)
+    if mem_text:
+        parts.append("## Matches\n")
+        parts.append(mem_text)
+    rel_text = format_relations(relations)
+    if rel_text:
+        parts.append(rel_text)
+    parts.append(f"\n---\n_Fast path ({len(memories)} results). Use recall() for full multi-source search._")
     return "\n".join(parts)
 
 

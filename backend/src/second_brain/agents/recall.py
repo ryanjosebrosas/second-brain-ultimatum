@@ -56,7 +56,14 @@ async def search_semantic_memory(
 ) -> str:
     """Search Mem0 semantic memory for relevant content."""
     try:
-        result = await ctx.deps.memory_service.search(query)
+        from second_brain.agents.utils import expand_query
+
+        expanded = expand_query(query)
+        oversample = ctx.deps.config.retrieval_oversample_factor
+        result = await ctx.deps.memory_service.search(
+            expanded,
+            limit=ctx.deps.config.memory_search_limit * oversample,
+        )
         memories = await rerank_memories(ctx.deps, query, result.memories)
         relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
@@ -76,9 +83,36 @@ async def search_semantic_memory(
 async def search_patterns(
     ctx: RunContext[BrainDeps], topic: str | None = None
 ) -> str:
-    """Search the pattern registry using semantic search and Supabase."""
+    """Search the pattern registry using hybrid search (semantic + keyword)."""
     try:
-        # Try semantic search first (Mem0 with pattern filter)
+        from second_brain.agents.utils import expand_query
+
+        formatted = []
+
+        # Path A: Hybrid search (semantic + keyword via pgvector + FTS)
+        if ctx.deps.embedding_service:
+            query_text = topic or "patterns"
+            expanded = expand_query(query_text)
+            embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            try:
+                hybrid_results = await ctx.deps.storage_service.hybrid_search(
+                    query_text=query_text,
+                    query_embedding=embedding,
+                    table="patterns",
+                    limit=ctx.deps.config.memory_search_limit,
+                )
+                if hybrid_results:
+                    formatted.append("## Pattern Matches (hybrid)")
+                    for p in hybrid_results:
+                        title = p.get("title", "Unknown")
+                        content = p.get("content", "")[:ctx.deps.config.pattern_preview_limit]
+                        sim = p.get("similarity", 0)
+                        search_type = p.get("search_type", "semantic")
+                        formatted.append(f"- [{sim:.3f}|{search_type}] {title}: {content}")
+            except Exception:
+                logger.debug("Hybrid pattern search failed, using fallback")
+
+        # Path B: Semantic memory search (Mem0 with pattern filter)
         semantic_results = []
         semantic_relations = []
         try:
@@ -94,23 +128,19 @@ async def search_patterns(
             semantic_results = result.memories
             semantic_relations = result.relations
         except Exception:
-            logger.debug("Semantic pattern search failed, falling back to Supabase")
+            logger.debug("Semantic pattern search failed, skipping")
 
         semantic_results = await rerank_memories(ctx.deps, topic or "patterns", semantic_results)
 
-        # Always include Supabase patterns (source of truth)
-        patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
-
-        if not patterns and not semantic_results and not semantic_relations:
-            return "No patterns found in registry."
-
-        formatted = []
         if semantic_results:
-            formatted.append("## Semantic Matches")
+            formatted.append("\n## Semantic Matches (Mem0)")
             formatted.append(format_memories(semantic_results))
-            formatted.append("")
 
-        if patterns:
+        # Path C: Exact-match fallback (only if no results from A or B)
+        if not formatted:
+            patterns = await ctx.deps.storage_service.get_patterns(topic=topic)
+            if not patterns:
+                return "No patterns found in registry."
             formatted.append("## Pattern Registry")
             for p in patterns:
                 formatted.append(
@@ -129,17 +159,37 @@ async def search_patterns(
 
 @recall_agent.tool
 async def search_experiences(
-    ctx: RunContext[BrainDeps], category: str | None = None
+    ctx: RunContext[BrainDeps], query: str | None = None, category: str | None = None
 ) -> str:
-    """Search past experiences in Supabase."""
+    """Search past experiences by semantic similarity or category filter.
+
+    Use query for semantic search, category for exact filter, or both."""
     try:
-        experiences = await ctx.deps.storage_service.get_experiences(category=category)
+        experiences = []
+
+        # Semantic search path (preferred when query + embedding service available)
+        if query and ctx.deps.embedding_service:
+            embedding = await ctx.deps.embedding_service.embed_query(query)
+            experiences = await ctx.deps.storage_service.search_experiences_semantic(
+                embedding=embedding,
+                limit=ctx.deps.config.experience_limit,
+            )
+
+        # Fallback / supplement: exact-match filter
+        if not experiences:
+            experiences = await ctx.deps.storage_service.get_experiences(category=category)
+
         if not experiences:
             return "No past experiences found."
+
         formatted = []
         for e in experiences:
+            sim = e.get("similarity")
+            name = e.get("name", e.get("title", "Untitled"))
+            cat = e.get("category", "unknown")
             score_str = f" (score: {e['review_score']})" if e.get("review_score") else ""
-            formatted.append(f"- {e['name']} [{e['category']}]{score_str}")
+            sim_str = f"[{sim:.3f}] " if sim else ""
+            formatted.append(f"- {sim_str}{name} [{cat}]{score_str}")
         return "\n".join(formatted)
     except Exception as e:
         return tool_error("search_experiences", e)
@@ -147,16 +197,36 @@ async def search_experiences(
 
 @recall_agent.tool
 async def search_examples(
-    ctx: RunContext[BrainDeps], content_type: str | None = None
+    ctx: RunContext[BrainDeps], query: str | None = None, content_type: str | None = None
 ) -> str:
-    """Search content examples in the brain (emails, LinkedIn posts, case studies, etc.)."""
+    """Search content examples by semantic similarity or content type filter.
+
+    Use query for semantic search, content_type for exact filter, or both."""
     try:
-        examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
+        examples = []
+
+        # Semantic search path (preferred when query + embedding service available)
+        if query and ctx.deps.embedding_service:
+            embedding = await ctx.deps.embedding_service.embed_query(query)
+            examples = await ctx.deps.storage_service.search_examples_semantic(
+                embedding=embedding,
+                limit=ctx.deps.config.memory_search_limit,
+            )
+
+        # Fallback / supplement: exact-match filter
+        if not examples:
+            examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
+
         if not examples:
             return "No content examples found."
+
         formatted = []
         for e in examples:
-            formatted.append(f"- [{e['content_type']}] {e['title']}")
+            sim = e.get("similarity")
+            ct = e.get("content_type", "unknown")
+            title = e.get("title", "Untitled")
+            prefix = f"[{sim:.3f}] " if sim else f"[{ct}] "
+            formatted.append(f"- {prefix}{title}")
             preview = e.get("content", "")[:ctx.deps.config.pattern_preview_limit]
             if preview:
                 formatted.append(f"  {preview}")

@@ -87,57 +87,66 @@ async def load_brain_context(ctx: RunContext[BrainDeps]) -> str:
 async def find_relevant_patterns(
     ctx: RunContext[BrainDeps], query: str
 ) -> str:
-    """Find patterns relevant to the current question using semantic search."""
+    """Find patterns relevant to the current question using hybrid search."""
     try:
-        # Semantic memory search (general)
-        result = await ctx.deps.memory_service.search(query)
+        from second_brain.agents.utils import expand_query, deduplicate_results
+
+        expanded = expand_query(query)
+
+        # Call 1: Mem0 semantic + keyword search (keyword_search enabled at service layer)
+        result = await ctx.deps.memory_service.search(expanded)
+
+        # Call 2: Rerank Mem0 results (single rerank, not two separate ones)
         reranked_memories = await rerank_memories(ctx.deps, query, result.memories)
 
-        # Semantic pattern search (filtered to patterns)
-        pattern_memories = []
-        pattern_relations = []
-        try:
-            pattern_result = await ctx.deps.memory_service.search_with_filters(
-                query,
-                metadata_filters={"category": "pattern"},
-                limit=10,
-            )
-            pattern_memories = pattern_result.memories
-            pattern_relations = pattern_result.relations
-        except Exception:
-            logger.debug("Semantic pattern search failed in ask_agent")
+        # Call 3: Hybrid pgvector + FTS search for patterns (replaces full get_patterns scan)
+        pattern_results = []
+        if ctx.deps.embedding_service:
+            try:
+                embedding = await ctx.deps.embedding_service.embed_query(query)
+                pattern_results = await ctx.deps.storage_service.hybrid_search(
+                    query_text=query,
+                    query_embedding=embedding,
+                    table="patterns",
+                    limit=10,
+                )
+            except Exception:
+                logger.debug("Hybrid pattern search failed, falling back to Supabase")
+                pattern_results = []
 
-        pattern_memories = await rerank_memories(ctx.deps, query, pattern_memories)
+        # Fallback: exact-match patterns if hybrid unavailable
+        if not pattern_results:
+            patterns = await ctx.deps.storage_service.get_patterns()
+            pattern_results = [
+                {"content": p.get("pattern_text", ""), "title": p.get("name", ""),
+                 "category": p.get("topic", ""), "confidence": p.get("confidence", "LOW")}
+                for p in (patterns or [])[:10]
+            ]
 
-        # Collect graph relations (general + pattern + graphiti fallback)
-        base_relations = (result.relations or []) + (pattern_relations or [])
-        relations = await search_with_graph_fallback(ctx.deps, query, base_relations)
+        # Graph relations (single call, same as before)
+        relations = await search_with_graph_fallback(ctx.deps, query, result.relations)
 
         sources = []
         formatted = ["## Semantic Memory Matches"]
         for r in reranked_memories[:5]:
             memory = r.get("memory", r.get("result", ""))
-            formatted.append(f"- {memory}")
+            score = r.get("rerank_score", r.get("score", 0))
+            formatted.append(f"- [{score:.2f}] {memory}")
 
-        if pattern_memories:
-            formatted.append("\n## Semantically Matched Patterns")
-            formatted.append(format_memories(pattern_memories))
-            sources.extend([f"mem0/pattern/{m.get('id', 'unknown')}" for m in pattern_memories])
+        if pattern_results:
+            formatted.append("\n## Relevant Patterns")
+            for p in pattern_results:
+                title = p.get("title", p.get("name", "Unknown"))
+                content = p.get("content", p.get("pattern_text", ""))
+                sim = p.get("similarity")
+                conf = p.get("confidence", p.get("category", ""))
+                prefix = f"[{sim:.3f}]" if sim else f"[{conf}]"
+                formatted.append(f"- {prefix} **{title}**: {content[:ctx.deps.config.pattern_preview_limit]}")
+                sources.append(f"pattern/{title}")
 
         rel_text = format_relations(relations)
         if rel_text:
             formatted.append(rel_text)
-
-        # Still include top Supabase patterns as reference
-        patterns = await ctx.deps.storage_service.get_patterns()
-        if patterns:
-            formatted.append("\n## Pattern Registry (Top 10)")
-            for p in patterns[:10]:
-                formatted.append(
-                    f"- [{p['confidence']}] **{p['name']}**: "
-                    f"{p.get('pattern_text', '')[:ctx.deps.config.pattern_preview_limit]}"
-                )
-            sources.extend([f"supabase/pattern/{p['name']}" for p in patterns[:10]])
 
         if sources:
             formatted.append(f"\n---\nSources: {', '.join(sources)}")
