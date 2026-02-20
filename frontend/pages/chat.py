@@ -162,8 +162,21 @@ if user_input:
         with st.spinner(f"{agent_config['name']} is thinking..."):
             try:
                 response = call_agent(agent_config["endpoint"], payload)
-                format_agent_response(agent_key, response)
-                st.session_state[history_key].append({"role": "assistant", "content": response})
+                if "error" in response:
+                    status = response.get("status_code", "")
+                    error_msg = response["error"]
+                    if status == 503:
+                        st.warning("The Second Brain is still starting up. Please try again in a moment.")
+                    elif status == 504:
+                        st.warning("The request timed out. Try a shorter or simpler query.")
+                    elif status == 0:
+                        st.error("Cannot reach the Second Brain API. Is the backend running?")
+                    else:
+                        st.error(f"Error: {error_msg}")
+                    st.session_state[history_key].append({"role": "assistant", "content": f"Error: {error_msg}"})
+                else:
+                    format_agent_response(agent_key, response)
+                    st.session_state[history_key].append({"role": "assistant", "content": response})
                 # Cap history to prevent session state bloat
                 if len(st.session_state[history_key]) > _MAX_HISTORY:
                     st.session_state[history_key] = st.session_state[history_key][-_MAX_HISTORY:]

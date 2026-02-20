@@ -544,3 +544,103 @@ class TestDepsNotInitialized:
         response = test_client.get("/api/health/metrics")
         assert response.status_code == 503
         assert "not initialized" in response.json()["detail"]
+
+
+class TestModelNotInitialized:
+    """Test that agent endpoints return 503 when model is None."""
+
+    def test_recall_503_when_model_none(self):
+        application = create_app()
+        mock_deps = MagicMock(spec=BrainDeps)
+        mock_deps.config = MagicMock()
+        application.state.deps = mock_deps
+        application.state.model = None
+        test_client = TestClient(application)
+        response = test_client.post("/api/recall", json={"query": "test"})
+        assert response.status_code == 503
+        assert "LLM model not initialized" in response.json()["detail"]
+
+    def test_ask_503_when_model_none(self):
+        application = create_app()
+        mock_deps = MagicMock(spec=BrainDeps)
+        mock_deps.config = MagicMock()
+        application.state.deps = mock_deps
+        application.state.model = None
+        test_client = TestClient(application)
+        response = test_client.post("/api/ask", json={"question": "test"})
+        assert response.status_code == 503
+        assert "LLM model not initialized" in response.json()["detail"]
+
+
+class TestAgentError:
+    """Test that agent exceptions return 502, not 500."""
+
+    @patch("second_brain.api.routers.agents.recall_agent")
+    def test_recall_502_on_agent_exception(self, mock_agent, client):
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("Model API unavailable"))
+        response = client.post("/api/recall", json={"query": "test"})
+        assert response.status_code == 502
+        assert "Recall failed" in response.json()["detail"]
+        assert "RuntimeError" in response.json()["detail"]
+
+    @patch("second_brain.api.routers.agents.ask_agent")
+    def test_ask_502_on_agent_exception(self, mock_agent, client):
+        mock_agent.run = AsyncMock(side_effect=ConnectionError("Mem0 unreachable"))
+        response = client.post("/api/ask", json={"question": "test"})
+        assert response.status_code == 502
+        assert "Ask failed" in response.json()["detail"]
+
+    @patch("second_brain.api.routers.agents.recall_agent")
+    def test_recall_504_on_timeout(self, mock_agent, client, app):
+        app.state.deps.config.api_timeout_seconds = 0.001
+
+        async def slow_run(*args, **kwargs):
+            import asyncio
+            await asyncio.sleep(1)
+        mock_agent.run = slow_run
+        response = client.post("/api/recall", json={"query": "test"})
+        assert response.status_code == 504
+        assert "timed out" in response.json()["detail"]
+
+
+class TestHealthProbes:
+    """Test lightweight health probes."""
+
+    def test_liveness_always_200(self):
+        application = create_app()
+        application.state.deps = None
+        application.state.model = None
+        test_client = TestClient(application)
+        response = test_client.get("/api/health/live")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert "uptime_seconds" in response.json()
+
+    def test_readiness_503_when_deps_none(self):
+        application = create_app()
+        application.state.deps = None
+        application.state.model = None
+        application.state.init_error = "Mem0 connection refused"
+        test_client = TestClient(application)
+        response = test_client.get("/api/health/ready")
+        assert response.status_code == 503
+        assert "not_ready" in response.json()["status"]
+        assert "Mem0 connection refused" in response.json()["error"]
+
+    def test_readiness_200_when_initialized(self, client):
+        response = client.get("/api/health/ready")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+
+    def test_readiness_model_unavailable(self):
+        application = create_app()
+        mock_deps = MagicMock(spec=BrainDeps)
+        application.state.deps = mock_deps
+        application.state.model = None
+        application.state.init_error = "LLM model: No provider available"
+        test_client = TestClient(application)
+        response = test_client.get("/api/health/ready")
+        assert response.status_code == 200  # deps are OK, so ready
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["model"] == "unavailable"

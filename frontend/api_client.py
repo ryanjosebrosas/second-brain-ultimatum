@@ -38,15 +38,29 @@ def check_api_health(timeout: float = 3.0) -> bool:
 # --- Agent methods ---
 
 def call_agent(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Call an agent endpoint with a JSON payload."""
+    """Call an agent endpoint with a JSON payload.
+
+    Returns the JSON response on success.
+    Returns {"error": str, "status_code": int} on HTTP errors.
+    Returns {"error": str, "status_code": 0} on connection errors.
+    """
     client = _get_client()
     try:
         response = client.post(endpoint, json=payload)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        logger.error("Agent call to %s failed: %s", endpoint, e.response.status_code)
-        return {"error": str(e), "status_code": e.response.status_code}
+        status = e.response.status_code
+        # Try to extract server error message
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        logger.error("Agent call to %s failed: %s — %s", endpoint, status, detail)
+        return {"error": detail, "status_code": status}
+    except httpx.RequestError as e:
+        logger.error("Agent call to %s connection error: %s", endpoint, e)
+        return {"error": f"Cannot reach API: {type(e).__name__}", "status_code": 0}
 
 
 # --- Memory methods ---

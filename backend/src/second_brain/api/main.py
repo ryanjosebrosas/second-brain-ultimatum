@@ -18,16 +18,27 @@ async def lifespan(app: FastAPI):
     """Initialize BrainDeps on startup, cleanup on shutdown."""
     config = app.state.config  # Set by create_app before lifespan runs
     logger.info("Initializing Second Brain deps for API...")
+    app.state.init_error = None
     try:
         deps = create_deps()
-        model = get_model_fn(config)
         app.state.deps = deps
-        app.state.model = model
-        logger.info("Second Brain API initialized successfully")
+        logger.info("Core deps initialized")
     except Exception as e:
         logger.error("Failed to initialize deps: %s", e)
         app.state.deps = None
         app.state.model = None
+        app.state.init_error = str(e)
+        yield
+        return
+
+    try:
+        model = get_model_fn(config)
+        app.state.model = model
+        logger.info("Second Brain API initialized successfully")
+    except Exception as e:
+        logger.error("LLM model init failed (agents will be unavailable): %s", e)
+        app.state.model = None
+        app.state.init_error = f"LLM model: {e}"
     yield
     logger.info("Second Brain API shutting down")
 

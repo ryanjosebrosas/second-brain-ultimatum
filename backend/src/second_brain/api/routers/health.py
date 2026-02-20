@@ -1,15 +1,44 @@
 """Health, growth, and dashboard endpoints."""
 
 import dataclasses
+import json
 import logging
+import time
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from second_brain.deps import BrainDeps
 from second_brain.api.deps import get_deps
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health", tags=["Health"])
+
+_START_TIME = time.monotonic()
+
+
+@router.get("/live")
+async def liveness():
+    """Liveness probe — is the event loop running? No I/O."""
+    return {"status": "ok", "uptime_seconds": round(time.monotonic() - _START_TIME, 1)}
+
+
+@router.get("/ready")
+async def readiness(request: Request):
+    """Readiness probe — can the app serve agent requests?"""
+    deps = getattr(request.app.state, "deps", None)
+    model = getattr(request.app.state, "model", None)
+    init_error = getattr(request.app.state, "init_error", None)
+    if deps is None:
+        return Response(
+            content=f'{{"status":"not_ready","reason":"deps not initialized","error":{json.dumps(init_error)}}}',
+            media_type="application/json",
+            status_code=503,
+        )
+    return {
+        "status": "ready",
+        "deps": "ok",
+        "model": "ok" if model is not None else "unavailable",
+    }
 
 
 @router.get("/metrics")

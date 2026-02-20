@@ -21,9 +21,15 @@ def get_deps(request: Request) -> BrainDeps:
     return deps
 
 
-def get_model(request: Request) -> "Model | None":
-    """Get LLM model from app state. Returns None if not set."""
-    return getattr(request.app.state, "model", None)
+def get_model(request: Request) -> "Model":
+    """Get LLM model from app state. Raises 503 if not initialized."""
+    model = getattr(request.app.state, "model", None)
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM model not initialized. Check MODEL_PROVIDER and API key env vars.",
+        )
+    return model
 
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
