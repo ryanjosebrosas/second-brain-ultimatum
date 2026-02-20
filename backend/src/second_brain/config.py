@@ -6,6 +6,12 @@ from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
+_KNOWN_AGENT_NAMES = frozenset({
+    "recall", "ask", "learn", "create", "review", "chief_of_staff",
+    "coach", "pmo", "email", "specialist", "clarity", "synthesizer",
+    "template_builder",
+})
+
 
 class BrainConfig(BaseSettings):
     """Configuration for the AI Second Brain."""
@@ -31,6 +37,16 @@ class BrainConfig(BaseSettings):
         description=(
             "Comma-separated fallback providers tried if primary fails. "
             "Example: 'ollama-local,openai'. Empty = fail-fast (no fallback)."
+        ),
+    )
+    agent_model_overrides: dict[str, str] = Field(
+        default_factory=lambda: {},
+        description=(
+            "Per-agent model overrides as JSON. Keys are agent names, values are "
+            "model strings. Use 'provider:model' for cross-provider (e.g., "
+            "'anthropic:claude-sonnet-4-5'). Plain model names use the global provider "
+            "(e.g., 'deepseek-v3.1:671b-cloud'). "
+            'Example: {"recall": "llama3.1:8b", "create": "deepseek-v3.1:671b-cloud"}'
         ),
     )
 
@@ -187,7 +203,7 @@ class BrainConfig(BaseSettings):
     supabase_key: str = Field(..., description="Supabase anon key", repr=False)
 
     # Brain
-    brain_user_id: str = Field(default="ryan", description="Default user ID")
+    brain_user_id: str = Field(default="", description="User ID for data isolation. Set BRAIN_USER_ID in .env.")
     brain_data_path: Path = Field(
         ...,
         description="Path to Second Brain markdown data",
@@ -292,6 +308,18 @@ class BrainConfig(BaseSettings):
         ge=1024,
         le=65535,
         description="Port for MCP HTTP/SSE transport. Range: 1024-65535.",
+    )
+
+    # API settings
+    api_port: int = Field(
+        default=8001,
+        ge=1024,
+        le=65535,
+        description="Port for the FastAPI REST API. Range: 1024-65535.",
+    )
+    frontend_url: str = Field(
+        default="http://localhost:8501",
+        description="Frontend URL for CORS allowlist (Streamlit default: http://localhost:8501)",
     )
 
     # Input validation
@@ -438,6 +466,29 @@ class BrainConfig(BaseSettings):
             elif self.model_provider == "groq":
                 object.__setattr__(self, "model_name", self.groq_model_name)
 
+        return self
+
+    @model_validator(mode="after")
+    def _validate_agent_model_overrides(self) -> "BrainConfig":
+        for agent_name, model_str in self.agent_model_overrides.items():
+            if not model_str or not model_str.strip():
+                raise ValueError(
+                    f"agent_model_overrides[{agent_name!r}] cannot be empty"
+                )
+            if agent_name not in _KNOWN_AGENT_NAMES:
+                logger.warning(
+                    "Unknown agent name in AGENT_MODEL_OVERRIDES: %r "
+                    "(known: %s)", agent_name, ", ".join(sorted(_KNOWN_AGENT_NAMES))
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _warn_default_user_id(self) -> "BrainConfig":
+        if not self.brain_user_id:
+            logger.warning(
+                "BRAIN_USER_ID is not set — data will not be user-scoped. "
+                "Set BRAIN_USER_ID in your .env for multi-user deployments."
+            )
         return self
 
     @property
