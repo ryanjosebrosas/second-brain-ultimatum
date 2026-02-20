@@ -28,9 +28,11 @@ logger = logging.getLogger(__name__)
 def _validate_mcp_input(
     text: str,
     label: str = "input",
-    max_length: int = 10000,
+    max_length: int | None = None,
 ) -> str:
     """Validate MCP tool text input."""
+    if max_length is None:
+        max_length = 10000  # fallback if called before deps available
     if not text or not text.strip():
         raise ValueError(f"{label} cannot be empty")
     if len(text) > max_length:
@@ -221,18 +223,20 @@ async def quick_recall(query: str, limit: int = 10) -> str:
         query: What to search for (e.g., "content patterns", "client feedback")
         limit: Maximum results after dedup + reranking (default: 10)
     """
+    deps = _get_deps()
     try:
-        query = _validate_mcp_input(query, label="query")
+        query = _validate_mcp_input(query, label="query", max_length=deps.config.max_input_length)
     except ValueError as e:
         return str(e)
 
-    deps = _get_deps()
     timeout = deps.config.api_timeout_seconds
 
     # Auto-upgrade complex queries to deep recall
     from second_brain.agents.utils import classify_query_complexity
     complexity = classify_query_complexity(query, deps.config.complex_query_word_threshold)
+    logger.info("quick_recall complexity=%s query=%r", complexity, query[:80])
     if complexity == "complex":
+        logger.info("quick_recall routing to recall_deep for complex query")
         return await recall_deep(query, limit=limit)
 
     try:
@@ -256,8 +260,14 @@ async def quick_recall(query: str, limit: int = 10) -> str:
             mem0_coro = deps.memory_service.search(expanded, limit=limit * oversample)
 
             hybrid_coro = None
+            embedding = None
             if deps.embedding_service:
-                embedding = await deps.embedding_service.embed_query(query)
+                try:
+                    embedding = await deps.embedding_service.embed_query(query)
+                except Exception as e:
+                    logger.warning("Embedding failed in quick_recall (non-fatal): %s", type(e).__name__)
+                    logger.debug("Embedding error detail: %s", e)
+            if embedding:
                 hybrid_coro = deps.storage_service.hybrid_search(
                     query_text=query,
                     query_embedding=embedding,
@@ -305,9 +315,15 @@ async def quick_recall(query: str, limit: int = 10) -> str:
 
     except TimeoutError:
         return f"Quick recall timed out after {timeout}s. Try a simpler query."
+    except Exception as e:
+        logger.error("Quick recall failed: %s", type(e).__name__)
+        logger.debug("Quick recall error detail: %s", e)
+        return f"Quick recall encountered an error: {type(e).__name__}. Try again or use recall() for agent-backed search."
 
     if not memories and not relations:
         return "No results found. Try recall() for a deeper multi-source search."
+
+    logger.info("quick_recall returning %d results from sources=%s", len(memories), search_sources)
 
     # Format output
     parts = [f"# Quick Recall: {query}\n"]
@@ -341,12 +357,12 @@ async def recall_deep(query: str, limit: int = 15) -> str:
                enterprise client engagement approaches")
         limit: Maximum results after dedup + reranking (default: 15)
     """
+    deps = _get_deps()
     try:
-        query = _validate_mcp_input(query, label="query")
+        query = _validate_mcp_input(query, label="query", max_length=deps.config.max_input_length)
     except ValueError as e:
         return str(e)
 
-    deps = _get_deps()
     timeout = deps.config.api_timeout_seconds
 
     try:
@@ -360,6 +376,10 @@ async def recall_deep(query: str, limit: int = 15) -> str:
             result = await deep_recall_search(deps, query, limit=limit)
     except TimeoutError:
         return f"Deep recall timed out after {timeout}s. Try a simpler query or use quick_recall()."
+    except Exception as e:
+        logger.error("Deep recall failed: %s", type(e).__name__)
+        logger.debug("Deep recall error detail: %s", e)
+        return f"Deep recall encountered an error: {type(e).__name__}. Try again or use quick_recall() for a simpler search."
 
     memories = result["memories"]
     relations = result["relations"]

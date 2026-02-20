@@ -18,6 +18,10 @@ def _mock_deps(**overrides):
     deps = MagicMock()
     deps.config.api_timeout_seconds = 30
     deps.config.mcp_review_timeout_multiplier = 2
+    deps.config.max_input_length = 10000
+    deps.config.complex_query_word_threshold = 8
+    deps.config.retrieval_oversample_factor = 3
+    deps.config.voyage_rerank_top_k = 10
     for k, v in overrides.items():
         setattr(deps, k, v)
     return deps

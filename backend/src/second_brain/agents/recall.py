@@ -72,8 +72,13 @@ async def search_semantic_memory(
         mem0_coro = ctx.deps.memory_service.search(expanded, limit=search_limit)
         hybrid_coro = None
 
+        embedding = None
         if ctx.deps.embedding_service:
-            embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            try:
+                embedding = await ctx.deps.embedding_service.embed_query(expanded)
+            except Exception:
+                logger.debug("Embedding failed in search_semantic_memory, skipping hybrid search")
+        if embedding:
             hybrid_coro = ctx.deps.storage_service.hybrid_search(
                 query_text=query,
                 query_embedding=embedding,

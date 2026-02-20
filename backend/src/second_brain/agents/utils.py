@@ -31,7 +31,11 @@ def format_memories(memories: list[dict], limit: int | None = None) -> str:
     for m in items:
         content = m.get("memory", m.get("result", ""))
         score = m.get("rerank_score", m.get("score", 0))
-        lines.append(f"- [{score:.2f}] {content}")
+        line = f"- [{score:.2f}] {content}"
+        source = m.get("source", "")
+        if source:
+            line = f"{line} [{source}]"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -236,6 +240,7 @@ def normalize_results(
 
 async def parallel_search_gather(
     searches: list[tuple[str, object]],
+    per_source_timeout: float | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Run multiple search coroutines in parallel with fault-tolerant error handling.
 
@@ -245,6 +250,8 @@ async def parallel_search_gather(
     Args:
         searches: List of (source_name, coroutine) tuples.
                  source_name is used for logging and result tagging.
+        per_source_timeout: Optional timeout in seconds for each individual source.
+                           If a source exceeds this, it's treated as a failed source.
 
     Returns:
         Tuple of (all_results, source_names):
@@ -252,28 +259,50 @@ async def parallel_search_gather(
         - source_names: List of source names that contributed results.
     """
     import asyncio as _asyncio
+    import time as _time
 
     source_names_input = [name for name, _ in searches]
-    coros = [coro for _, coro in searches]
+    coros = []
+    for _, coro in searches:
+        if per_source_timeout:
+            coros.append(_asyncio.wait_for(coro, timeout=per_source_timeout))
+        else:
+            coros.append(coro)
 
+    start = _time.perf_counter()
     results = await _asyncio.gather(*coros, return_exceptions=True)
+    total_ms = (_time.perf_counter() - start) * 1000
 
     all_results: list[dict] = []
     contributing_sources: list[str] = []
+    source_timings: list[str] = []
 
     for name, result in zip(source_names_input, results):
         if isinstance(result, BaseException):
-            logger.debug("Parallel search source '%s' failed: %s", name, result)
+            if isinstance(result, _asyncio.TimeoutError):
+                logger.info("Search source '%s' timed out", name)
+            else:
+                logger.info("Search source '%s' failed: %s", name, type(result).__name__)
+            source_timings.append(f"{name}=FAIL")
             continue
         if isinstance(result, list) and result:
             all_results.extend(result)
             contributing_sources.append(name)
+            source_timings.append(f"{name}={len(result)}hits")
         elif hasattr(result, "memories") and result.memories:
             # Handle SearchResult objects from MemoryService
             all_results.extend(
                 normalize_results(result.memories, source=name)
             )
             contributing_sources.append(name)
+            source_timings.append(f"{name}={len(result.memories)}hits")
+        else:
+            source_timings.append(f"{name}=0hits")
+
+    logger.info(
+        "parallel_search_gather: %.0fms total, sources=[%s]",
+        total_ms, ", ".join(source_timings),
+    )
 
     return all_results, contributing_sources
 
@@ -326,7 +355,10 @@ async def parallel_multi_table_search(
     if not searches:
         return [], []
 
-    return await parallel_search_gather(searches)
+    return await parallel_search_gather(
+        searches,
+        per_source_timeout=deps.config.service_timeout_seconds,
+    )
 
 
 async def deep_recall_search(
@@ -364,7 +396,13 @@ async def deep_recall_search(
     # 2. Hybrid pgvector search (if embedding available)
     embedding = None
     if deps.embedding_service:
-        embedding = await deps.embedding_service.embed_query(query)
+        try:
+            embedding = await deps.embedding_service.embed_query(query)
+        except Exception as e:
+            logger.warning("Embedding failed in deep_recall_search (non-fatal): %s", type(e).__name__)
+            logger.debug("Embedding error detail: %s", e)
+
+    if embedding:
         searches.append((
             "hybrid:memory_content",
             deps.storage_service.hybrid_search(
@@ -393,9 +431,13 @@ async def deep_recall_search(
     if deps.graphiti_service:
         searches.append(("graphiti", deps.graphiti_service.search(query)))
 
-    # --- Execute all searches in parallel ---
+    # --- Execute all searches in parallel (with per-source timeout) ---
     source_names = [name for name, _ in searches]
-    coros = [coro for _, coro in searches]
+    per_source_timeout = deps.config.service_timeout_seconds
+    coros = [
+        _asyncio.wait_for(coro, timeout=per_source_timeout)
+        for _, coro in searches
+    ]
     raw_results = await _asyncio.gather(*coros, return_exceptions=True)
 
     # --- Process results ---
@@ -491,15 +533,21 @@ async def rerank_memories(
     if not deps.voyage_service or not memories:
         return memories
 
-    # Extract text from memory dicts
-    documents = [
-        m.get("memory", m.get("result", ""))
-        for m in memories
-    ]
-    documents = [d for d in documents if d]  # filter empties
+    if top_k is None:
+        top_k = getattr(deps.config, "voyage_rerank_top_k", None)
 
-    if not documents:
+    # Extract text from memory dicts — track original indices
+    indexed_docs = []
+    for i, m in enumerate(memories):
+        text = m.get("memory", m.get("result", ""))
+        if text:
+            indexed_docs.append((i, text))
+
+    if not indexed_docs:
         return memories
+
+    documents = [text for _, text in indexed_docs]
+    original_indices = [idx for idx, _ in indexed_docs]
 
     try:
         if instruction and hasattr(deps.voyage_service, "rerank_with_instructions"):
@@ -508,12 +556,13 @@ async def rerank_memories(
             )
         else:
             reranked = await deps.voyage_service.rerank(query, documents, top_k=top_k)
-        # Rebuild memory dicts in reranked order
+        # Rebuild memory dicts in reranked order using original index mapping
         result = []
         for r in reranked:
-            idx = r["index"]
-            if idx < len(memories):
-                mem = dict(memories[idx])
+            ridx = r["index"]
+            if ridx < len(original_indices):
+                orig_idx = original_indices[ridx]
+                mem = dict(memories[orig_idx])
                 mem["rerank_score"] = r["relevance_score"]
                 result.append(mem)
         return result
