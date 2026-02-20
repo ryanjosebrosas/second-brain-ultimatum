@@ -1081,6 +1081,55 @@ class TestSearchCommunities:
         assert result == []
 
 
+class TestBuildCommunities:
+    """Tests for build_communities trigger + return."""
+
+    async def test_builds_and_returns_communities(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_community = MagicMock()
+        mock_community.uuid = "c1"
+        mock_community.name = "Engineering"
+        mock_community.summary = "Engineering team"
+        mock_raw = MagicMock()
+        mock_raw.communities = [mock_community]
+        service._client = AsyncMock()
+        service._client.build_communities_ = AsyncMock(return_value=None)
+        service._client.search_ = AsyncMock(return_value=mock_raw)
+        result = await service.build_communities()
+        service._client.build_communities_.assert_called_once_with()
+        assert len(result) == 1
+        assert result[0]["name"] == "Engineering"
+
+    async def test_empty_when_api_unavailable(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        service._client = MagicMock(spec=["search", "driver"])
+        result = await service.build_communities()
+        assert result == []
+
+    async def test_returns_empty_when_not_initialized(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._init_failed = True
+        result = await service.build_communities()
+        assert result == []
+
+    async def test_passes_group_id(self, graphiti_config):
+        from second_brain.services.graphiti import GraphitiService
+        service = GraphitiService(graphiti_config)
+        service._initialized = True
+        mock_raw = MagicMock()
+        mock_raw.communities = []
+        service._client = AsyncMock()
+        service._client.build_communities_ = AsyncMock(return_value=None)
+        service._client.search_ = AsyncMock(return_value=mock_raw)
+        await service.build_communities(group_id="grp1")
+        service._client.build_communities_.assert_called_once_with(group_ids=["grp1"])
+
+
 class TestAdvancedSearch:
     """Tests for advanced_search with filters."""
 
