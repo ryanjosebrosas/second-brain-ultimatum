@@ -86,14 +86,15 @@ with tab_browse:
             uses = tmpl.get("use_count", 0)
 
             with st.expander(f"{tmpl_name}  ({tmpl_type})  [uses: {uses}]"):
-                st.markdown(f"**Structure:** {tmpl.get('structure_hint', 'N/A')}")
+                if tmpl.get("writeprint"):
+                    st.markdown(f"**Voice & Tone:** {tmpl['writeprint']}")
                 st.markdown(f"**When to use:** {tmpl.get('when_to_use', 'N/A')}")
                 if tmpl.get("when_not_to_use"):
                     st.markdown(f"**When NOT to use:** {tmpl['when_not_to_use']}")
                 st.markdown(f"**Tags:** {tmpl_tags}")
 
-                # Show template body
-                with st.expander("Template Body", expanded=False):
+                # Show structure (template body)
+                with st.expander("Structure", expanded=False):
                     st.code(tmpl.get("body", "(empty)"), language=None)
 
                 if tmpl.get("customization_guide"):
@@ -162,6 +163,12 @@ with tab_edit:
             "Structure Hint (e.g., Hook -> Body -> CTA)",
             value=editing.get("structure_hint", "") if editing else "",
         )
+        writeprint = st.text_area(
+            "Voice & Tone (Writeprint)",
+            value=editing.get("writeprint", "") if editing else "",
+            height=80,
+            placeholder="e.g., Conversational tone with self-deprecating humor. Uses short punchy sentences...",
+        )
         when_to_use = st.text_area(
             "When to Use",
             value=editing.get("when_to_use", "") if editing else "",
@@ -192,6 +199,7 @@ with tab_edit:
             "body": body,
             "description": description,
             "structure_hint": structure_hint,
+            "writeprint": writeprint,
             "when_to_use": when_to_use,
             "when_not_to_use": when_not_to_use,
             "customization_guide": customization_guide,
@@ -259,11 +267,13 @@ with tab_deconstruct:
 
         st.markdown(f"**Name:** {result.get('name', '')}")
         st.markdown(f"**Content Type:** {result.get('content_type', '')}")
-        st.markdown(f"**Structure:** {result.get('structure_hint', '')}")
+        if result.get("writeprint"):
+            st.markdown("**Voice & Tone (Writeprint)**")
+            st.markdown(result["writeprint"])
         st.markdown(f"**When to Use:** {result.get('when_to_use', '')}")
         st.markdown(f"**Tags:** {', '.join(result.get('tags', []))}")
 
-        with st.expander("Template Body", expanded=True):
+        with st.expander("Structure", expanded=True):
             st.code(result.get("body", ""), language=None)
 
         col_save, col_edit_btn, col_discard = st.columns(3)
@@ -275,6 +285,7 @@ with tab_deconstruct:
                         "content_type": result.get("content_type", ""),
                         "body": result.get("body", ""),
                         "structure_hint": result.get("structure_hint", ""),
+                        "writeprint": result.get("writeprint", ""),
                         "when_to_use": result.get("when_to_use", ""),
                         "when_not_to_use": result.get("when_not_to_use", ""),
                         "customization_guide": result.get("customization_guide", ""),

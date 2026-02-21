@@ -859,6 +859,7 @@ async def load_voice_context(
     deps: "BrainDeps",
     preview_limit: int | None = None,
     include_graph: bool = False,
+    voice_user_id: str | None = None,
 ) -> str:
     """Load user's voice/tone guide from storage. Shared across agents.
 
@@ -866,9 +867,13 @@ async def load_voice_context(
         deps: BrainDeps with storage_service
         preview_limit: Max chars per content item (None = use config default)
         include_graph: Whether to enrich with graph relationships
+        voice_user_id: Override user_id for voice data isolation.
+            When set, loads voice from this user's data instead of default.
     """
     limit = preview_limit or deps.config.content_preview_limit
-    content = await deps.storage_service.get_memory_content("style-voice")
+    content = await deps.storage_service.get_memory_content(
+        "style-voice", override_user_id=voice_user_id,
+    )
     if not content:
         return "No voice guide found. Write in a clear, direct, conversational tone."
     sections = []
@@ -883,7 +888,8 @@ async def load_voice_context(
             rel_text = format_relations(graphiti_rels)
             if rel_text:
                 sections.append(rel_text)
-    return "## Voice & Tone Guide\n" + "\n\n".join(sections)
+    uid_label = voice_user_id or deps.config.brain_user_id
+    return f"## Voice & Tone Guide (profile: {uid_label})\n" + "\n\n".join(sections)
 
 
 # Prefix used by output validators to detect tool-level backend failures.

@@ -75,9 +75,11 @@ async def load_audience_context(ctx: RunContext[BrainDeps]) -> str:
 
 
 @clarity_agent.tool
-async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
-    """Load voice/style guide for language level calibration."""
+async def load_voice_reference(ctx: RunContext[BrainDeps], voice_user_id: str = "") -> str:
+    """Load voice/style guide for language level calibration.
+    Pass voice_user_id to load a specific user's voice profile."""
     try:
-        return await load_voice_context(ctx.deps, preview_limit=200)
+        uid = voice_user_id if voice_user_id else None
+        return await load_voice_context(ctx.deps, preview_limit=200, voice_user_id=uid)
     except Exception as e:
         return tool_error("load_voice_reference", e)

@@ -2221,6 +2221,7 @@ class TestOperationsMCPTools:
                 content_type="blog",
                 body="[INTRODUCTION]\n\n[BODY_SECTION]\n\n[CONCLUSION]",
                 structure_hint="Introduction -> Body -> Conclusion",
+                writeprint="Conversational and informative tone",
                 when_to_use="For weekly blog content",
                 tags=["blog", "content"],
             )
@@ -2231,6 +2232,8 @@ class TestOperationsMCPTools:
             result = await find_template_opportunities(deliverable="A blog post about AI")
             assert "Blog Post Template" in result
             assert "TEMPLATE BODY" in result
+            assert "WRITEPRINT" in result
+            assert "Conversational and informative tone" in result
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
@@ -2558,3 +2561,138 @@ class TestConversationalShortCircuit:
         mock_model_fn.return_value = MagicMock()
         result = await ask(question="Hello, can you help me with my project?")
         mock_agent.run.assert_called_once()
+
+
+class TestMultiUserVoice:
+    """Tests for multi-user voice isolation on MCP tools."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_with_user_id(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """create_content with user_id injects 'Voice profile: <uid>' into prompt."""
+        import second_brain.mcp_server as mod
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Test draft", content_type="linkedin", mode="professional", word_count=10,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        deps = _mock_deps()
+        deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
+        mock_type_config = MagicMock()
+        mock_type_config.name = "LinkedIn Post"
+        mock_type_config.length_guidance = ""
+        mock_type_config.max_words = None
+        mock_type_config.writing_instructions = ""
+        mock_type_config.structure_hint = ""
+        mock_registry = AsyncMock()
+        mock_registry.get = AsyncMock(return_value=mock_type_config)
+        deps.get_content_type_registry = MagicMock(return_value=mock_registry)
+        mock_deps_fn.return_value = deps
+        mock_model_fn.return_value = MagicMock()
+
+        original_deps = mod._deps
+        try:
+            mod._deps = deps  # _validate_user_id reads module-level _deps
+            result = await create_content(prompt="Write about AI", content_type="linkedin", user_id="uttam")
+        finally:
+            mod._deps = original_deps
+        call_args = mock_agent.run.call_args
+        agent_prompt = call_args[0][0]
+        assert "Voice profile: uttam" in agent_prompt
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_create_content_invalid_user_id(self, mock_deps_fn, mock_model_fn):
+        """create_content with unknown user_id returns error string."""
+        import second_brain.mcp_server as mod
+        from second_brain.mcp_server import create_content
+        deps = _mock_deps()
+        deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
+        mock_deps_fn.return_value = deps
+        mock_model_fn.return_value = MagicMock()
+
+        original_deps = mod._deps
+        try:
+            mod._deps = deps
+            result = await create_content(prompt="Write about AI", content_type="linkedin", user_id="nobody")
+        finally:
+            mod._deps = original_deps
+        assert "Unknown user_id" in result
+        assert "nobody" in result
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.create_agent")
+    async def test_create_content_empty_user_id_uses_default(self, mock_agent, mock_deps_fn, mock_model_fn):
+        """create_content with empty user_id does NOT inject voice profile line."""
+        import second_brain.mcp_server as mod
+        from second_brain.mcp_server import create_content
+        mock_result = MagicMock()
+        mock_result.output = CreateResult(
+            draft="Test draft", content_type="linkedin", mode="professional", word_count=10,
+        )
+        mock_agent.run = AsyncMock(return_value=mock_result)
+        deps = _mock_deps()
+        deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
+        mock_type_config = MagicMock()
+        mock_type_config.name = "LinkedIn Post"
+        mock_type_config.length_guidance = ""
+        mock_type_config.max_words = None
+        mock_type_config.writing_instructions = ""
+        mock_type_config.structure_hint = ""
+        mock_registry = AsyncMock()
+        mock_registry.get = AsyncMock(return_value=mock_type_config)
+        deps.get_content_type_registry = MagicMock(return_value=mock_registry)
+        mock_deps_fn.return_value = deps
+        mock_model_fn.return_value = MagicMock()
+
+        original_deps = mod._deps
+        try:
+            mod._deps = deps
+            result = await create_content(prompt="Write about AI", content_type="linkedin", user_id="")
+        finally:
+            mod._deps = original_deps
+        call_args = mock_agent.run.call_args
+        agent_prompt = call_args[0][0]
+        assert "Voice profile:" not in agent_prompt
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_review_content_invalid_user_id(self, mock_deps_fn, mock_model_fn):
+        """review_content with unknown user_id returns error string."""
+        import second_brain.mcp_server as mod
+        from second_brain.mcp_server import review_content
+        deps = _mock_deps()
+        deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
+        mock_deps_fn.return_value = deps
+        mock_model_fn.return_value = MagicMock()
+
+        original_deps = mod._deps
+        try:
+            mod._deps = deps
+            result = await review_content(content="Some content to review", user_id="nobody")
+        finally:
+            mod._deps = original_deps
+        assert "Unknown user_id" in result
+
+    def test_validate_user_id_returns_none_for_empty(self):
+        """_validate_user_id returns None for empty string."""
+        from second_brain.mcp_server import _validate_user_id
+        assert _validate_user_id("") is None
+        assert _validate_user_id("  ") is None
+        assert _validate_user_id(None) is None
+
+    def test_validate_user_id_lowercases(self):
+        """_validate_user_id lowercases the input."""
+        from second_brain.mcp_server import _validate_user_id
+        # When _deps is None, no allowlist check — just returns cleaned id
+        import second_brain.mcp_server as mod
+        original_deps = mod._deps
+        try:
+            mod._deps = None
+            assert _validate_user_id("UTTAM") == "uttam"
+            assert _validate_user_id(" Robert ") == "robert"
+        finally:
+            mod._deps = original_deps

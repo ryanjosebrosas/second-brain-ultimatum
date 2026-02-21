@@ -118,6 +118,29 @@ class TestTemplateBankSchemas:
         assert tmpl.tags == []
         assert tmpl.when_not_to_use == ""
         assert tmpl.customization_guide == ""
+        assert tmpl.writeprint == ""
+
+    def test_deconstructed_template_with_writeprint(self):
+        t = DeconstructedTemplate(
+            name="Test", content_type="linkedin", body="[HOOK] text [CTA] more [BODY]",
+            structure_hint="Hook -> Body -> CTA",
+            writeprint="Conversational tone with punchy sentences",
+            when_to_use="Case studies",
+        )
+        assert t.writeprint == "Conversational tone with punchy sentences"
+
+    def test_template_bank_entry_writeprint(self):
+        e = TemplateBankEntry(
+            name="Test", content_type="linkedin", body="test", when_to_use="test",
+            writeprint="Direct and authoritative",
+        )
+        assert e.writeprint == "Direct and authoritative"
+
+    def test_template_bank_entry_writeprint_defaults_empty(self):
+        e = TemplateBankEntry(
+            name="Test", content_type="linkedin", body="test", when_to_use="test",
+        )
+        assert e.writeprint == ""
 
     def test_old_schemas_still_work(self):
         """Backward compatibility — old schemas not removed."""
@@ -207,12 +230,42 @@ class TestTemplateValidator:
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
+    async def test_flat_structure_hint_rejected(self):
+        """Validator rejects flat one-liner structure_hint."""
+        output = DeconstructedTemplate(
+            name="Test", content_type="email",
+            body="[GREETING]\n[BODY]\n[SIGN_OFF]",
+            structure_hint="Greeting -> Body -> Sign-off",
+            when_to_use="For emails",
+            writeprint="Formal tone",
+        )
+        ctx = MagicMock()
+        validators = template_builder_agent._output_validators
+        with pytest.raises(ModelRetry, match="MULTI-LINE"):
+            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+
+    @pytest.mark.asyncio
+    async def test_missing_writeprint(self):
+        output = DeconstructedTemplate(
+            name="Test", content_type="email",
+            body="[GREETING]\n[BODY]\n[SIGN_OFF]",
+            structure_hint="**Email**\n{greeting}\n{body}\n{sign-off}",
+            when_to_use="For emails",
+            writeprint="",
+        )
+        ctx = MagicMock()
+        validators = template_builder_agent._output_validators
+        with pytest.raises(ModelRetry, match="writeprint"):
+            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+
+    @pytest.mark.asyncio
     async def test_valid_template_passes(self):
         output = DeconstructedTemplate(
             name="Email Template", content_type="email",
             body="[GREETING],\n\n[OPENING_LINE]\n\n[BODY_PARAGRAPH]\n\n[SIGN_OFF]",
-            structure_hint="Greeting -> Opening -> Body -> Sign-off",
+            structure_hint="**Follow-up Email**\n{greeting}\n{opening line}\n{body paragraph}\n{sign-off}",
             when_to_use="Professional follow-up emails",
+            writeprint="Formal and concise business tone",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
@@ -345,6 +398,7 @@ class TestTemplateEndpoints:
             "content_type": "email",
             "body": "[GREETING]\n[BODY]\n[SIGN_OFF]",
             "structure_hint": "Greeting -> Body -> Sign-off",
+            "writeprint": "Formal business tone with concise sentences",
             "when_to_use": "Follow-up emails",
             "when_not_to_use": "",
             "customization_guide": "",

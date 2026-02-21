@@ -48,6 +48,20 @@ def _validate_mcp_input(
     return text.strip()
 
 
+def _validate_user_id(user_id: str | None) -> str | None:
+    """Validate user_id against allowed list. Returns cleaned user_id or None."""
+    if not user_id or not user_id.strip():
+        return None
+    user_id = user_id.strip().lower()
+    if _deps is not None:
+        allowed = _deps.config.allowed_user_ids_list
+        if allowed and user_id not in allowed:
+            raise ValueError(
+                f"Unknown user_id '{user_id}'. Allowed: {', '.join(allowed)}"
+            )
+    return user_id
+
+
 def _validate_url_scheme(url: str, label: str = "URL") -> str:
     """Validate URL uses HTTP(S) scheme. Allows data URIs for base64 images."""
     if not url or not url.strip():
@@ -870,10 +884,11 @@ async def multimodal_vector_search(
 
 @server.tool()
 async def create_content(
-    prompt: str, content_type: str = "linkedin",
+    prompt: str, content_type: str = "linkedin", user_id: str = "",
 ) -> str:
     """Create content using your brand voice, patterns, and accumulated knowledge.
     Loads voice guide, relevant examples, and patterns before generating.
+    Specify user_id to write in a specific user's voice.
 
     When to use: For content creation — LinkedIn posts, emails, case studies,
     newsletters, landing pages, essays. Specify content_type for format-specific
@@ -887,11 +902,18 @@ async def create_content(
                 "Draft a cold outreach email for SaaS founders")
         content_type: Content format — linkedin, email, case-study, newsletter,
                       landing-page, essay, or any custom type (default: linkedin)
+        user_id: Voice profile to use (e.g., "uttam", "robert").
+                 Empty = use default profile.
     """
     try:
         prompt = _validate_mcp_input(prompt, label="prompt")
     except ValueError as e:
         return str(e)
+    try:
+        effective_uid = _validate_user_id(user_id)
+    except ValueError as e:
+        return str(e)
+
     deps = _get_deps()
     model = _get_model("create")
     registry = deps.get_content_type_registry()
@@ -907,7 +929,9 @@ async def create_content(
         agent_prompt += f" ({type_config.length_guidance})"
     elif type_config.max_words:
         agent_prompt += f" (around {type_config.max_words} words)"
-    agent_prompt += f":\n\n{prompt}"
+    if effective_uid:
+        agent_prompt += f"\n\nVoice profile: {effective_uid}"
+    agent_prompt += f"\n\n{prompt}"
 
     timeout = deps.config.api_timeout_seconds
     try:
@@ -936,10 +960,11 @@ async def create_content(
 
 
 @server.tool()
-async def review_content(content: str, content_type: str | None = None) -> str:
+async def review_content(content: str, content_type: str | None = None,
+                         user_id: str = "") -> str:
     """Score content across multiple quality dimensions — structure, voice alignment,
     engagement, clarity, and persuasion. Uses your established patterns as the
-    review standard.
+    review standard. Specify user_id to evaluate against a specific user's voice.
 
     When to use: Before publishing content. Provides actionable scores and
     specific improvement suggestions. For voice-only analysis, use analyze_clarity
@@ -951,9 +976,15 @@ async def review_content(content: str, content_type: str | None = None) -> str:
     Args:
         content: The content text to review.
         content_type: Content format for type-specific review criteria (optional).
+        user_id: Voice profile to use for voice alignment scoring (e.g., "uttam").
+                 Empty = use default profile.
     """
     try:
         content = _validate_mcp_input(content, label="content")
+    except ValueError as e:
+        return str(e)
+    try:
+        _validate_user_id(user_id)
     except ValueError as e:
         return str(e)
     deps = _get_deps()
@@ -2548,8 +2579,22 @@ async def find_template_opportunities(deliverable: str) -> str:
     lines = [
         f"Template: {out.name}",
         f"Type: {out.content_type}",
-        f"Structure: {out.structure_hint}",
+        "",
+        "--- WRITEPRINT ---",
+        out.writeprint,
+        "--- END WRITEPRINT ---",
+        "",
+        "--- STRUCTURE ---",
+        out.structure_hint,
+        "--- END STRUCTURE ---",
+        "",
         f"When to use: {out.when_to_use}",
+    ]
+    if out.when_not_to_use:
+        lines.append(f"When NOT to use: {out.when_not_to_use}")
+    if out.customization_guide:
+        lines.extend(["", f"Customization: {out.customization_guide}"])
+    lines.extend([
         f"Tags: {', '.join(out.tags)}",
         "",
         "--- TEMPLATE BODY ---",
@@ -2557,7 +2602,7 @@ async def find_template_opportunities(deliverable: str) -> str:
         "--- END TEMPLATE ---",
         "",
         "Use save_template to persist this to your template bank.",
-    ]
+    ])
     return "\n".join(lines)
 
 
@@ -2568,6 +2613,7 @@ async def save_template(
     body: str,
     when_to_use: str = "",
     structure_hint: str = "",
+    writeprint: str = "",
     tags: str = "",
     description: str = "",
     customization_guide: str = "",
@@ -2588,6 +2634,7 @@ async def save_template(
         body: Full template text with [PLACEHOLDER] markers for customizable parts
         when_to_use: When this template should be applied
         structure_hint: Section flow summary (e.g., "Hook -> Body -> CTA")
+        writeprint: Voice/tone/style fingerprint of the content
         tags: Comma-separated tags for filtering (e.g., "thought-leadership, professional")
         description: Brief description of the template
         customization_guide: What to customize vs keep standard
@@ -2610,6 +2657,7 @@ async def save_template(
             "body": body,
             "when_to_use": when_to_use,
             "structure_hint": structure_hint,
+            "writeprint": writeprint,
             "tags": tag_list,
             "description": description,
             "customization_guide": customization_guide,

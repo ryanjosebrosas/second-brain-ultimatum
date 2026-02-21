@@ -247,13 +247,30 @@ class TestTemplateValidator:
             name="Email Template",
             content_type="email",
             body="[GREETING],\n\n[OPENING_LINE]\n\n[BODY_PARAGRAPH]\n\n[SIGN_OFF]",
-            structure_hint="Greeting -> Opening -> Body -> Sign-off",
+            structure_hint="**Follow-up Email**\n{greeting}\n{opening line}\n{body paragraph}\n{sign-off}",
+            writeprint="Formal and concise business tone",
             when_to_use="Follow-up emails to prospects",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
         result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
         assert result.name == "Email Template"
+
+    @pytest.mark.asyncio
+    async def test_template_without_writeprint(self):
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="Email Template",
+            content_type="email",
+            body="[GREETING]\n[BODY]\n[SIGN_OFF]",
+            structure_hint="**Email**\n{greeting}\n{body}\n{sign-off}",
+            writeprint="",
+            when_to_use="Follow-up emails",
+        )
+        ctx = MagicMock()
+        validators = template_builder_agent._output_validators
+        with pytest.raises(ModelRetry, match="writeprint"):
+            await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
     async def test_template_without_structure_hint(self):

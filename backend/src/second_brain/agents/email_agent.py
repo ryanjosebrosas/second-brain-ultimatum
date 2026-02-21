@@ -44,14 +44,18 @@ async def validate_email(ctx: RunContext[BrainDeps], output: EmailAction) -> Ema
 
 
 @email_agent.tool
-async def load_email_voice(ctx: RunContext[BrainDeps]) -> str:
-    """Load email-specific voice and style guidelines."""
+async def load_email_voice(ctx: RunContext[BrainDeps], voice_user_id: str = "") -> str:
+    """Load email-specific voice and style guidelines.
+    Pass voice_user_id to load a specific user's voice profile."""
     try:
+        uid = voice_user_id if voice_user_id else None
         parts = []
-        voice_text = await load_voice_context(ctx.deps, preview_limit=200)
+        voice_text = await load_voice_context(ctx.deps, preview_limit=200, voice_user_id=uid)
         if voice_text:
             parts.append(voice_text)
-        examples = await ctx.deps.storage_service.get_examples(content_type="email")
+        examples = await ctx.deps.storage_service.get_examples(
+            content_type="email", override_user_id=uid,
+        )
         if examples:
             parts.append("Email examples:\n" + "\n".join(
                 f"- {e.get('title', '?')}: {e.get('content', '')[:100]}..." for e in examples[:3]

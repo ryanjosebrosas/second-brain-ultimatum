@@ -75,10 +75,12 @@ async def validate_review(ctx: RunContext[BrainDeps], output: DimensionScore) ->
 
 
 @review_agent.tool
-async def load_voice_reference(ctx: RunContext[BrainDeps]) -> str:
-    """Load the user's voice and tone guide for evaluating brand voice consistency."""
+async def load_voice_reference(ctx: RunContext[BrainDeps], voice_user_id: str = "") -> str:
+    """Load the user's voice and tone guide for evaluating brand voice consistency.
+    Pass voice_user_id to load a specific user's voice profile."""
     try:
-        return await load_voice_context(ctx.deps)
+        uid = voice_user_id if voice_user_id else None
+        return await load_voice_context(ctx.deps, voice_user_id=uid)
     except Exception as e:
         return tool_error("load_voice_reference", e)
 

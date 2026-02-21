@@ -32,15 +32,6 @@ async def list_templates(
     return {"templates": templates, "count": len(templates)}
 
 
-@router.get("/{template_id}")
-async def get_template(template_id: str, deps: BrainDeps = Depends(get_deps)):
-    """Get a single template by ID."""
-    tmpl = await deps.storage_service.get_template(template_id)
-    if not tmpl:
-        raise HTTPException(404, detail=f"Template not found: {template_id}")
-    return tmpl
-
-
 @router.post("/")
 async def create_template(
     body: CreateTemplateRequest, deps: BrainDeps = Depends(get_deps),
@@ -51,6 +42,36 @@ async def create_template(
     if result:
         return result
     raise HTTPException(500, detail="Failed to create template")
+
+
+@router.post("/deconstruct")
+async def deconstruct_content(
+    body: DeconstructRequest,
+    deps: BrainDeps = Depends(get_deps),
+    model=Depends(get_model),
+) -> dict[str, Any]:
+    """AI-deconstruct content into a template blueprint."""
+    from second_brain.agents.template_builder import template_builder_agent
+
+    prompt = body.content
+    if body.content_type:
+        prompt = f"[Content type: {body.content_type}]\n\n{body.content}"
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await template_builder_agent.run(prompt, deps=deps, model=model)
+    except TimeoutError:
+        raise HTTPException(504, detail=f"Deconstruction timed out after {timeout}s")
+    return result.output.model_dump()
+
+
+@router.get("/{template_id}")
+async def get_template(template_id: str, deps: BrainDeps = Depends(get_deps)):
+    """Get a single template by ID."""
+    tmpl = await deps.storage_service.get_template(template_id)
+    if not tmpl:
+        raise HTTPException(404, detail=f"Template not found: {template_id}")
+    return tmpl
 
 
 @router.patch("/{template_id}")
@@ -77,24 +98,3 @@ async def delete_template(template_id: str, deps: BrainDeps = Depends(get_deps))
     if deleted:
         return {"message": f"Deleted template: {template_id}"}
     raise HTTPException(404, detail=f"Template not found: {template_id}")
-
-
-@router.post("/deconstruct")
-async def deconstruct_content(
-    body: DeconstructRequest,
-    deps: BrainDeps = Depends(get_deps),
-    model=Depends(get_model),
-) -> dict[str, Any]:
-    """AI-deconstruct content into a template blueprint."""
-    from second_brain.agents.template_builder import template_builder_agent
-
-    prompt = body.content
-    if body.content_type:
-        prompt = f"[Content type: {body.content_type}]\n\n{body.content}"
-    timeout = deps.config.api_timeout_seconds
-    try:
-        async with asyncio.timeout(timeout):
-            result = await template_builder_agent.run(prompt, deps=deps, model=model)
-    except TimeoutError:
-        raise HTTPException(504, detail=f"Deconstruction timed out after {timeout}s")
-    return result.output.model_dump()

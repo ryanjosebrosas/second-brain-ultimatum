@@ -2682,3 +2682,85 @@ class TestWrapMetadataFilter:
     def test_metadata_key_passthrough(self):
         from second_brain.services.memory import _wrap_metadata_filter
         assert _wrap_metadata_filter({"metadata": {"foo": "bar"}}) == {"metadata": {"foo": "bar"}}
+
+
+class TestMemoryServiceUserOverride:
+    """Tests for override_user_id in MemoryService search methods."""
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_override_user_id(self, MockClient):
+        """search() uses override_user_id when provided."""
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [{"memory": "test"}], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        svc = MemoryService(config)
+        result = await svc.search("test query", override_user_id="uttam")
+
+        call_args = mock_client.search.call_args
+        filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
+        assert {"user_id": "uttam"} in filters["AND"]
+        assert len(result.memories) == 1
+
+    @patch("mem0.MemoryClient")
+    async def test_search_without_override_uses_default(self, MockClient):
+        """search() uses self.user_id when no override."""
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        svc = MemoryService(config)
+        await svc.search("test query")
+
+        call_args = mock_client.search.call_args
+        filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
+        assert {"user_id": "brainforge"} in filters["AND"]
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_override(self, MockClient):
+        """search_with_filters() uses override_user_id when provided."""
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        svc = MemoryService(config)
+        await svc.search_with_filters("test", metadata_filters={"category": "pattern"},
+                                      override_user_id="robert")
+
+        call_args = mock_client.search.call_args
+        filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
+        assert {"user_id": "robert"} in filters["AND"]
+
+    def test_effective_user_id_with_override(self):
+        """_effective_user_id returns override when provided."""
+        with patch("mem0.MemoryClient"):
+            config = MagicMock()
+            config.mem0_api_key = "test-key"
+            config.brain_user_id = "brainforge"
+            config.service_timeout_seconds = 10
+            config.graph_provider = "none"
+            svc = MemoryService(config)
+            assert svc._effective_user_id("uttam") == "uttam"
+            assert svc._effective_user_id(None) == "brainforge"
+            assert svc._effective_user_id("") == "brainforge"

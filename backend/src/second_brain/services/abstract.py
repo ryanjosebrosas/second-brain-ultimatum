@@ -171,8 +171,9 @@ class MemoryServiceBase(ABC):
 
     @abstractmethod
     async def search(self, query: str, limit: int | None = None,
-                     enable_graph: bool | None = None) -> "SearchResult":
-        """Semantic search. Returns SearchResult(memories, relations, search_filters)."""
+                     enable_graph: bool | None = None,
+                     override_user_id: str | None = None) -> "SearchResult":
+        """Semantic search. override_user_id scopes to a different user's memories."""
 
     @abstractmethod
     async def search_with_filters(
@@ -181,14 +182,16 @@ class MemoryServiceBase(ABC):
         metadata_filters: dict | None = None,
         limit: int = 10,
         enable_graph: bool | None = None,
+        override_user_id: str | None = None,
     ) -> "SearchResult":
-        """Search with metadata filters. Returns SearchResult."""
+        """Search with metadata filters. override_user_id scopes to a different user."""
 
     @abstractmethod
     async def search_by_category(
-        self, category: str, query: str, limit: int = 10
+        self, category: str, query: str = "", limit: int = 10,
+        override_user_id: str | None = None,
     ) -> "SearchResult":
-        """Search within a category. Returns SearchResult."""
+        """Search within a category. override_user_id scopes to a different user."""
 
     @abstractmethod
     async def get_all(self) -> list[dict]:
@@ -237,16 +240,16 @@ class StubMemoryService(MemoryServiceBase):
     async def add_multimodal(self, content_blocks, metadata=None, enable_graph=None):
         return {}
 
-    async def search(self, query, limit=None, enable_graph=None):
+    async def search(self, query, limit=None, enable_graph=None, override_user_id=None):
         from second_brain.services.search_result import SearchResult
         return SearchResult()
 
     async def search_with_filters(self, query, metadata_filters=None, limit=10,
-                                  enable_graph=None):
+                                  enable_graph=None, override_user_id=None):
         from second_brain.services.search_result import SearchResult
         return SearchResult()
 
-    async def search_by_category(self, category, query, limit=10):
+    async def search_by_category(self, category, query="", limit=10, override_user_id=None):
         from second_brain.services.search_result import SearchResult
         return SearchResult()
 

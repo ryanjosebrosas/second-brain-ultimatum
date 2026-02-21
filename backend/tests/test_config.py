@@ -950,3 +950,74 @@ class TestAgentModelOverrides:
             "recall": "llama3.1:8b",
             "create": "anthropic:claude-sonnet-4-5",
         }
+
+
+class TestAllowedUserIds:
+    """Tests for allowed_user_ids config field and validators."""
+
+    def test_default_allowed_user_ids(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        ids = config.allowed_user_ids_list
+        assert "uttam" in ids
+        assert "robert" in ids
+        assert "luke" in ids
+        assert "brainforge" in ids
+
+    def test_comma_separated_parsing(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("ALLOWED_USER_IDS", "alice,bob,charlie")
+        config = BrainConfig(_env_file=None)
+        assert config.allowed_user_ids_list == ["alice", "bob", "charlie"]
+
+    def test_brain_user_id_auto_added(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="custom_user",
+            allowed_user_ids="uttam,robert",
+            _env_file=None,
+        )
+        assert "custom_user" in config.allowed_user_ids_list
+
+    def test_brain_user_id_already_in_list(self, tmp_path):
+        """brain_user_id already in allowed list doesn't duplicate."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="uttam",
+            allowed_user_ids="uttam,robert",
+            _env_file=None,
+        )
+        assert config.allowed_user_ids_list.count("uttam") == 1
+
+    def test_empty_brain_user_id_skips_auto_add(self, tmp_path):
+        """Empty brain_user_id doesn't trigger auto-add."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="",
+            allowed_user_ids="uttam,robert",
+            _env_file=None,
+        )
+        assert config.allowed_user_ids_list == ["uttam", "robert"]
+
+    def test_custom_list_replaces_default(self, tmp_path):
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            allowed_user_ids="alice,bob",
+            _env_file=None,
+        )
+        assert "uttam" not in config.allowed_user_ids_list
+        assert config.allowed_user_ids_list == ["alice", "bob"]

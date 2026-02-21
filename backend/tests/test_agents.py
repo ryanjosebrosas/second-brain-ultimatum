@@ -1768,7 +1768,9 @@ class TestAgentFunctionalBehavior:
 
         result = await tool.function(mock_ctx)
 
-        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with("style-voice")
+        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with(
+            "style-voice", override_user_id=None,
+        )
         assert isinstance(result, str)
 
     async def test_create_load_content_examples_calls_storage(self, mock_ctx):
@@ -1783,7 +1785,9 @@ class TestAgentFunctionalBehavior:
 
         result = await tool.function(mock_ctx, content_type="blog-post")
 
-        mock_ctx.deps.storage_service.get_examples.assert_called_once_with(content_type="blog-post")
+        mock_ctx.deps.storage_service.get_examples.assert_called_once_with(
+            content_type="blog-post", override_user_id=None,
+        )
         assert isinstance(result, str)
 
     # --- review_agent ---
@@ -1799,7 +1803,9 @@ class TestAgentFunctionalBehavior:
 
         result = await tool.function(mock_ctx)
 
-        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with("style-voice")
+        mock_ctx.deps.storage_service.get_memory_content.assert_called_once_with(
+            "style-voice", override_user_id=None,
+        )
         assert isinstance(result, str)
 
     async def test_review_load_example_benchmarks_calls_storage(self, mock_ctx):
@@ -2646,3 +2652,62 @@ class TestLimitCapping:
              patch.object(mod, "_get_model", return_value=MagicMock()):
             result = await mod.quick_recall(query="test query", limit=0)
             assert isinstance(result, str)
+
+
+class TestCreateAgentVoiceRouting:
+    """Tests for voice_user_id parameter on agent tools."""
+
+    def test_create_agent_has_voice_user_id_on_load_voice_guide(self):
+        """create_agent's load_voice_guide tool accepts voice_user_id param."""
+        from second_brain.agents.create import create_agent
+        import inspect
+        tool = create_agent._function_toolset.tools["load_voice_guide"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_create_agent_has_voice_user_id_on_load_content_examples(self):
+        """create_agent's load_content_examples tool accepts voice_user_id param."""
+        from second_brain.agents.create import create_agent
+        import inspect
+        tool = create_agent._function_toolset.tools["load_content_examples"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_create_agent_has_voice_user_id_on_find_applicable_patterns(self):
+        """create_agent's find_applicable_patterns tool accepts voice_user_id param."""
+        from second_brain.agents.create import create_agent
+        import inspect
+        tool = create_agent._function_toolset.tools["find_applicable_patterns"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_review_agent_has_voice_user_id_on_load_voice_reference(self):
+        """review_agent's load_voice_reference tool accepts voice_user_id param."""
+        from second_brain.agents.review import review_agent
+        import inspect
+        tool = review_agent._function_toolset.tools["load_voice_reference"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_email_agent_has_voice_user_id_on_load_email_voice(self):
+        """email_agent's load_email_voice tool accepts voice_user_id param."""
+        from second_brain.agents.email_agent import email_agent
+        import inspect
+        tool = email_agent._function_toolset.tools["load_email_voice"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_clarity_agent_has_voice_user_id_on_load_voice_reference(self):
+        """clarity_agent's load_voice_reference tool accepts voice_user_id param."""
+        from second_brain.agents.clarity import clarity_agent
+        import inspect
+        tool = clarity_agent._function_toolset.tools["load_voice_reference"]
+        sig = inspect.signature(tool.function)
+        assert "voice_user_id" in sig.parameters
+
+    def test_create_agent_instructions_mention_voice_profile(self):
+        """create_agent instructions should mention voice profile routing."""
+        from second_brain.agents.create import create_agent
+        instructions = create_agent._instructions
+        assert "voice" in instructions.lower()
+        assert "user" in instructions.lower() or "profile" in instructions.lower()

@@ -96,14 +96,9 @@ with tab_create:
         mode = selected_type.get("default_mode", "N/A")
         st.info(f"**{type_name}**\n\n{type_desc}\n\nMax words: {max_words} | Mode: {mode}")
 
-        # Structure hint
-        hint = selected_type.get("structure_hint", "")
-        if hint:
-            with st.expander("Structure Guide"):
-                st.markdown(hint)
-
         # --- Template selector ---
         selected_template_body = ""
+        chosen_template = None
         try:
             tmpl_response = _get_cached_templates(selected_key)
             tmpl_list = tmpl_response.get("templates", []) if isinstance(tmpl_response, dict) else []
@@ -122,18 +117,31 @@ with tab_create:
                 key="create_template",
             )
             if tmpl_choice and tmpl_choice > 0:
-                chosen = tmpl_list[tmpl_choice - 1]
-                selected_template_body = chosen.get("body", "")
-                if chosen.get("when_to_use"):
-                    st.caption(f"When to use: {chosen['when_to_use']}")
-                if chosen.get("customization_guide"):
+                chosen_template = tmpl_list[tmpl_choice - 1]
+                selected_template_body = chosen_template.get("body", "")
+                if chosen_template.get("when_to_use"):
+                    st.caption(f"When to use: {chosen_template['when_to_use']}")
+                if chosen_template.get("customization_guide"):
                     with st.expander("Customization Guide"):
-                        st.markdown(chosen["customization_guide"])
+                        st.markdown(chosen_template["customization_guide"])
+
+        # Structure Guide — template body IS the structure; fall back to content type hint
+        if chosen_template and chosen_template.get("body"):
+            hint = chosen_template["body"]
+        else:
+            hint = selected_type.get("structure_hint", "")
+        if hint:
+            with st.expander("Structure Guide", expanded=bool(chosen_template)):
+                st.code(hint, language=None) if chosen_template else st.markdown(hint)
+
+        # Writeprint — show if template has one
+        if chosen_template and chosen_template.get("writeprint"):
+            with st.expander("Voice & Tone Guide"):
+                st.markdown(chosen_template["writeprint"])
 
         # Input form
         prompt = st.text_area(
             "What do you want to create?",
-            value=selected_template_body,
             height=150,
             placeholder=f"Describe the {selected_type.get('name', '')} you want to create...",
         )

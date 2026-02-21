@@ -450,11 +450,13 @@ class StorageService:
     # --- Memory Content ---
 
     async def get_memory_content(
-        self, category: str, subcategory: str | None = None
+        self, category: str, subcategory: str | None = None,
+        override_user_id: str | None = None,
     ) -> list[dict]:
         try:
+            uid = override_user_id or self.user_id
             query = self._client.table("memory_content").select("*")
-            query = query.eq("user_id", self.user_id)
+            query = query.eq("user_id", uid)
             query = query.eq("category", category)
             if subcategory:
                 query = query.eq("subcategory", subcategory)
@@ -535,11 +537,13 @@ class StorageService:
     # --- Examples ---
 
     async def get_examples(
-        self, content_type: str | None = None
+        self, content_type: str | None = None,
+        override_user_id: str | None = None,
     ) -> list[dict]:
         try:
+            uid = override_user_id or self.user_id
             query = self._client.table("examples").select("*")
-            query = query.eq("user_id", self.user_id)
+            query = query.eq("user_id", uid)
             if content_type:
                 query = query.eq("content_type", content_type)
             query = query.order("created_at", desc=True)

@@ -105,6 +105,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         query: str,
         limit: int | None = None,
         enable_graph: bool | None = None,
+        override_user_id: str | None = None,
     ) -> SearchResult:
         """Semantic search via GraphitiService with user-scoped group_id.
 
@@ -128,6 +129,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         metadata_filters: dict | None = None,
         limit: int = 10,
         enable_graph: bool | None = None,
+        override_user_id: str | None = None,
     ) -> SearchResult:
         """Search with metadata filters approximated via query augmentation.
 
@@ -170,7 +172,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             return SearchResult(search_filters=metadata_filters or {})
 
     async def search_by_category(
-        self, category: str, query: str, limit: int = 10
+        self, category: str, query: str = "", limit: int = 10,
+        override_user_id: str | None = None,
     ) -> SearchResult:
         """Search by category by prepending category to query string."""
         try:

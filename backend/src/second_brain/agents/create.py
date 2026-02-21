@@ -50,6 +50,12 @@ create_agent = Agent(
         "Follow the length guidance but don't pad or truncate artificially.\n"
         "6. Call validate_draft to check structure requirements.\n"
         "7. Produce a DRAFT for human editing, not final copy.\n\n"
+        "USER PROFILE ROUTING:\n"
+        "- Your prompt may include 'Voice profile: <user_id>'.\n"
+        "- When present, pass that user_id to load_voice_guide, load_content_examples, "
+        "and find_applicable_patterns as the voice_user_id parameter. "
+        "This loads THAT user's specific voice and style.\n"
+        "- If no voice profile is specified, omit voice_user_id (uses default).\n\n"
         "ERROR HANDLING: If brain context tools (voice guide, patterns, examples) "
         "return 'BACKEND_ERROR:' messages, write the best draft you can without that "
         "context. Set the error field to describe which services were unavailable. "
@@ -136,23 +142,27 @@ async def validate_create(ctx: RunContext[BrainDeps], output: CreateResult) -> C
 
 
 @create_agent.tool
-async def load_voice_guide(ctx: RunContext[BrainDeps]) -> str:
-    """Load the user's voice and tone guide from the brain for style matching."""
+async def load_voice_guide(ctx: RunContext[BrainDeps], voice_user_id: str = "") -> str:
+    """Load the user's voice and tone guide from the brain for style matching.
+    Pass voice_user_id to load a specific user's voice profile."""
     try:
-        return await load_voice_context(ctx.deps, include_graph=True)
+        uid = voice_user_id if voice_user_id else None
+        return await load_voice_context(ctx.deps, voice_user_id=uid, include_graph=True)
     except Exception as e:
         return tool_error("load_voice_guide", e)
 
 
 @create_agent.tool
 async def load_content_examples(
-    ctx: RunContext[BrainDeps], content_type: str
+    ctx: RunContext[BrainDeps], content_type: str, voice_user_id: str = ""
 ) -> str:
     """Load reference examples of a specific content type from the brain.
-    Use this to study the user's past work before drafting."""
+    Use this to study the user's past work before drafting.
+    Pass voice_user_id to load a specific user's examples."""
     try:
+        uid = voice_user_id if voice_user_id else None
         examples = await ctx.deps.storage_service.get_examples(
-            content_type=content_type
+            content_type=content_type, override_user_id=uid,
         )
         if not examples:
             return f"No examples found for type '{content_type}'."
@@ -169,17 +179,21 @@ async def load_content_examples(
 
 @create_agent.tool
 async def find_applicable_patterns(
-    ctx: RunContext[BrainDeps], topic: str, content_type: str = ""
+    ctx: RunContext[BrainDeps], topic: str, content_type: str = "",
+    voice_user_id: str = ""
 ) -> str:
     """Find brain patterns and semantic memories relevant to the content topic.
-    When content_type is provided, uses filtered semantic search for that type."""
+    When content_type is provided, uses filtered semantic search for that type.
+    Uses voice_user_id for voice-specific patterns, shared pool for topic knowledge."""
     try:
-        # Semantic search for general memories about the topic
+        uid = voice_user_id if voice_user_id else None
+
+        # Shared knowledge: topic memories from default user (brainforge)
         result = await ctx.deps.memory_service.search(topic)
         general_relations = result.relations
         reranked_general = await rerank_memories(ctx.deps, topic, result.memories)
 
-        # Semantic search for patterns (optionally filtered by content type)
+        # Voice-scoped: writing patterns from the target user
         pattern_memories = []
         pattern_relations = []
         try:
@@ -196,6 +210,7 @@ async def find_applicable_patterns(
                 topic,
                 metadata_filters=filters,
                 limit=10,
+                override_user_id=uid,
             )
             pattern_memories = pattern_result.memories
             pattern_relations = pattern_result.relations

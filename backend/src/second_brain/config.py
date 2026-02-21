@@ -204,6 +204,14 @@ class BrainConfig(BaseSettings):
 
     # Brain
     brain_user_id: str = Field(default="", description="User ID for data isolation. Set BRAIN_USER_ID in .env.")
+    allowed_user_ids: str = Field(
+        default="uttam,robert,luke,brainforge",
+        description=(
+            "Comma-separated valid user IDs for multi-user voice isolation. "
+            "MCP tools validate user_id against this list. "
+            "Set ALLOWED_USER_IDS in .env."
+        ),
+    )
     brain_api_key: str = Field(
         default="",
         description="API key for REST API authentication. Set BRAIN_API_KEY in .env. Leave empty to disable auth (local-only use).",
@@ -419,6 +427,25 @@ class BrainConfig(BaseSettings):
         },
         description="PMO priority scoring weights (must sum to 1.0)",
     )
+    @property
+    def allowed_user_ids_list(self) -> list[str]:
+        """Parse ALLOWED_USER_IDS into a list of user ID strings."""
+        if not self.allowed_user_ids:
+            return []
+        return [uid.strip() for uid in self.allowed_user_ids.split(",") if uid.strip()]
+
+    @model_validator(mode="after")
+    def _validate_allowed_user_ids(self) -> "BrainConfig":
+        if self.brain_user_id and self.allowed_user_ids:
+            parsed = self.allowed_user_ids_list
+            if self.brain_user_id not in parsed:
+                logger.warning(
+                    "BRAIN_USER_ID=%r not in ALLOWED_USER_IDS=%r — adding it",
+                    self.brain_user_id, self.allowed_user_ids,
+                )
+                self.allowed_user_ids = self.allowed_user_ids + "," + self.brain_user_id
+        return self
+
     @model_validator(mode="after")
     def _validate_graph_config(self) -> "BrainConfig":
         if self.graph_provider == "graphiti":

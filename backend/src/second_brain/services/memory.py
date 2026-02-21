@@ -186,6 +186,10 @@ class MemoryService(MemoryServiceBase):
             logger.debug("Mem0 add_multimodal error detail: %s", e)
             return {}
 
+    def _effective_user_id(self, override: str | None = None) -> str:
+        """Return override if provided, else self.user_id (from config)."""
+        return override if override else self.user_id
+
     def _check_idle_reconnect(self) -> None:
         """Re-instantiate client if idle for too long (Mem0 timeout workaround)."""
         elapsed = time.monotonic() - self._last_activity
@@ -206,12 +210,14 @@ class MemoryService(MemoryServiceBase):
             logger.error(f"Failed to enable project-level graph: {e}")
 
     async def search(self, query: str, limit: int | None = None,
-                     enable_graph: bool | None = None) -> SearchResult:
+                     enable_graph: bool | None = None,
+                     override_user_id: str | None = None) -> SearchResult:
         """Semantic search across memories."""
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
+        uid = self._effective_user_id(override_user_id)
         kwargs: dict = {
-            "filters": {"AND": [{"user_id": self.user_id}]},
+            "filters": {"AND": [{"user_id": uid}]},
             "top_k": limit,
         }
         if self.config.mem0_keyword_search:
@@ -243,6 +249,7 @@ class MemoryService(MemoryServiceBase):
         metadata_filters: dict | None = None,
         limit: int | None = None,
         enable_graph: bool | None = None,
+        override_user_id: str | None = None,
     ) -> SearchResult:
         """Semantic search with metadata filtering.
 
@@ -255,12 +262,14 @@ class MemoryService(MemoryServiceBase):
                 Logical: {"AND": [{"category": "pattern"}, {"topic": "Content"}]}
             limit: Max results (defaults to config.memory_search_limit).
             enable_graph: Override graph setting. None = use config default.
+            override_user_id: Override user_id for scoping to a different user.
         """
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
+        uid = self._effective_user_id(override_user_id)
 
         # Platform API v2: user_id inside filters, custom metadata wrapped
-        conditions: list[dict] = [{"user_id": self.user_id}]
+        conditions: list[dict] = [{"user_id": uid}]
         if metadata_filters:
             # Flatten caller's AND conditions to avoid double-nesting
             if isinstance(metadata_filters, dict) and len(metadata_filters) == 1:
@@ -423,6 +432,7 @@ class MemoryService(MemoryServiceBase):
         category: str,
         query: str = "",
         limit: int = 10,
+        override_user_id: str | None = None,
     ) -> SearchResult:
         """Convenience wrapper — search memories filtered by category metadata.
 
@@ -430,6 +440,7 @@ class MemoryService(MemoryServiceBase):
             category: Category to filter by (e.g., voice, content, clients)
             query: Natural language search query (defaults to category name if empty)
             limit: Maximum results
+            override_user_id: Override user_id for scoping to a different user.
 
         Returns:
             SearchResult with matches in this category.
@@ -438,6 +449,7 @@ class MemoryService(MemoryServiceBase):
             query=query or category,
             metadata_filters={"category": category},
             limit=limit,
+            override_user_id=override_user_id,
         )
 
     async def close(self) -> None:
