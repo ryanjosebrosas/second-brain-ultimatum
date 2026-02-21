@@ -85,6 +85,47 @@ def _wrap_metadata_filter(condition: dict) -> dict:
     return {"metadata": condition}
 
 
+def validate_metadata_filter(condition: dict | None, path: str = "filter") -> None:
+    """Validate metadata filter structure before wrapping.
+
+    Raises ValueError on malformed filters with descriptive message.
+
+    Args:
+        condition: The filter dict to validate.
+        path: Current path in filter tree (for error messages).
+
+    Raises:
+        ValueError: If filter structure is invalid.
+    """
+    if condition is None:
+        return
+    if not isinstance(condition, dict):
+        raise ValueError(
+            f"Metadata filter at '{path}' must be a dict, got {type(condition).__name__}"
+        )
+    if not condition:
+        return  # Empty dict is valid (no filters)
+
+    for key, value in condition.items():
+        if key in ("AND", "OR", "NOT"):
+            if not isinstance(value, list):
+                raise ValueError(
+                    f"Logical operator '{key}' at '{path}' requires a list, "
+                    f"got {type(value).__name__}"
+                )
+            if not value:
+                raise ValueError(
+                    f"Logical operator '{key}' at '{path}' cannot have empty list"
+                )
+            for i, item in enumerate(value):
+                if not isinstance(item, dict):
+                    raise ValueError(
+                        f"Item {i} in '{key}' at '{path}' must be a dict, "
+                        f"got {type(item).__name__}"
+                    )
+                validate_metadata_filter(item, path=f"{path}.{key}[{i}]")
+
+
 class MemoryService(MemoryServiceBase):
     """Semantic memory via Mem0 Cloud. Requires mem0_api_key."""
 
@@ -387,6 +428,8 @@ class MemoryService(MemoryServiceBase):
             override_user_id: Override user_id for scoping to a different user.
         """
         self._check_idle_reconnect()
+        # Validate filter structure early
+        validate_metadata_filter(metadata_filters)
         limit = limit if limit is not None else self.config.memory_search_limit
         uid = self._effective_user_id(override_user_id)
 

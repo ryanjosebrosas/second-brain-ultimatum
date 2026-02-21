@@ -1173,3 +1173,307 @@ class TestMemoryServiceOverrideUserId:
         assert svc._effective_user_id("override") == "override"
         assert svc._effective_user_id(None) == "test-user"
         assert svc._effective_user_id("") == "test-user"  # Empty string = default
+
+
+class TestMetadataFilterValidation:
+    """Tests for validate_metadata_filter() function."""
+
+    def test_valid_simple_filter(self):
+        """Simple category filter passes validation."""
+        from second_brain.services.memory import validate_metadata_filter
+        validate_metadata_filter({"category": "pattern"})  # Should not raise
+
+    def test_valid_and_filter(self):
+        """AND filter with list of dicts passes validation."""
+        from second_brain.services.memory import validate_metadata_filter
+        validate_metadata_filter({"AND": [{"category": "pattern"}, {"source": "learn"}]})
+
+    def test_valid_nested_and_or(self):
+        """Nested AND/OR filter passes validation."""
+        from second_brain.services.memory import validate_metadata_filter
+        validate_metadata_filter({
+            "AND": [
+                {"category": "pattern"},
+                {"OR": [{"source": "learn"}, {"source": "ask"}]},
+            ]
+        })
+
+    def test_valid_none_filter(self):
+        """None filter passes validation."""
+        from second_brain.services.memory import validate_metadata_filter
+        validate_metadata_filter(None)  # Should not raise
+
+    def test_valid_empty_dict(self):
+        """Empty dict passes validation."""
+        from second_brain.services.memory import validate_metadata_filter
+        validate_metadata_filter({})  # Should not raise
+
+    def test_invalid_and_not_list(self):
+        """AND with non-list value raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="AND.*requires a list"):
+            validate_metadata_filter({"AND": {"category": "pattern"}})
+
+    def test_invalid_and_empty_list(self):
+        """AND with empty list raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="AND.*cannot have empty list"):
+            validate_metadata_filter({"AND": []})
+
+    def test_invalid_and_item_not_dict(self):
+        """AND with non-dict item raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="Item 0.*must be a dict"):
+            validate_metadata_filter({"AND": ["not-a-dict", {"category": "ok"}]})
+
+    def test_invalid_or_not_list(self):
+        """OR with non-list value raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="OR.*requires a list"):
+            validate_metadata_filter({"OR": "not-a-list"})
+
+    def test_invalid_not_not_list(self):
+        """NOT with non-list value raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="NOT.*requires a list"):
+            validate_metadata_filter({"NOT": {"category": "excluded"}})
+
+    def test_invalid_nested_error_path(self):
+        """Nested error includes path for debugging."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match=r"filter\.AND\[1\]"):
+            validate_metadata_filter({
+                "AND": [
+                    {"category": "ok"},
+                    {"OR": "not-a-list"},  # Error here
+                ]
+            })
+
+    def test_invalid_non_dict_filter(self):
+        """Non-dict filter raises ValueError."""
+        from second_brain.services.memory import validate_metadata_filter
+        with pytest.raises(ValueError, match="must be a dict"):
+            validate_metadata_filter("not-a-dict")
+
+
+class TestMemoryServiceFeatureCombinations:
+    """Integration tests for feature flag combinations.
+
+    These tests verify that multiple features work correctly together,
+    catching subtle interaction bugs that single-feature tests miss.
+    """
+
+    @patch("mem0.MemoryClient")
+    async def test_all_four_flags_enabled(self, mock_client_cls):
+        """All 4 feature flags can be enabled simultaneously."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = True
+        config.mem0_use_criteria = True
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("filter_memories") is True
+        # use_criteria=True means NOT passed (criteria auto-activate)
+        assert "use_criteria" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_keyword_rerank_filter_together(self, mock_client_cls):
+        """keyword_search + rerank + filter_memories work together."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = True
+        config.mem0_use_criteria = False
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [{"memory": "test"}], "relations": []}
+
+        svc = MemoryService(config)
+        result = await svc.search("test query")
+
+        assert len(result.memories) == 1
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("filter_memories") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_override_user_id_with_keyword_search(self, mock_client_cls):
+        """override_user_id + keyword_search work together."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "default-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test", override_user_id="uttam")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        filters = call_kwargs.get("filters", {})
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "uttam" in user_ids
+
+    @patch("mem0.MemoryClient")
+    async def test_override_user_id_with_filter_memories(self, mock_client_cls):
+        """override_user_id + filter_memories work together."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "default-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = True
+        config.mem0_use_criteria = False
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test", override_user_id="robert")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("filter_memories") is True
+        filters = call_kwargs.get("filters", {})
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "robert" in user_ids
+
+    @patch("mem0.MemoryClient")
+    async def test_per_call_override_with_config_flags(self, mock_client_cls):
+        """Per-call filter_memories=True overrides config with other flags active."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = False  # Config disabled
+        config.mem0_use_criteria = True
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test", filter_memories=True)  # Per-call override
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("filter_memories") is True  # Per-call override worked
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_all_flags_and_metadata(self, mock_client_cls):
+        """search_with_filters with metadata_filters + override_user_id + all flags."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "default-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = True
+        config.mem0_use_criteria = True
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [{"memory": "pattern"}], "relations": []}
+
+        svc = MemoryService(config)
+        result = await svc.search_with_filters(
+            "react hooks",
+            metadata_filters={"category": "pattern"},
+            override_user_id="luke",
+        )
+
+        assert len(result.memories) == 1
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("filter_memories") is True
+        filters = call_kwargs.get("filters", {})
+        # Verify user_id is "luke"
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "luke" in user_ids
+
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category_propagates_flags(self, mock_client_cls):
+        """search_by_category propagates feature flags via search_with_filters."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search_by_category("voice", query="brand tone")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        # Flags should be passed through
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_use_criteria_false_with_all_other_flags(self, mock_client_cls):
+        """use_criteria=False per-call with all other config flags enabled."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = True
+        config.mem0_use_criteria = True  # Config says yes
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test", use_criteria=False)  # Per-call says no
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("filter_memories") is True
+        assert call_kwargs.get("use_criteria") is False  # Per-call override
