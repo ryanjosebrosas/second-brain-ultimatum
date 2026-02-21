@@ -885,6 +885,7 @@ async def multimodal_vector_search(
 @server.tool()
 async def create_content(
     prompt: str, content_type: str = "linkedin", user_id: str = "",
+    structure_hint: str = "",
 ) -> str:
     """Create content using your brand voice, patterns, and accumulated knowledge.
     Loads voice guide, relevant examples, and patterns before generating.
@@ -904,6 +905,8 @@ async def create_content(
                       landing-page, essay, or any custom type (default: linkedin)
         user_id: Voice profile to use (e.g., "uttam", "robert").
                  Empty = use default profile.
+        structure_hint: Optional template body or structure guide. When provided,
+                       overrides the content type's default structure.
     """
     try:
         prompt = _validate_mcp_input(prompt, label="prompt")
@@ -932,6 +935,13 @@ async def create_content(
     if effective_uid:
         agent_prompt += f"\n\nVoice profile: {effective_uid}"
     agent_prompt += f"\n\n{prompt}"
+    if structure_hint:
+        agent_prompt += (
+            "\n\n## Structure Template (MANDATORY)\n"
+            "Follow this template structure exactly — match every section, "
+            "heading, and flow. Fill in the placeholders with relevant content:\n\n"
+            f"{structure_hint}"
+        )
 
     timeout = deps.config.api_timeout_seconds
     try:
@@ -2753,6 +2763,62 @@ async def get_template(template_id: str) -> str:
     except Exception as e:
         logger.error("Failed to get template: %s", e)
         return "Failed to get template. Check server logs for details."
+
+
+@server.tool()
+async def write_linkedin_hooks(
+    topic: str, hook_type: str = "", user_id: str = "",
+) -> str:
+    """Generate scroll-stopping LinkedIn hook variations for a topic.
+    Returns 3-7 hook options across different categories.
+
+    When to use: Before writing a LinkedIn post, when you need a strong opening
+    line. Use with create_content for the full post.
+
+    Args:
+        topic: What the post is about (e.g., "launching a coaching business",
+               "lessons from failing at email marketing")
+        hook_type: Optional preferred hook category — bold-statement,
+                   self-deprecating, curiosity-gap, contrarian, stat-lead,
+                   question, dialogue-scene, meta-platform
+        user_id: Voice profile to match (e.g., "uttam"). Empty = default.
+    """
+    try:
+        topic = _validate_mcp_input(topic, label="topic")
+    except ValueError as e:
+        return str(e)
+    try:
+        effective_uid = _validate_user_id(user_id)
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+    model = _get_model("hook_writer")
+    from second_brain.agents.hook_writer import hook_writer_agent
+
+    prompt = f"Write LinkedIn hooks for: {topic}"
+    if hook_type:
+        prompt += f"\nPreferred hook category: {hook_type}"
+    if effective_uid:
+        prompt += f"\nVoice profile: {effective_uid}"
+
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await hook_writer_agent.run(prompt, deps=deps, model=model)
+    except TimeoutError:
+        return f"Hook writing timed out after {timeout}s."
+    out = result.output
+
+    parts = [f"# LinkedIn Hooks: {topic}\n"]
+    parts.append(f"**Category**: {out.hook_type}")
+    parts.append(f"**Angle**: {out.topic_angle}\n")
+    for i, hook in enumerate(out.hooks, 1):
+        parts.append(f"{i}. {hook}")
+    if out.reasoning:
+        parts.append(f"\n**Why these work**: {out.reasoning}")
+
+    return "\n".join(parts)
 
 
 if __name__ == "__main__":

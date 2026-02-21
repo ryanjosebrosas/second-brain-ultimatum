@@ -63,5 +63,10 @@ def get_agent_registry() -> dict[str, tuple[Any, str]]:
         registry["specialist"] = (specialist_agent, "Claude Code expertise")
     except ImportError:
         pass
+    try:
+        from second_brain.agents.hook_writer import hook_writer_agent
+        registry["hook_writer"] = (hook_writer_agent, "LinkedIn hook generation")
+    except ImportError:
+        pass
 
     return registry

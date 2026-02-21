@@ -1050,6 +1050,33 @@ def ask_specialist(question: str):
     asyncio.run(run())
 
 
+@cli.command("seed-templates")
+@click.option("--user-id", default="uttam", help="User ID to seed templates for")
+def seed_templates_cmd(user_id: str):
+    """Seed the template bank with LinkedIn post templates."""
+    from scripts.seed_linkedin_templates import seed_templates
+
+    click.echo(f"Seeding LinkedIn templates for user '{user_id}'...")
+    asyncio.run(seed_templates(user_id))
+
+
+@cli.command("ingest-linkedin")
+@click.argument("csv_path")
+@click.option("--user-id", default="uttam", help="User ID for data ownership")
+@click.option("--dry-run", is_flag=True, help="Parse only, don't write to DB")
+@click.option("--min-length", default=100, help="Min post length to include")
+def ingest_linkedin_cmd(csv_path: str, user_id: str, dry_run: bool, min_length: int):
+    """Ingest LinkedIn CSV posts into the examples table."""
+    from scripts.ingest_linkedin_csv import ingest_posts
+
+    asyncio.run(ingest_posts(
+        csv_path=csv_path,
+        user_id=user_id,
+        dry_run=dry_run,
+        min_length=min_length,
+    ))
+
+
 @cli.command()
 def migrate():
     """Migrate markdown data to Mem0 + Supabase."""

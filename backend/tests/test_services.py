@@ -2764,3 +2764,88 @@ class TestMemoryServiceUserOverride:
             assert svc._effective_user_id("uttam") == "uttam"
             assert svc._effective_user_id(None) == "brainforge"
             assert svc._effective_user_id("") == "brainforge"
+
+
+class TestMem0NativeRerank:
+    """Tests for Mem0 Platform native reranking (rerank=True)."""
+
+    @patch("mem0.MemoryClient")
+    async def test_search_passes_rerank_when_enabled(self, MockClient):
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.mem0_rerank = True
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        service = MemoryService(config)
+        await service.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_no_rerank_when_disabled(self, MockClient):
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        service = MemoryService(config)
+        await service.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "rerank" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_passes_rerank(self, MockClient):
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.mem0_rerank = True
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        service = MemoryService(config)
+        await service.search_with_filters("test query", metadata_filters={"category": "pattern"})
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_rerank_default_enabled(self, MockClient):
+        """mem0_rerank defaults to True — rerank should be passed by default."""
+        mock_client = MockClient.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        config = MagicMock()
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "brainforge"
+        config.memory_search_limit = 10
+        config.mem0_keyword_search = False
+        config.mem0_rerank = True  # Default value
+        config.service_timeout_seconds = 10
+        config.graph_provider = "none"
+
+        service = MemoryService(config)
+        await service.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True

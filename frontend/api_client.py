@@ -28,7 +28,7 @@ def _get_client() -> httpx.Client:
 def check_api_health(timeout: float = 3.0) -> bool:
     """Check if the API server is reachable. Used by app.py sidebar."""
     try:
-        response = _get_client().get("/health/metrics", timeout=timeout)
+        response = _get_client().get("/health/live", timeout=timeout)
         return response.status_code == 200
     except Exception as e:
         logger.warning("API health check failed: %s", type(e).__name__)

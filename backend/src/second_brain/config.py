@@ -307,6 +307,10 @@ class BrainConfig(BaseSettings):
         default=True,
         description="Enable Mem0 Cloud hybrid keyword+semantic search. +10ms latency, better recall.",
     )
+    mem0_rerank: bool = Field(
+        default=True,
+        description="Enable Mem0 Platform native reranking (rerank=True). Adds ~150-200ms latency but improves result ordering.",
+    )
     retrieval_oversample_factor: int = Field(
         default=3,
         ge=1,

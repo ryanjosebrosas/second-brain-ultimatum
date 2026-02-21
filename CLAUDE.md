@@ -59,6 +59,11 @@ A comprehensive AI-assisted development methodology + the Second Brain MCP backe
 
 ---
 
+## Archon Integration
+@sections/06_archon_workflow.md
+
+---
+
 ## On-Demand Guides
 
 > All guides in `reference/`. Load when the task requires it.
@@ -72,7 +77,6 @@ A comprehensive AI-assisted development methodology + the Second Brain MCP backe
 | `file-structure` | File location lookup |
 | `command-design-framework` | Slash command design |
 | `subagents-deep-dive` | Subagent creation |
-| `archon-workflow` | Archon tasks / RAG |
 
 ---
 

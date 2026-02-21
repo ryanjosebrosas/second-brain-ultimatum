@@ -222,6 +222,8 @@ class MemoryService(MemoryServiceBase):
         }
         if self.config.mem0_keyword_search:
             kwargs["keyword_search"] = True
+        if self.config.mem0_rerank:
+            kwargs["rerank"] = True
         try:
             logger.debug("Mem0 search kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
 
@@ -288,6 +290,8 @@ class MemoryService(MemoryServiceBase):
         }
         if self.config.mem0_keyword_search:
             kwargs["keyword_search"] = True
+        if self.config.mem0_rerank:
+            kwargs["rerank"] = True
 
         try:
             logger.debug("Mem0 search_with_filters kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})

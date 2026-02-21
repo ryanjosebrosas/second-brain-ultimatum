@@ -51,6 +51,7 @@ async def deconstruct_content(
     model=Depends(get_model),
 ) -> dict[str, Any]:
     """AI-deconstruct content into a template blueprint."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
     from second_brain.agents.template_builder import template_builder_agent
 
     prompt = body.content
@@ -62,6 +63,8 @@ async def deconstruct_content(
             result = await template_builder_agent.run(prompt, deps=deps, model=model)
     except TimeoutError:
         raise HTTPException(504, detail=f"Deconstruction timed out after {timeout}s")
+    except UnexpectedModelBehavior as e:
+        raise HTTPException(422, detail=f"Deconstruction failed after retries: {e}")
     return result.output.model_dump()
 
 

@@ -26,11 +26,18 @@ class LearnRequest(BaseModel):
 class CreateContentRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=10000)
     content_type: str = Field(default="linkedin")
+    user_id: str = Field(default="", description="Voice profile to use (e.g., 'uttam', 'robert'). Empty = default.")
+    structure_hint: str = Field(
+        default="",
+        description="Template body or structure hint to guide content structure. "
+        "When provided, overrides the content type's default structure_hint.",
+    )
 
 
 class ReviewContentRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=10000)
     content_type: str | None = Field(default=None)
+    user_id: str = Field(default="", description="Voice profile for voice alignment scoring. Empty = default.")
 
 
 class CoachingRequest(BaseModel):

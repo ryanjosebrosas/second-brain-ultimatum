@@ -121,16 +121,25 @@ async def learn(body: LearnRequest, deps: BrainDeps = Depends(get_deps), model: 
 @router.post("/create")
 async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(get_deps), model: "Model" = Depends(get_model)) -> dict[str, Any]:
     """Draft content in your voice using brain knowledge."""
+    # Validate user_id against allowed list
+    effective_uid = body.user_id.strip().lower() if body.user_id and body.user_id.strip() else None
+    if effective_uid:
+        allowed = deps.config.allowed_user_ids_list
+        if allowed and effective_uid not in allowed:
+            raise HTTPException(400, detail=f"Unknown user_id '{effective_uid}'. Allowed: {', '.join(allowed)}")
+
     registry = deps.get_content_type_registry()
     type_config = await registry.get(body.content_type)
     if not type_config:
         available = await registry.slugs()
         raise HTTPException(400, detail=f"Unknown content type '{body.content_type}'. Available: {', '.join(available)}")
 
-    # Pre-load voice guide
+    # Pre-load voice guide (scoped to user_id if provided)
     voice_sections = []
     try:
-        voice_content = await deps.storage_service.get_memory_content("style-voice")
+        voice_content = await deps.storage_service.get_memory_content(
+            "style-voice", override_user_id=effective_uid,
+        )
         if voice_content:
             for item in voice_content:
                 title = item.get("title", "Untitled")
@@ -139,10 +148,12 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
     except Exception:
         logger.debug("Failed to pre-load voice guide")
 
-    # Pre-load examples
+    # Pre-load examples (scoped to user_id if provided)
     example_sections = []
     try:
-        examples = await deps.storage_service.get_examples(content_type=body.content_type)
+        examples = await deps.storage_service.get_examples(
+            content_type=body.content_type, override_user_id=effective_uid,
+        )
         if examples:
             limit = deps.config.experience_limit
             for ex in examples[:limit]:
@@ -155,8 +166,16 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
     # Build enhanced prompt (mirrors mcp_server.py create_content)
     enhanced_parts = [
         f"Content type: {type_config.name} ({body.content_type})",
-        f"Structure: {type_config.structure_hint}",
     ]
+    if body.structure_hint:
+        enhanced_parts.append(
+            "\n## Structure Template (MANDATORY)\n"
+            "Follow this template structure exactly — match every section, "
+            "heading, and flow. Fill in the placeholders with relevant content:\n\n"
+            f"{body.structure_hint}"
+        )
+    elif type_config.structure_hint:
+        enhanced_parts.append(f"Structure: {type_config.structure_hint}")
     if type_config.length_guidance:
         enhanced_parts.append(f"Length: {type_config.length_guidance}")
     elif type_config.max_words:
@@ -164,6 +183,8 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
             f"Typical length: around {type_config.max_words} words, "
             "but adjust to fit the content"
         )
+    if effective_uid:
+        enhanced_parts.append(f"\nVoice profile: {effective_uid}")
     if voice_sections:
         enhanced_parts.append("\n## Your Voice & Tone Guide\n" + "\n\n".join(voice_sections))
     else:

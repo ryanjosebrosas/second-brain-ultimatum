@@ -1021,3 +1021,26 @@ class TestAllowedUserIds:
         )
         assert "uttam" not in config.allowed_user_ids_list
         assert config.allowed_user_ids_list == ["alice", "bob"]
+
+
+class TestMem0RerankConfig:
+    """Tests for mem0_rerank config field."""
+
+    def test_mem0_rerank_default_true(self, tmp_path):
+        """mem0_rerank defaults to True."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        assert config.mem0_rerank is True
+
+    def test_mem0_rerank_can_disable(self, tmp_path, monkeypatch):
+        """mem0_rerank can be disabled via env var."""
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_KEY", "test-key")
+        monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
+        monkeypatch.setenv("MEM0_RERANK", "false")
+        config = BrainConfig(_env_file=None)
+        assert config.mem0_rerank is False

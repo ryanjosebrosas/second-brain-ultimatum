@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 template_builder_agent = Agent(
     deps_type=BrainDeps,
     output_type=DeconstructedTemplate,
-    retries=3,
+    retries=5,
     instructions=(
         "You are a master of content analysis, frameworks, structural understanding, "
         "and template creation. You identify and interpret implicit information with ease "

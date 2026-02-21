@@ -23,6 +23,8 @@ _STATUS_ICONS: dict[str, str] = {
     "issue": ":material/error:",
 }
 
+_VOICE_PROFILES = ["Default", "uttam", "robert", "luke"]
+
 st.title(":material/edit: Content Studio")
 
 tab_create, tab_review, tab_ingest = st.tabs(["Create", "Review", "Ingest"])
@@ -89,6 +91,16 @@ with tab_create:
                 selected_key = list(content_types.keys())[0] if content_types else "linkedin"
                 selected_type = content_types.get(selected_key, {})
 
+        # Voice profile selector
+        selected_voice = st.selectbox(
+            "Voice Profile",
+            options=_VOICE_PROFILES,
+            index=0,
+            key="create_voice_profile",
+            help="Select whose writing voice and style to use for this content.",
+        )
+        voice_user_id = "" if selected_voice == "Default" else selected_voice
+
         # Show type details
         type_name = selected_type.get("name", selected_key)
         type_desc = selected_type.get("description", "")
@@ -98,15 +110,14 @@ with tab_create:
 
         # --- Template selector ---
         selected_template_body = ""
-        chosen_template = None
         try:
             tmpl_response = _get_cached_templates(selected_key)
             tmpl_list = tmpl_response.get("templates", []) if isinstance(tmpl_response, dict) else []
         except Exception:
             tmpl_list = []
 
+        st.markdown("#### Template (optional)")
         if tmpl_list:
-            st.markdown("#### Use a Template (optional)")
             tmpl_names = ["None — write from scratch"] + [
                 t.get("name", "Untitled") for t in tmpl_list
             ]
@@ -119,25 +130,10 @@ with tab_create:
             if tmpl_choice and tmpl_choice > 0:
                 chosen_template = tmpl_list[tmpl_choice - 1]
                 selected_template_body = chosen_template.get("body", "")
-                if chosen_template.get("when_to_use"):
-                    st.caption(f"When to use: {chosen_template['when_to_use']}")
-                if chosen_template.get("customization_guide"):
-                    with st.expander("Customization Guide"):
-                        st.markdown(chosen_template["customization_guide"])
-
-        # Structure Guide — template body IS the structure; fall back to content type hint
-        if chosen_template and chosen_template.get("body"):
-            hint = chosen_template["body"]
+                if selected_template_body:
+                    st.code(selected_template_body, language=None)
         else:
-            hint = selected_type.get("structure_hint", "")
-        if hint:
-            with st.expander("Structure Guide", expanded=bool(chosen_template)):
-                st.code(hint, language=None) if chosen_template else st.markdown(hint)
-
-        # Writeprint — show if template has one
-        if chosen_template and chosen_template.get("writeprint"):
-            with st.expander("Voice & Tone Guide"):
-                st.markdown(chosen_template["writeprint"])
+            st.caption("No templates available for this content type.")
 
         # Input form
         prompt = st.text_area(
@@ -149,10 +145,15 @@ with tab_create:
         if st.button("Create", type="primary", disabled=not prompt):
             with st.spinner("Creating content..."):
                 try:
-                    result = api_client.call_agent("/create", {
+                    payload = {
                         "prompt": prompt,
                         "content_type": selected_key,
-                    })
+                    }
+                    if voice_user_id:
+                        payload["user_id"] = voice_user_id
+                    if selected_template_body:
+                        payload["structure_hint"] = selected_template_body
+                    result = api_client.call_agent("/create", payload)
 
                     # Store draft for review tab
                     st.session_state["last_draft"] = result
@@ -237,12 +238,24 @@ with tab_review:
         if review_slugs[review_idx] != "auto":
             review_type = review_slugs[review_idx]
 
+    # Voice profile for voice alignment scoring
+    review_voice = st.selectbox(
+        "Voice Profile",
+        options=_VOICE_PROFILES,
+        index=0,
+        key="review_voice_profile",
+        help="Select whose voice to score alignment against.",
+    )
+    review_voice_id = "" if review_voice == "Default" else review_voice
+
     if st.button("Review", type="primary", disabled=not review_content):
         with st.spinner("Reviewing content..."):
             try:
                 payload = {"content": review_content}
                 if review_type:
                     payload["content_type"] = review_type
+                if review_voice_id:
+                    payload["user_id"] = review_voice_id
 
                 result = api_client.call_agent("/review", payload)
 

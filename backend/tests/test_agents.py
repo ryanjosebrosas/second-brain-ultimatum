@@ -1268,17 +1268,57 @@ class TestGraphIntegration:
         assert "enable_graph" not in call_kwargs, "enable_graph is not valid on Mem0 search endpoint"
 
     async def test_create_find_patterns_no_enable_graph(self, mock_deps):
-        """find_applicable_patterns should not pass enable_graph (removed in Mem0 v1.0.0 cleanup)."""
+        """find_applicable_patterns uses Mem0 semantic+graph and Supabase patterns (no Voyage rerank)."""
         from second_brain.agents.create import create_agent
         tool_fn = create_agent._function_toolset.tools["find_applicable_patterns"]
         mock_ctx = MagicMock()
         mock_ctx.deps = mock_deps
 
-        await tool_fn.function(mock_ctx, topic="hooks", content_type="linkedin")
+        result = await tool_fn.function(mock_ctx, topic="hooks", content_type="linkedin")
 
+        # Mem0 semantic search called
+        mock_deps.memory_service.search.assert_called_once_with("hooks")
+        # Mem0 filtered pattern search called
         mock_deps.memory_service.search_with_filters.assert_called_once()
         call_kwargs = mock_deps.memory_service.search_with_filters.call_args[1]
         assert "enable_graph" not in call_kwargs, "enable_graph is not valid on Mem0 search endpoint"
+        # Supabase patterns called
+        mock_deps.storage_service.get_patterns.assert_called_once()
+        # Returns a string
+        assert isinstance(result, str)
+
+    async def test_create_find_patterns_no_voyage_rerank(self, mock_deps):
+        """find_applicable_patterns should NOT call Voyage rerank — Mem0 reranks natively."""
+        from second_brain.agents.create import create_agent
+        tool_fn = create_agent._function_toolset.tools["find_applicable_patterns"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        await tool_fn.function(mock_ctx, topic="leadership", content_type="blog-post")
+
+        # Voyage rerank should NOT be called — Mem0 handles reranking natively
+        mock_deps.voyage_service.rerank.assert_not_called()
+
+    async def test_create_find_patterns_uses_mem0_relations(self, mock_deps):
+        """find_applicable_patterns should include Mem0 graph relations in output."""
+        from second_brain.agents.create import create_agent
+        from second_brain.services.search_result import SearchResult
+
+        # Set up Mem0 search to return relations
+        mock_deps.memory_service.search = AsyncMock(return_value=SearchResult(
+            memories=[{"memory": "Test memory", "score": 0.9}],
+            relations=[{"source": "leadership", "relationship": "relates_to", "target": "management"}],
+        ))
+
+        tool_fn = create_agent._function_toolset.tools["find_applicable_patterns"]
+        mock_ctx = MagicMock()
+        mock_ctx.deps = mock_deps
+
+        result = await tool_fn.function(mock_ctx, topic="leadership")
+
+        # Relations from Mem0 graph should appear in the formatted output
+        assert "leadership" in result
+        assert "management" in result
 
     async def test_ask_find_experiences_passes_graph(self, mock_deps):
         from second_brain.agents.ask import ask_agent

@@ -685,15 +685,33 @@ DEFAULT_CONTENT_TYPES: dict[str, ContentTypeConfig] = {
         is_builtin=True,
         writing_instructions=(
             "LINKEDIN RULES:\n"
-            "1. First line is the hook — must stop the scroll\n"
-            "2. Use short paragraphs (1-2 sentences each)\n"
-            "3. Include a clear CTA or question at the end\n"
-            "4. No hashtag spam — 3-5 relevant hashtags max\n"
-            "5. Write conversationally, not corporately"
+            "1. First line is the HOOK — must stop the scroll. Categories:\n"
+            "   - Bold Statement: 'I did it. $1M in earnings with less than 100K followers.'\n"
+            "   - Self-Deprecating: 'As blunders go, this is a fairly substantial one.'\n"
+            "   - Curiosity Gap: 'This is gonna make the business strategists cry...'\n"
+            "   - Contrarian: 'Stop wasting decades chasing titles that won't matter when you're 60.'\n"
+            "   - Stat/Number Lead: '12 months and 70lbs between these photos.'\n"
+            "   - Question Hook: 'How do I launch my coaching business if I don't have a niche yet?'\n"
+            "   - Dialogue/Scene: 'An older lady approached me and my dog while we sat on a bench...'\n"
+            "   - Meta/Platform: 'Me: Takes a few days off posting. LinkedIn: DID YOU DIE?'\n"
+            "2. Use short paragraphs (1-2 sentences each) with generous white space\n"
+            "3. LinkedIn truncates at ~210 chars — hook must work BEFORE 'see more'\n"
+            "4. Post structures that work:\n"
+            "   - Origin Story: Time anchor -> Scene -> Obstacle -> Decision -> Results -> Moral\n"
+            "   - Vulnerability Confession: Bold stat -> Defense -> Transformation list -> Empowerment CTA\n"
+            "   - Results Breakdown: Bold claim -> Proof -> Numbered lessons -> CTA\n"
+            "   - Contrarian Advice: Counter-intuitive hook -> 'I used to...' -> What changed -> Framework\n"
+            "   - Listicle Framework: Question hook -> Examples -> Numbered proof -> CTA\n"
+            "   - Hot Take: Provocative opener -> Punchline (mic drop, no CTA needed)\n"
+            "5. Include a clear CTA or question at the end\n"
+            "6. No hashtag spam — 3-5 relevant hashtags max, or none\n"
+            "7. Write conversationally, not corporately\n"
+            "8. Use emoji sparingly — for emphasis, not decoration"
         ),
         length_guidance=(
-            "Let it breathe — short posts (50-150 words) or long-form thought "
-            "leadership (300-800 words) both work. Match length to the depth of the idea."
+            "Let it breathe — short posts (50-150 words) for hot takes and quips, "
+            "or long-form thought leadership (300-800 words) for stories and frameworks. "
+            "Match length to the depth of the idea."
         ),
         validation_rules={"min_words": 30},
         ui_config={"icon": "linkedin", "color": "#0077b5", "category": "social"},
@@ -1086,6 +1104,30 @@ class DeconstructedTemplate(BaseModel):
     customization_guide: str = Field(default="", description="What parts to customize vs keep standard")
     tags: list[str] = Field(default_factory=list, description="Suggested tags for categorization")
     estimated_time_savings: str = Field(default="", description="Time saved per use")
+
+
+class HookWriterResult(BaseModel):
+    """Output from the LinkedIn Hook Writer agent."""
+
+    hooks: list[str] = Field(
+        description="Generated LinkedIn hook variations (3-7 options)"
+    )
+    hook_type: str = Field(
+        description="Primary hook category used: bold-statement, self-deprecating, "
+        "curiosity-gap, contrarian, stat-lead, question, dialogue-scene, meta-platform"
+    )
+    topic_angle: str = Field(
+        description="The angle or framing applied to the topic"
+    )
+    reasoning: str = Field(
+        default="",
+        description="Brief explanation of why these hooks fit the topic and audience",
+    )
+    error: str = Field(
+        default="",
+        description="Error message when backend services are degraded. "
+        "When set, minimal output is expected and should not trigger retries.",
+    )
 
 
 # --- Operations & Advisory Agents ---

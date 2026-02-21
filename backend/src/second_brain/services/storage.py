@@ -557,7 +557,9 @@ class StorageService:
     async def upsert_example(self, example: dict) -> dict:
         try:
             data = {**example, "user_id": self.user_id}
-            query = self._client.table("examples").upsert(data)
+            query = self._client.table("examples").upsert(
+                data, on_conflict="content_type,source_file"
+            )
             result = await asyncio.to_thread(query.execute)
             return result.data[0] if result.data else {}
         except Exception as e:
@@ -579,7 +581,9 @@ class StorageService:
             try:
                 result = await self._with_timeout(
                     asyncio.to_thread(
-                        self._client.table("examples").upsert(chunk).execute
+                        self._client.table("examples").upsert(
+                            chunk, on_conflict="content_type,source_file"
+                        ).execute
                     )
                 )
                 inserted += len(result.data) if result.data else 0
@@ -923,8 +927,7 @@ class StorageService:
             logger.warning("hybrid_search timed out on %s after %ds", table, self._timeout)
             return []
         except Exception as e:
-            logger.warning("hybrid_search failed on %s: %s", table, type(e).__name__)
-            logger.debug("hybrid_search error detail: %s", e)
+            logger.warning("hybrid_search failed on %s: %s: %s", table, type(e).__name__, e)
             return []
 
     async def search_patterns_semantic(

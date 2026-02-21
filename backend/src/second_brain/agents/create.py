@@ -8,8 +8,6 @@ from second_brain.agents.utils import (
     format_memories,
     format_relations,
     load_voice_context,
-    rerank_memories,
-    search_with_graph_fallback,
     tool_error,
 )
 from second_brain.deps import BrainDeps
@@ -189,9 +187,10 @@ async def find_applicable_patterns(
         uid = voice_user_id if voice_user_id else None
 
         # Shared knowledge: topic memories from default user (brainforge)
+        # Mem0 handles reranking natively (rerank=True via config)
         result = await ctx.deps.memory_service.search(topic)
+        general_memories = result.memories
         general_relations = result.relations
-        reranked_general = await rerank_memories(ctx.deps, topic, result.memories)
 
         # Voice-scoped: writing patterns from the target user
         pattern_memories = []
@@ -217,15 +216,10 @@ async def find_applicable_patterns(
         except Exception:
             logger.debug("Semantic pattern search failed in create_agent")
 
-        pattern_memories = await rerank_memories(ctx.deps, topic, pattern_memories)
-
-        # Also check Graphiti for deeper entity relationships
-        graphiti_relations = await search_with_graph_fallback(ctx.deps, topic)
-
-        # Fall back to Supabase patterns (structured data)
+        # Supabase patterns (structured data)
         patterns = await ctx.deps.storage_service.get_patterns()
 
-        # Filter patterns by content type if provided (Supabase fallback)
+        # Filter patterns by content type if provided
         if content_type and patterns:
             type_specific = [
                 p for p in patterns
@@ -257,15 +251,15 @@ async def find_applicable_patterns(
                 )
             sections.append("\n".join(pattern_lines))
 
-        if reranked_general:
+        if general_memories:
             mem_lines = ["## Semantic Memory"]
-            for m in reranked_general[:5]:
+            for m in general_memories[:5]:
                 memory = m.get("memory", m.get("result", ""))
                 mem_lines.append(f"- {memory}")
             sections.append("\n".join(mem_lines))
 
-        # Merge all graph relations (general + pattern + Graphiti)
-        all_relations = (general_relations or []) + pattern_relations + graphiti_relations
+        # Graph relations from Mem0 (semantic + pattern searches)
+        all_relations = (general_relations or []) + pattern_relations
         rel_text = format_relations(all_relations)
         if rel_text:
             sections.append(rel_text)
