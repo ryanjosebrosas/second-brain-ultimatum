@@ -4,14 +4,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests: 1324 passing](https://img.shields.io/badge/tests-1324_passing-brightgreen.svg)](#tests)
-[![MCP Tools: 49](https://img.shields.io/badge/MCP_tools-49-purple.svg)](#mcp-tool-reference)
+[![Tests: 1706 passing](https://img.shields.io/badge/tests-1706_passing-brightgreen.svg)](#tests)
+[![MCP Tools: 55](https://img.shields.io/badge/MCP_tools-55-purple.svg)](#mcp-tool-reference)
 
 Your AI forgets everything between sessions. Second Brain fixes that.
 
-13 Pydantic AI agents expose **49 MCP tools** that give Claude (or any MCP client) persistent recall of your decisions, patterns, voice, and priorities — backed by Mem0 semantic memory, Supabase/pgvector hybrid search, and Voyage AI multimodal embeddings. Text, images, PDFs, video — all searchable in one shared vector space.
+16 Pydantic AI agents expose **55 MCP tools** that give Claude (or any MCP client) persistent recall of your decisions, patterns, voice, and priorities — backed by Mem0 semantic memory, Supabase/pgvector hybrid search, and Voyage AI multimodal embeddings. Text, images, PDFs, video — all searchable in one shared vector space.
 
-Three interfaces: **MCP server** for Claude Code, **REST API** (FastAPI, 45+ endpoints) for custom frontends, **CLI** for scripts. Ships with a **Streamlit dashboard** out of the box.
+Three interfaces: **MCP server** for Claude Code, **REST API** (FastAPI, 50+ endpoints) for custom frontends, **CLI** for scripts. Ships with a **Streamlit dashboard** out of the box.
 
 ---
 
@@ -21,6 +21,7 @@ Three interfaces: **MCP server** for Claude Code, **REST API** (FastAPI, 45+ end
 - [Quickstart](#quickstart)
 - [Features](#features)
 - [MCP Tool Reference](#mcp-tool-reference)
+- [Agents](#agents)
 - [Setup](#setup)
 - [Docker](#docker)
 - [MCP Integration](#mcp-integration)
@@ -58,7 +59,7 @@ cp .env.example .env
 Edit `.env` with your keys:
 ```bash
 ANTHROPIC_API_KEY=sk-...       # Or any LLM provider key (OpenAI, Groq, Ollama)
-MEM0_API_KEY=m0-...            # Mem0 cloud memory (or omit for local Qdrant)
+MEM0_API_KEY=m0-...            # Mem0 cloud memory
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=eyJ...
 BRAIN_USER_ID=your-name        # Data isolation identifier
@@ -68,8 +69,8 @@ BRAIN_USER_ID=your-name        # Data isolation identifier
 
 ```bash
 pip install -e ".[dev]"
-# Apply all 21 SQL migrations via Supabase dashboard or CLI
-# Migrations in: backend/supabase/migrations/ (001–020)
+# Apply all 24 SQL migrations via Supabase dashboard or CLI
+# Migrations in: backend/supabase/migrations/ (001–024)
 ```
 
 ### 3. Start
@@ -90,7 +91,7 @@ docker compose up -d
 # MCP: http://localhost:8000  |  API: http://localhost:8001  |  Dashboard: http://localhost:8501
 ```
 
-All 13 agents and 49 tools are now available. See [MCP Integration](#mcp-integration) for Claude Code/Desktop configuration.
+All 16 agents and 55 tools are now available. See [MCP Integration](#mcp-integration) for Claude Code/Desktop configuration.
 
 ---
 
@@ -101,11 +102,19 @@ All 13 agents and 49 tools are now available. See [MCP Integration](#mcp-integra
 - **Hybrid search** — combines Mem0 semantic memory, pgvector similarity, and BM25 full-text search with Reciprocal Rank Fusion (RRF)
 - **Voyage AI reranking** — results reranked with `rerank-2.5-lite` for precision
 - **Multimodal embeddings** — text, images, PDFs, and video indexed in one shared vector space via `voyage-multimodal-3.5`
+- **Criteria-based retrieval** — Mem0 v2 criteria retrieval for structured memory filtering
+- **Custom instructions** — persistent Mem0 custom instructions for context-aware extraction
 
 ### Content & Voice
 - **Voice-matched content generation** — creates landing pages, case studies, emails in your writing style
+- **Multi-user voice isolation** — 4 users supported (uttam, robert, luke, brainforge) with shared data but isolated voice/style
 - **Multi-dimension quality scoring** — 6 parallel reviewers score content across dimensions
 - **Content type system** — built-in and custom content types with templates, voice guides, and examples
+
+### LinkedIn & Social
+- **LinkedIn post writer** — generates posts matched to your voice with hook variations
+- **LinkedIn engagement agent** — creates thoughtful comments for engagement
+- **Hook writer** — generates attention-grabbing hooks using proven frameworks
 
 ### Operations
 - **Daily coaching** — Pomodoro-aware accountability coaching
@@ -114,15 +123,21 @@ All 13 agents and 49 tools are now available. See [MCP Integration](#mcp-integra
 
 ### Architecture
 - **Pluggable LLM providers** — Anthropic, OpenAI, Groq, Ollama (local + cloud) with automatic fallback chains
-- **Pluggable memory providers** — Mem0 (cloud), Graphiti/Neo4j (graph), or stub — switch via config
+- **Pluggable memory providers** — Mem0 (cloud), Graphiti/Neo4j (graph) — switch via config, zero code changes
 - **Three interfaces** — MCP server, REST API (FastAPI), CLI — all backed by the same agent layer
-- **Streamlit dashboard** — 7-page frontend for chat, memory browsing, content creation, settings
+- **Streamlit dashboard** — 8-page frontend for chat, memory browsing, content creation, templates, settings
+
+### Resilience
+- **Timeout protection** — all service calls have configurable timeouts (default 30s)
+- **Retry with backoff** — Tenacity-powered retries with exponential backoff and jitter
+- **Deterministic error detection** — validators detect backend failures without relying on LLM instruction-following
+- **Graceful degradation** — agents continue with general knowledge when backends are down
 
 ---
 
 ## MCP Tool Reference
 
-49 tools across 13 agent backends. Tools are grouped by function — use the "When to use" guidance in each tool's description to pick the right one.
+55 tools across 16 agent backends. Tools are grouped by function — use the "When to use" guidance in each tool's description to pick the right one.
 
 ### Memory & Recall (6 tools)
 
@@ -151,10 +166,21 @@ All 13 agents and 49 tools are now available. See [MCP Integration](#mcp-integra
 |------|-------------|
 | `ask` | Q&A with full brain context — answers using your stored knowledge, patterns, and experiences. |
 | `learn` | Extract patterns and insights from a work session or text. Stores to memory. |
-| `create_content` | Generate content (landing pages, emails, case studies) matched to your voice. |
-| `review_content` | Multi-dimension quality scoring — 6 parallel reviews covering different aspects. |
+| `create_content` | Generate content (landing pages, emails, case studies) matched to your voice. Accepts `user_id` for multi-user voice. |
+| `review_content` | Multi-dimension quality scoring — 6 parallel reviews covering different aspects. Accepts `user_id` for voice-specific review. |
 | `consolidate_brain` | Run the Chief of Staff to route a request to the right agent or pipeline. |
 | `run_brain_pipeline` | Execute a multi-step agent pipeline (e.g., learn → create → review). |
+
+### LinkedIn & Social (6 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `create_linkedin_post` | Generate LinkedIn posts in your voice with hook variations and CTA options. |
+| `create_linkedin_engagement` | Generate thoughtful comments for LinkedIn posts you want to engage with. |
+| `create_hooks` | Generate attention-grabbing hooks using proven frameworks (Question, Bold Claim, Story, Contrarian). |
+| `analyze_linkedin_post` | Analyze a LinkedIn post for engagement potential and improvement opportunities. |
+| `get_linkedin_templates` | Retrieve LinkedIn post templates and frameworks. |
+| `get_hook_frameworks` | List available hook writing frameworks with examples. |
 
 ### Graph Memory (7 tools)
 
@@ -227,6 +253,37 @@ All 13 agents and 49 tools are now available. See [MCP Integration](#mcp-integra
 
 ---
 
+## Agents
+
+16 specialized Pydantic AI agents, each with focused responsibilities:
+
+| Agent | File | Purpose |
+|-------|------|---------|
+| **recall_agent** | `recall.py` | Complexity-aware memory retrieval with hybrid search |
+| **ask_agent** | `ask.py` | Q&A with full brain context, graceful degradation |
+| **learn_agent** | `learn.py` | Pattern extraction from work sessions, stores to memory |
+| **create_agent** | `create.py` | Voice-matched content generation |
+| **review_agent** | `review.py` | Multi-dimension quality scoring (6 parallel reviewers) |
+| **chief_of_staff** | `chief_of_staff.py` | Request routing and pipeline orchestration |
+| **linkedin_writer** | `linkedin_writer.py` | LinkedIn post generation with hook variations |
+| **linkedin_engagement** | `linkedin_engagement.py` | Thoughtful LinkedIn comment generation |
+| **hook_writer** | `hook_writer.py` | Attention-grabbing hook generation |
+| **coach_agent** | `coach.py` | Daily accountability coaching |
+| **pmo_agent** | `pmo.py` | PMO-style task prioritization |
+| **email_agent** | `email_agent.py` | Email composition in brand voice |
+| **specialist_agent** | `specialist.py` | Claude Code / Pydantic AI expert Q&A |
+| **clarity_agent** | `clarity.py` | Readability and clarity analysis |
+| **synthesizer_agent** | `synthesizer.py` | Feedback consolidation |
+| **template_builder** | `template_builder.py` | Template opportunity detection |
+
+Each agent follows the same pattern:
+- Defined with `Agent(deps_type=BrainDeps, output_type=Schema, retries=N)`
+- Has `@agent.output_validator` for deterministic error detection
+- Has `@agent.tool` functions for backend operations
+- All tools use `tool_error()` for consistent error handling
+
+---
+
 ## Setup
 
 ### 1. Install
@@ -265,12 +322,18 @@ cp .env.example .env
 
 `MODEL_PROVIDER=auto` detects available keys: Anthropic → Ollama Cloud → Ollama Local.
 
-**Memory** (at least one required):
+**Memory** (required for full functionality):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEM0_API_KEY` | — | Mem0 cloud (primary). Omit for local Qdrant fallback |
-| `MEMORY_PROVIDER` | `mem0` | `mem0`, `graphiti`, or `none` |
+| `MEM0_API_KEY` | — | Mem0 cloud API key (required for MemoryService) |
+| `MEMORY_PROVIDER` | `mem0` | `mem0` or `graphiti` |
+
+**Multi-User Voice Isolation:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ALLOWED_USER_IDS` | `uttam,robert,luke,brainforge` | Comma-separated list of valid user IDs for voice isolation |
 
 **Optional:**
 
@@ -280,19 +343,20 @@ cp .env.example .env
 | `BRAIN_API_KEY` | `""` | REST API auth key (empty = no auth) |
 | `MCP_TRANSPORT` | `stdio` | `stdio`, `http`, `streamable-http` |
 | `GRAPHITI_ENABLED` | `false` | Enable Graphiti knowledge graph |
-| `NEO4J_URL` | — | Required if `GRAPH_PROVIDER=graphiti` |
+| `NEO4J_URL` | — | Required if `MEMORY_PROVIDER=graphiti` |
 | `MODEL_FALLBACK_CHAIN` | `""` | Comma-separated fallback providers |
 | `AGENT_MODEL_OVERRIDES` | `{}` | JSON dict for per-agent model selection |
+| `SERVICE_TIMEOUT_SECONDS` | `30` | Timeout for all service calls |
 
 See `.env.example` for the complete list with descriptions.
 
 ### 3. Database Migrations
 
-Apply all 21 migrations via Supabase dashboard or CLI:
+Apply all 24 migrations via Supabase dashboard or CLI:
 
 ```bash
 # Migrations in: backend/supabase/migrations/
-# Numbered 001 through 020 (019 has two files)
+# Numbered 001 through 024
 ```
 
 Key migrations:
@@ -300,7 +364,7 @@ Key migrations:
 - `011–015`: Quality gates, content types, vault support
 - `016–018`: User isolation (RLS policies, user_id columns)
 - `019`: HNSW vector indexes + GIN tag indexes
-- `020`: Hybrid search RPC (BM25 + pgvector fusion)
+- `020–024`: Hybrid search RPC, additional hardening
 
 ### 4. Start
 
@@ -349,9 +413,8 @@ The server supports three transport modes via the `MCP_TRANSPORT` environment va
 | **stdio** | `stdio` (default) | Local development — Claude Code spawns as subprocess |
 | **HTTP** | `http` | Docker / network — single `/mcp` endpoint, stateless |
 | **Streamable HTTP** | `streamable-http` | Alias for `http` (same behavior in FastMCP 2.x) |
-| **SSE** | `sse` | Legacy — Server-Sent Events (deprecated by MCP spec 2025-03-26) |
 
-Additional env vars for HTTP/SSE mode:
+Additional env vars for HTTP mode:
 
 ```bash
 MCP_HOST=0.0.0.0   # Bind address (default: 0.0.0.0)
@@ -360,7 +423,7 @@ MCP_PORT=8000       # Port (default: 8000, range: 1024-65535)
 
 ### Health Check
 
-When running in HTTP/SSE mode, a deep health endpoint is available:
+When running in HTTP mode, a deep health endpoint is available:
 
 ```bash
 curl http://localhost:8000/health
@@ -430,7 +493,7 @@ Claude Desktop requires the `mcp-remote` proxy to connect to HTTP MCP servers:
 
 ### Usage Examples
 
-Once connected, all 49 tools are available naturally:
+Once connected, all 55 tools are available naturally:
 
 ```
 Use quick_recall to find everything I know about authentication patterns.
@@ -444,33 +507,29 @@ Review this draft and score it across all dimensions.
 Coach me — what should I be focused on today?
 ```
 
-Manage projects and knowledge:
+LinkedIn engagement:
 
 ```
-List all my active projects.
+Create a LinkedIn post about launching our new AI feature.
 
-Update project "auth-system" — mark it as shipped.
+Write an engaging comment for this LinkedIn post: [paste post]
 
-Search patterns — find everything I've learned about rate limiting.
-
-Ingest this example into my brain: [paste code or content]
+Generate 5 hook variations for: "We just shipped the biggest update in company history"
 ```
 
-Multimodal content:
+Multi-user voice:
 
 ```
-Learn this image — it's my app's architecture diagram: [image URL]
+Create content as robert: Draft an email about the Q4 roadmap.
 
-Learn this PDF — it's the Supabase RLS guide: [PDF URL]
-
-Search across all my stored content (text + images) for "authentication flow".
+Review this draft using luke's voice standards.
 ```
 
 ---
 
 ## REST API
 
-FastAPI server with 45+ endpoints. Start with:
+FastAPI server with 50+ endpoints. Start with:
 
 ```bash
 uvicorn second_brain.api.main:app --host 0.0.0.0 --port 8001
@@ -483,12 +542,13 @@ Auth: Set `BRAIN_API_KEY` in `.env`. Pass as `X-API-Key` header. Empty = no auth
 | Group | Path | Methods | Description |
 |-------|------|---------|-------------|
 | Health | `/api/health/*` | GET | Metrics, growth, milestones, quality, setup status (no auth) |
-| Agents | `/api/recall`, `/api/ask`, `/api/learn`, etc. | POST | All 13 agents as REST endpoints |
+| Agents | `/api/recall`, `/api/ask`, `/api/learn`, etc. | POST | All 16 agents as REST endpoints |
 | Memory | `/api/search/*`, `/api/ingest/*` | GET/POST | Search examples, knowledge, patterns, experiences; ingest content |
 | Projects | `/api/projects/*` | CRUD | Project lifecycle management with artifacts |
 | Graph | `/api/graph/*` | GET/POST | Knowledge graph search and health |
 | Settings | `/api/settings/*` | GET | Active config and provider info |
 | Content Types | `/api/content-types` | GET/POST | Manage content type registry |
+| Templates | `/api/templates/*` | GET | Template bank access |
 | Items | `/api/items/{table}/{id}` | DELETE | Delete items by table and ID |
 
 Interactive docs at `http://localhost:8001/docs` (Swagger UI).
@@ -511,13 +571,14 @@ brain health            # Check brain health
 graph TB
     subgraph CLIENTS["Three Interfaces"]
         MCP["MCP Server<br/>Claude Code / Desktop"]
-        API["REST API<br/>FastAPI (45+ endpoints)"]
+        API["REST API<br/>FastAPI (50+ endpoints)"]
         CLI["CLI<br/>Click"]
     end
 
-    subgraph AGENTS["Agent Layer<br/>13 Pydantic AI agents → 49 MCP tools"]
+    subgraph AGENTS["Agent Layer<br/>16 Pydantic AI agents → 55 MCP tools"]
         MEMORY["Memory<br/>recall · quick_recall · recall_deep · learn"]
         CONTENT["Content<br/>create · review · clarity · synthesize"]
+        LINKEDIN["LinkedIn<br/>linkedin_writer · linkedin_engagement · hook_writer"]
         OPS["Operations<br/>coach · pmo · email · specialist"]
         ROUTING["Routing<br/>chief_of_staff · pipeline"]
     end
@@ -535,16 +596,19 @@ graph TB
 
 ```
 backend/src/second_brain/
-├── mcp_server.py          # 49 MCP tools (FastMCP 2.x)
+├── mcp_server.py          # 55 MCP tools (FastMCP 2.x)
 ├── api/                   # REST API (FastAPI)
 │   ├── main.py            # App factory, middleware, CORS
-│   └── routers/           # 6 route modules (agents, memory, projects, graph, health, settings)
-├── agents/                # 13 Pydantic AI agents (one per file)
+│   └── routers/           # 8 route modules
+├── agents/                # 16 Pydantic AI agents (one per file)
 │   ├── recall.py          # Complexity-aware recall with hybrid search
 │   ├── ask.py, learn.py   # Core knowledge agents
 │   ├── create.py          # Voice-matched content generation
 │   ├── review.py          # Multi-dimension scoring
 │   ├── chief_of_staff.py  # Routing orchestrator
+│   ├── linkedin_writer.py # LinkedIn post generation
+│   ├── linkedin_engagement.py # LinkedIn comment generation
+│   ├── hook_writer.py     # Hook generation
 │   └── ...                # coach, pmo, email, specialist, clarity, synthesizer, template_builder
 ├── services/              # External service wrappers
 │   ├── memory.py          # Mem0 semantic memory (retry + timeout hardened)
@@ -552,7 +616,7 @@ backend/src/second_brain/
 │   ├── embeddings.py      # Voyage AI embedding generation
 │   ├── voyage.py          # Voyage AI reranking
 │   ├── graphiti.py        # Neo4j knowledge graph (optional)
-│   ├── graphiti_memory.py # Graphiti ↔ MemoryServiceBase adapter
+│   ├── graphiti_memory.py # Graphiti ↔ MemoryServiceBase adapter (timeout hardened)
 │   └── abstract.py        # MemoryServiceBase ABC (14 methods)
 ├── providers/             # LLM provider registry
 │   ├── __init__.py        # BaseProvider ABC + PROVIDER_REGISTRY
@@ -599,7 +663,7 @@ sequenceDiagram
     M-->>U: "Found 5 matches (Mem0: 3, pgvector: 2)"
 ```
 
-### Error Handling
+### Error Handling & Resilience
 
 Three-tier error handling ensures agents never crash — they degrade gracefully:
 
@@ -610,20 +674,20 @@ graph TD
 
     AGENT["Agent Tools<br/>@agent.tool"] -->|"catches"| EX["Exception<br/>→ tool_error('name', e)"]
 
-    OUTPUT["Output Validation<br/>@agent.output_validator"] -->|"raises"| MR["ModelRetry(message)<br/>→ agent retries with guidance"]
+    OUTPUT["Output Validation<br/>@agent.output_validator"] -->|"deterministic check"| DET["all_tools_failed()?<br/>→ set error field, accept"]
+    OUTPUT -->|"raises"| MR["ModelRetry(message)<br/>→ agent retries with guidance"]
 
-    SVC["Service Layer"] -->|"logs + returns"| FB["empty fallback<br/>[] or {}"]
+    SVC["Service Layer"] -->|"timeout protection"| TO["asyncio.timeout()<br/>→ TimeoutError"]
+    SVC -->|"logs + returns"| FB["empty fallback<br/>[] or {}"]
 
     style MCP fill:#8e44ad,color:#fff
     style AGENT fill:#4a90d9,color:#fff
     style OUTPUT fill:#e67e22,color:#fff
     style SVC fill:#27ae60,color:#fff
-    style VE fill:#e74c3c,color:#fff
-    style TE fill:#e74c3c,color:#fff
-    style EX fill:#e74c3c,color:#fff
-    style MR fill:#f39c12,color:#fff
-    style FB fill:#95a5a6,color:#fff
+    style DET fill:#3498db,color:#fff
 ```
+
+**Deterministic error detection**: All memory-using agents (Recall, Ask, Learn) parse `ctx.messages` for tool outputs and call `all_tools_failed()`. When all backends are down, they set the `error` field and return immediately — no retry spirals.
 
 ---
 
@@ -631,53 +695,16 @@ graph TD
 
 Agents never talk to databases directly. External systems do the heavy lifting through a clean service abstraction — swappable at runtime via `MEMORY_PROVIDER`.
 
-```mermaid
-graph TD
-    subgraph "Service Layer"
-        MS["memory.py<br/>Mem0 wrapper"]
-        SS["storage.py<br/>Supabase CRUD + hybrid search"]
-        ES["embeddings.py<br/>Voyage AI / OpenAI"]
-        VS["voyage.py<br/>Voyage AI reranking"]
-        GS["graphiti.py<br/>Knowledge graph (optional)"]
-        HS["health.py<br/>Metrics + growth milestones"]
-    end
-
-    subgraph "External Systems"
-        MEM0[("Mem0<br/>Semantic memory store")]
-        SB[("Supabase<br/>PostgreSQL + pgvector")]
-        VAI[("Voyage AI<br/>voyage-multimodal-3.5")]
-        FK[("FalkorDB<br/>Graph database")]
-    end
-
-    MS <--> MEM0
-    SS <--> SB
-    ES <--> VAI
-    VS <--> VAI
-    GS <--> FK
-
-    style MS fill:#4a90d9,color:#fff
-    style SS fill:#4a90d9,color:#fff
-    style ES fill:#4a90d9,color:#fff
-    style VS fill:#4a90d9,color:#fff
-    style GS fill:#95a5a6,color:#fff
-    style HS fill:#4a90d9,color:#fff
-    style MEM0 fill:#e74c3c,color:#fff
-    style SB fill:#e74c3c,color:#fff
-    style VAI fill:#e74c3c,color:#fff
-    style FK fill:#95a5a6,color:#fff
-```
-
 | Service | Purpose |
 |---------|---------|
-| `memory.py` | Mem0 wrapper — add, search, and retrieve semantic memories. Retry/timeout hardened via Tenacity. Supports multimodal content |
+| `memory.py` | Mem0 wrapper — add, search, and retrieve semantic memories. Retry/timeout hardened via Tenacity. Supports multimodal content, criteria retrieval, and custom instructions |
 | `storage.py` | Supabase wrapper — CRUD for all structured data, hybrid search (BM25 + pgvector), `ContentTypeRegistry` for content type configs |
 | `embeddings.py` | Embedding generation via Voyage AI (primary) or OpenAI (fallback). Supports multimodal inputs via `embed_multimodal()` |
 | `voyage.py` | Voyage AI reranking + multimodal embeddings — `voyage-multimodal-3.5` embeds text, images, and video into a shared 1024-dim vector space |
 | `graphiti.py` | Knowledge graph via Graphiti + FalkorDB — entity and relationship extraction (optional) |
-| `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — complete drop-in replacement for Mem0, all 14 methods implemented |
+| `graphiti_memory.py` | Adapts Graphiti to the `MemoryServiceBase` interface — complete drop-in replacement for Mem0, all 14 methods implemented with timeout protection |
 | `health.py` | Brain metrics, growth milestones, and system health checks |
 | `retry.py` | Tenacity retry decorators for transient failures |
-| `search_result.py` | Shared data structures for search results across all retrieval methods |
 | `abstract.py` | Abstract base classes (`MemoryServiceBase`, etc.) for pluggable service implementations + stub services for testing |
 
 ---
@@ -688,11 +715,26 @@ graph TD
 
 | Provider | Backend | Config |
 |----------|---------|--------|
-| `mem0` (default) | Mem0 Cloud / local Qdrant | `MEMORY_PROVIDER=mem0` + `MEM0_API_KEY` |
+| `mem0` (default) | Mem0 Cloud | `MEMORY_PROVIDER=mem0` + `MEM0_API_KEY` |
 | `graphiti` | Neo4j knowledge graph | `MEMORY_PROVIDER=graphiti` + Neo4j vars |
-| `none` | Stub (no memory) | `MEMORY_PROVIDER=none` |
 
 All providers implement `MemoryServiceBase` (14 abstract methods). Switching is a config change — no code changes needed.
+
+### Multi-User Voice Isolation
+
+| User ID | Voice Profile |
+|---------|---------------|
+| `uttam` | Primary user voice |
+| `robert` | Alternative voice 1 |
+| `luke` | Alternative voice 2 |
+| `brainforge` | Brand voice |
+
+Shared data: memories, patterns, knowledge. Isolated per user: voice, writing style, content examples.
+
+Use `user_id` parameter on MCP tools:
+```
+Create content as robert: Draft an email about the roadmap.
+```
 
 ### Multimodal Support
 
@@ -704,10 +746,6 @@ All providers implement `MemoryServiceBase` (14 abstract methods). Switching is 
 | Mixed search | Text + image | `multimodal_vector_search` |
 
 Embeddings via Voyage `voyage-multimodal-3.5` — all content types share one vector space.
-
-### Multi-User Support
-
-Set `BRAIN_USER_ID` in `.env` to isolate data per user. All Supabase tables use row-level security (RLS) policies scoped to `user_id`. Mem0 memories are scoped via the `user_id` parameter.
 
 ### LLM Provider Fallback
 
@@ -729,13 +767,21 @@ AGENT_MODEL_OVERRIDES={"recall": "openai:gpt-4o", "create": "anthropic:claude-so
 
 ```bash
 cd backend
-pytest                          # All tests (1324+)
+pytest                          # All tests (1706+)
 pytest tests/test_agents.py     # Single file
 pytest -k "test_recall"         # Filter by name
 pytest -x                       # Stop on first failure
 ```
 
-25 test files covering agents, services, MCP tools, API endpoints, providers, config, CLI, and graph operations. See `backend/tests/` for the full list.
+31 test files covering agents, services, MCP tools, API endpoints, providers, config, CLI, and graph operations. Key test areas:
+
+- **Agent tests**: Validator behavior, error detection, output schemas
+- **Service tests**: Mem0, Supabase, Voyage AI, Graphiti integration
+- **MCP tests**: All 55 tools, input validation, timeout handling
+- **API tests**: REST endpoints via FastAPI TestClient
+- **Provider tests**: LLM provider registry, fallback chains
+
+Test count is tracked per commit (e.g., "1706 tests passing"). Never reduce count without explanation.
 
 ---
 
@@ -747,14 +793,16 @@ pytest -x                       # Stop on first failure
 | Agent Framework | Pydantic AI |
 | MCP Server | FastMCP 2.x |
 | REST API | FastAPI |
-| Memory | Mem0 (cloud/local) |
+| Memory | Mem0 (cloud) |
 | Database | Supabase (PostgreSQL + pgvector) |
 | Embeddings | Voyage AI (`voyage-multimodal-3.5`) |
 | Reranking | Voyage AI (`rerank-2.5-lite`) |
-| Knowledge Graph | Graphiti + Neo4j (optional) |
+| Knowledge Graph | Graphiti + Neo4j/FalkorDB (optional) |
 | Frontend | Streamlit |
 | CLI | Click |
 | LLM Providers | Anthropic, OpenAI, Groq, Ollama |
+| Retries | Tenacity |
+| Config | Pydantic Settings |
 
 ---
 
