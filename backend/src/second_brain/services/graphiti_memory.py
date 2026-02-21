@@ -93,7 +93,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             logger.warning("GraphitiMemoryAdapter.add timed out after %ds", self._timeout)
             return {}
         except Exception as e:
-            logger.debug("GraphitiMemoryAdapter.add error: %s", e)
+            logger.warning("GraphitiMemoryAdapter.add failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.add error detail: %s", e)
             return {}
 
     async def add_with_metadata(
@@ -164,7 +165,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             logger.warning("GraphitiMemoryAdapter.search timed out after %ds", self._timeout)
             return SearchResult()
         except Exception as e:
-            logger.debug("GraphitiMemoryAdapter.search error: %s", e)
+            logger.warning("GraphitiMemoryAdapter.search failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.search error detail: %s", e)
             return SearchResult()
 
     async def search_with_filters(
@@ -223,7 +225,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             logger.warning("GraphitiMemoryAdapter.search_with_filters timed out after %ds", self._timeout)
             return SearchResult(search_filters=metadata_filters or {})
         except Exception as e:
-            logger.debug("GraphitiMemoryAdapter.search_with_filters error: %s", e)
+            logger.warning("GraphitiMemoryAdapter.search_with_filters failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.search_with_filters error detail: %s", e)
             return SearchResult(search_filters=metadata_filters or {})
 
     async def search_by_category(
@@ -251,7 +254,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
             logger.warning("GraphitiMemoryAdapter.search_by_category timed out after %ds", self._timeout)
             return SearchResult()
         except Exception as e:
-            logger.debug("GraphitiMemoryAdapter.search_by_category error: %s", e)
+            logger.warning("GraphitiMemoryAdapter.search_by_category failed: %s", type(e).__name__)
+            logger.debug("GraphitiMemoryAdapter.search_by_category error detail: %s", e)
             return SearchResult()
 
     async def get_all(self) -> list[dict]:
