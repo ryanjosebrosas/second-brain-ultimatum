@@ -439,18 +439,6 @@ class BrainConfig(BaseSettings):
         },
         description="PMO priority scoring weights (must sum to 1.0)",
     )
-
-    @model_validator(mode="after")
-    def _validate_pmo_weights(self) -> "BrainConfig":
-        """Validate PMO score weights sum to 1.0."""
-        total = sum(self.pmo_score_weights.values())
-        if not (0.99 <= total <= 1.01):
-            raise ValueError(
-                f"pmo_score_weights must sum to 1.0, got {total:.3f}. "
-                f"Weights: {self.pmo_score_weights}"
-            )
-        return self
-
     @property
     def allowed_user_ids_list(self) -> list[str]:
         """Parse ALLOWED_USER_IDS into a list of user ID strings."""
