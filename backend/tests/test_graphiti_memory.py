@@ -14,6 +14,7 @@ from second_brain.services.search_result import SearchResult
 def mock_config():
     config = MagicMock()
     config.brain_user_id = "test-user"
+    config.service_timeout_seconds = 30
     return config
 
 

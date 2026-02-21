@@ -5,6 +5,7 @@ Used when MEMORY_PROVIDER=graphiti in config.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -46,6 +47,11 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         from second_brain.services.graphiti import GraphitiService
         self._graphiti: GraphitiService = GraphitiService(config)
         self.user_id: str = config.brain_user_id
+        self._timeout: int = config.service_timeout_seconds
+
+    def _effective_user_id(self, override: str | None = None) -> str:
+        """Return override if provided, else self.user_id (from config)."""
+        return override if override else self.user_id
 
     async def add(
         self,
@@ -55,10 +61,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     ) -> dict:
         """Add content as a Graphiti episode. Returns status dict."""
         try:
-            await self._graphiti.add_episode(
-                content, metadata=metadata, group_id=self.user_id
-            )
+            async with asyncio.timeout(self._timeout):
+                await self._graphiti.add_episode(
+                    content, metadata=metadata, group_id=self.user_id
+                )
             return {"status": "ok"}
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.add timed out after %ds", self._timeout)
+            return {}
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.add error: %s", e)
             return {}
@@ -114,13 +124,17 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         Populates BOTH memories (for reranking/formatting) and relations (for graph display).
         """
         try:
-            relations = await self._graphiti.search(
-                query, limit=limit or 10, group_id=self.user_id
-            )
+            async with asyncio.timeout(self._timeout):
+                relations = await self._graphiti.search(
+                    query, limit=limit or 10, group_id=self._effective_user_id(override_user_id)
+                )
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
             )
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.search timed out after %ds", self._timeout)
+            return SearchResult()
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search error: %s", e)
             return SearchResult()
@@ -163,14 +177,18 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
                     augmented_query,
                 )
         try:
-            relations = await self._graphiti.search(
-                augmented_query, limit=limit, group_id=self.user_id
-            )
+            async with asyncio.timeout(self._timeout):
+                relations = await self._graphiti.search(
+                    augmented_query, limit=limit, group_id=self._effective_user_id(override_user_id)
+                )
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
                 search_filters=metadata_filters or {},
             )
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.search_with_filters timed out after %ds", self._timeout)
+            return SearchResult(search_filters=metadata_filters or {})
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search_with_filters error: %s", e)
             return SearchResult(search_filters=metadata_filters or {})
@@ -182,13 +200,17 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Search by category by prepending category to query string."""
         try:
             combined = f"{category} {query}"
-            relations = await self._graphiti.search(
-                combined, limit=limit, group_id=self.user_id
-            )
+            async with asyncio.timeout(self._timeout):
+                relations = await self._graphiti.search(
+                    combined, limit=limit, group_id=self._effective_user_id(override_user_id)
+                )
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
             )
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.search_by_category timed out after %ds", self._timeout)
+            return SearchResult()
         except Exception as e:
             logger.debug("GraphitiMemoryAdapter.search_by_category error: %s", e)
             return SearchResult()
@@ -196,7 +218,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def get_all(self) -> list[dict]:
         """Retrieve all episodes for the current user's group."""
         try:
-            episodes = await self._graphiti.get_episodes(self.user_id)
+            async with asyncio.timeout(self._timeout):
+                episodes = await self._graphiti.get_episodes(self.user_id)
             return [
                 {
                     "id": ep.get("id", ""),
@@ -208,6 +231,9 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
                 }
                 for ep in episodes
             ]
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.get_all timed out after %ds", self._timeout)
+            return []
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.get_all failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.get_all error detail: %s", e)
@@ -216,7 +242,11 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def get_memory_count(self) -> int:
         """Count episodes for the current user's group."""
         try:
-            return await self._graphiti.get_episode_count(self.user_id)
+            async with asyncio.timeout(self._timeout):
+                return await self._graphiti.get_episode_count(self.user_id)
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.get_memory_count timed out after %ds", self._timeout)
+            return 0
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.get_memory_count failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.get_memory_count error detail: %s", e)
@@ -240,9 +270,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def delete(self, memory_id: str) -> None:
         """Delete a memory (episode) by its UUID."""
         try:
-            success = await self._graphiti.remove_episode(memory_id)
+            async with asyncio.timeout(self._timeout):
+                success = await self._graphiti.remove_episode(memory_id)
             if not success:
                 logger.debug("GraphitiMemoryAdapter.delete: remove_episode returned False for %s", memory_id)
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.delete timed out after %ds", self._timeout)
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.delete failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.delete error detail: %s", e)
@@ -250,7 +283,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def get_by_id(self, memory_id: str) -> dict | None:
         """Retrieve a specific episode by UUID."""
         try:
-            ep = await self._graphiti.get_episode_by_id(memory_id)
+            async with asyncio.timeout(self._timeout):
+                ep = await self._graphiti.get_episode_by_id(memory_id)
             if ep is None:
                 return None
             return {
@@ -261,6 +295,9 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
                     "created_at": ep.get("created_at"),
                 },
             }
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.get_by_id timed out after %ds", self._timeout)
+            return None
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.get_by_id failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.get_by_id error detail: %s", e)
@@ -269,7 +306,11 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def delete_all(self) -> int:
         """Delete all episodes for the current user's group."""
         try:
-            return await self._graphiti.delete_group_data(self.user_id)
+            async with asyncio.timeout(self._timeout):
+                return await self._graphiti.delete_group_data(self.user_id)
+        except asyncio.TimeoutError:
+            logger.warning("GraphitiMemoryAdapter.delete_all timed out after %ds", self._timeout)
+            return 0
         except Exception as e:
             logger.warning("GraphitiMemoryAdapter.delete_all failed: %s", type(e).__name__)
             logger.debug("GraphitiMemoryAdapter.delete_all error detail: %s", e)
@@ -277,6 +318,10 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def enable_project_graph(self) -> None:
         """Mem0-specific. No-op for Graphiti backend."""
+        logger.warning(
+            "enable_project_graph() called on GraphitiMemoryAdapter — "
+            "feature not supported. Graphiti graph is always enabled."
+        )
         return None
 
     async def setup_criteria_retrieval(
@@ -284,14 +329,22 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         criteria: list[dict] | None = None,
     ) -> bool:
         """Mem0-specific. No-op for Graphiti backend."""
-        return True  # Graphiti doesn't support criteria retrieval
+        logger.warning(
+            "setup_criteria_retrieval() called on GraphitiMemoryAdapter — "
+            "feature not supported. Criteria retrieval is Mem0-only."
+        )
+        return True  # Keep return True for compatibility
 
     async def setup_custom_instructions(
         self,
         instructions: str | None = None,
     ) -> bool:
         """Mem0-specific. No-op for Graphiti backend."""
-        return True  # Graphiti doesn't support custom instructions
+        logger.warning(
+            "setup_custom_instructions() called on GraphitiMemoryAdapter — "
+            "feature not supported. Custom instructions are Mem0-only."
+        )
+        return True  # Keep return True for compatibility
 
     async def close(self) -> None:
         """Close underlying Graphiti client if possible."""

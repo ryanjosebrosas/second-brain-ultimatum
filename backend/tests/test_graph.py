@@ -145,6 +145,7 @@ class TestGraphitiMemoryAdapterSearch:
             from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
             config = MagicMock()
             config.brain_user_id = "user1"
+            config.service_timeout_seconds = 30
             adapter = GraphitiMemoryAdapter(config)
             adapter._graphiti = mock_gs
             result = await adapter.search("test query")
@@ -164,6 +165,7 @@ class TestGraphitiMemoryAdapterSearch:
             from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
             config = MagicMock()
             config.brain_user_id = "user1"
+            config.service_timeout_seconds = 30
             adapter = GraphitiMemoryAdapter(config)
             adapter._graphiti = mock_gs
             filters = {"category": "pattern"}
@@ -179,6 +181,7 @@ class TestGraphitiMemoryAdapterSearch:
             from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
             config = MagicMock()
             config.brain_user_id = "user1"
+            config.service_timeout_seconds = 30
             adapter = GraphitiMemoryAdapter(config)
             adapter._graphiti = mock_gs
             result = await adapter.search("test")
@@ -195,6 +198,7 @@ class TestGraphitiMemoryAdapterSearch:
             from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
             config = MagicMock()
             config.brain_user_id = "user1"
+            config.service_timeout_seconds = 30
             adapter = GraphitiMemoryAdapter(config)
             adapter._graphiti = mock_gs
             result = await adapter.search_by_category("pattern", "coding")
@@ -211,6 +215,7 @@ class TestGraphitiMemoryAdapterSearch:
             from second_brain.services.graphiti_memory import GraphitiMemoryAdapter
             config = MagicMock()
             config.brain_user_id = "user1"
+            config.service_timeout_seconds = 30
             adapter = GraphitiMemoryAdapter(config)
             adapter._graphiti = mock_gs
             mem = await adapter.get_by_id("ep-123")
