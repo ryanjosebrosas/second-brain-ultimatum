@@ -398,6 +398,51 @@ class TestAgenticConfig:
         assert "alignment" in weights
         assert "momentum" in weights
 
+    def test_pmo_weights_custom_valid(self, tmp_path):
+        """Custom weights that sum to 1.0 should be accepted."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            pmo_score_weights={
+                "urgency": 0.5,
+                "impact": 0.3,
+                "effort": 0.2,
+            },
+            _env_file=None,
+        )
+        assert abs(sum(config.pmo_score_weights.values()) - 1.0) < 0.01
+
+    def test_pmo_weights_invalid_low(self, tmp_path):
+        """Weights summing to less than 1.0 should raise ValueError."""
+        with pytest.raises(ValueError, match=r"pmo_score_weights must sum to 1\.0"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                pmo_score_weights={
+                    "urgency": 0.3,
+                    "impact": 0.2,
+                    "effort": 0.1,
+                },
+                _env_file=None,
+            )
+
+    def test_pmo_weights_invalid_high(self, tmp_path):
+        """Weights summing to more than 1.0 should raise ValueError."""
+        with pytest.raises(ValueError, match=r"pmo_score_weights must sum to 1\.0"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                pmo_score_weights={
+                    "urgency": 0.5,
+                    "impact": 0.5,
+                    "effort": 0.5,
+                },
+                _env_file=None,
+            )
+
 
 # --- BrainDeps Tests ---
 
