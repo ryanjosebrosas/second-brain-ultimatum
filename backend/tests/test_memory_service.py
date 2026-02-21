@@ -853,3 +853,323 @@ class TestSetupCustomInstructions:
         result = await svc.setup_custom_instructions()
 
         assert result is False
+
+
+class TestMemoryServiceKeywordSearch:
+    """Tests for keyword_search feature in MemoryService."""
+
+    @pytest.fixture
+    def mock_config_keyword_enabled(self):
+        """Config with keyword_search enabled."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True  # ENABLED
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @pytest.fixture
+    def mock_config(self):
+        """Config with keyword_search disabled."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False  # DISABLED
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_passes_keyword_search_when_enabled(
+        self, mock_client_cls, mock_config_keyword_enabled
+    ):
+        """search() passes keyword_search=True when config enabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config_keyword_enabled)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_omits_keyword_search_when_disabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search() does not pass keyword_search when config disabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "keyword_search" not in call_kwargs or call_kwargs.get("keyword_search") is not True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_passes_keyword_search(
+        self, mock_client_cls, mock_config_keyword_enabled
+    ):
+        """search_with_filters() also passes keyword_search when enabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config_keyword_enabled)
+        await svc.search_with_filters("test", metadata_filters={"category": "pattern"})
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("keyword_search") is True
+
+
+class TestMemoryServiceRerank:
+    """Tests for rerank feature in MemoryService."""
+
+    @pytest.fixture
+    def mock_config_rerank_enabled(self):
+        """Config with rerank enabled."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = True  # ENABLED
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @pytest.fixture
+    def mock_config(self):
+        """Config with rerank disabled."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False  # DISABLED
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_passes_rerank_when_enabled(
+        self, mock_client_cls, mock_config_rerank_enabled
+    ):
+        """search() passes rerank=True when config enabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config_rerank_enabled)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_omits_rerank_when_disabled(self, mock_client_cls, mock_config):
+        """search() does not pass rerank when config disabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "rerank" not in call_kwargs or call_kwargs.get("rerank") is not True
+
+    @patch("mem0.MemoryClient")
+    async def test_rerank_with_keyword_search_combination(self, mock_client_cls):
+        """Both rerank and keyword_search can be enabled together."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = True
+        config.mem0_rerank = True
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True
+        assert call_kwargs.get("keyword_search") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_passes_rerank(self, mock_client_cls, mock_config_rerank_enabled):
+        """search_with_filters() also passes rerank when enabled."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config_rerank_enabled)
+        await svc.search_with_filters("test", metadata_filters={"category": "pattern"})
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("rerank") is True
+
+
+class TestMemoryServiceSearchByCategory:
+    """Tests for search_by_category method."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Standard config for search_by_category tests."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category_basic(self, mock_client_cls, mock_config):
+        """search_by_category wraps search_with_filters correctly."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {
+            "results": [{"memory": "voice pattern", "score": 0.9}],
+            "relations": [],
+        }
+
+        svc = MemoryService(mock_config)
+        result = await svc.search_by_category("voice", query="brand")
+
+        assert len(result.memories) == 1
+        assert result.memories[0]["memory"] == "voice pattern"
+
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category_passes_override_user_id(
+        self, mock_client_cls, mock_config
+    ):
+        """search_by_category passes override_user_id to search_with_filters."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_by_category("pattern", override_user_id="uttam")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        filters = call_kwargs.get("filters", {})
+        # Verify user_id filter is "uttam" not default
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "uttam" in user_ids
+
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category_empty_query(self, mock_client_cls, mock_config):
+        """search_by_category uses category as query when query is empty."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_by_category("experience")
+
+        call_args = mock_client.search.call_args
+        query_arg = call_args.args[0] if call_args.args else call_args.kwargs.get("query")
+        assert "experience" in query_arg
+
+    @patch("mem0.MemoryClient")
+    async def test_search_by_category_uses_limit(self, mock_client_cls, mock_config):
+        """search_by_category respects limit parameter."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_by_category("pattern", limit=5)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("top_k") == 5
+
+
+class TestMemoryServiceOverrideUserId:
+    """Tests for override_user_id multi-user scoping."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Config for override_user_id tests."""
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = False
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_override_user_id(self, mock_client_cls, mock_config):
+        """search() uses override_user_id when provided."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [{"memory": "test"}], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query", override_user_id="uttam")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        filters = call_kwargs.get("filters", {})
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "uttam" in user_ids
+
+    @patch("mem0.MemoryClient")
+    async def test_search_uses_default_when_no_override(self, mock_client_cls, mock_config):
+        """search() uses config.brain_user_id when no override."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        filters = call_kwargs.get("filters", {})
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "test-user" in user_ids  # from mock_config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_uses_override(self, mock_client_cls, mock_config):
+        """search_with_filters() uses override_user_id."""
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters(
+            "test", metadata_filters={"category": "pattern"}, override_user_id="robert"
+        )
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        filters = call_kwargs.get("filters", {})
+        user_ids = [c.get("user_id") for c in filters.get("AND", []) if "user_id" in c]
+        assert "robert" in user_ids
+
+    @patch("mem0.MemoryClient")
+    def test_effective_user_id_returns_override(self, mock_client_cls, mock_config):
+        """_effective_user_id returns override when provided."""
+        svc = MemoryService(mock_config)
+
+        assert svc._effective_user_id("override") == "override"
+        assert svc._effective_user_id(None) == "test-user"
+        assert svc._effective_user_id("") == "test-user"  # Empty string = default

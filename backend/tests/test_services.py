@@ -2448,7 +2448,7 @@ class TestStorageTimeout:
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
             brain_data_path=tmp_path,
-            service_timeout_seconds=1,
+            service_timeout_seconds=5,  # Minimum valid timeout
             _env_file=None,
         )
         with patch("second_brain.services.storage.create_client") as mock_create:

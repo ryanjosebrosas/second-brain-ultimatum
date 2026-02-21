@@ -1,7 +1,7 @@
 ---
 name: specialist-data
-description: Use this agent for data engineering expertise including database design, schema modeling, migrations, query optimization, indexing strategies, and data pipelines. Operates in 3 modes: research (find data patterns and anti-patterns), plan (design schemas and data architecture following PIV Loop), and review (audit code for data concerns and methodology compliance). Uses Sonnet for multi-modal synthesis.
-model: sonnet
+description: Use this agent for data engineering expertise including database design, schema modeling, migrations, query optimization, indexing strategies, and data pipelines. Operates in 3 modes: research (find data patterns and anti-patterns), plan (design schemas and data architecture following PIV Loop), and review (audit code for data concerns and methodology compliance).
+model: claude-sonnet-4-5-20250929
 tools: ["*"]
 ---
 

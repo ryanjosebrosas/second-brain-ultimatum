@@ -3,162 +3,94 @@
 ## Meta Information
 
 - **Plan file**: `requests/memory-foundation-hardening-plan.md`
-- **Execution date**: 2026-02-21
-- **Test count before**: 1589
-- **Test count after**: 1638 (+49 new tests)
-
-### Files Added
-- `backend/tests/test_memory_service.py` — 22 tests for MemoryService retry and degradation
-- `backend/tests/test_recall_agent.py` — 27 tests for recall agent validator and error detection
-
-### Files Modified
-- `backend/src/second_brain/services/retry.py` — Added `Mem0RetryConfig`, `MEM0_RETRY_CONFIG`, `create_retry_decorator()`, `_MEM0_RETRY` with jitter
-- `backend/src/second_brain/services/memory.py` — Replaced local retry with import, added retry+timeout+idle_reconnect to `add_with_metadata`, `add_multimodal`, `get_all`, `update_memory`, `delete`, fixed f-string logging
-- `backend/src/second_brain/agents/utils.py` — Added `all_tools_failed()` and `any_tool_failed()` helper functions
-- `backend/src/second_brain/agents/recall.py` — Imported `all_tools_failed`, updated validator for deterministic error detection
-- `backend/tests/test_services.py` — Added consolidation reference comment
-- `backend/tests/test_agents.py` — Added consolidation reference comment
-
----
+- **Files added**: None
+- **Files modified**:
+  - `backend/tests/test_memory_service.py`
+  - `backend/src/second_brain/services/memory.py`
+  - `backend/src/second_brain/agents/recall.py`
+  - `backend/src/second_brain/agents/ask.py`
+  - `backend/src/second_brain/agents/chief_of_staff.py`
 
 ## Completed Tasks
 
-1. **Update `retry.py` — Add jitter-enabled retry config** — completed
-   - Added `wait_random_exponential` import
-   - Created `Mem0RetryConfig(RetryConfig)` with `use_jitter: bool = True`
-   - Created `MEM0_RETRY_CONFIG` with 3 attempts, 1-10s wait, jitter enabled
-   - Created `create_retry_decorator()` factory function
-   - Exported `_MEM0_RETRY = create_retry_decorator(MEM0_RETRY_CONFIG)`
+### Phase 1: Test Foundation
+- Task 1: Add TestMemoryServiceClose test class (4 tests) — **completed**
+- Task 2: Update close() error handling in memory.py — **completed**
+- Task 3: Add update_memory and delete success tests — **completed**
+- Task 4: Add delete_all success test — **completed**
 
-2. **Update `memory.py` — Import and replace retry** — completed
-   - Removed local `_MEM0_RETRY` definition (lines 16-21)
-   - Added import: `from second_brain.services.retry import _MEM0_RETRY`
+### Phase 2: Agent User ID Propagation
+- Task 5: Add voice_user_id to recall.py tools (3 tools) — **completed**
+- Task 6: Update recall.py agent instructions — **completed**
+- Task 7: Add voice_user_id to ask.py tools (2 tools) — **completed**
+- Task 8: Update ask.py agent instructions — **completed**
+- Task 9: Add voice_user_id to chief_of_staff.py search_brain_context — **completed**
+- Task 10: Update chief_of_staff.py agent instructions — **completed**
 
-3. **Update `memory.py` — Add retry to `add_with_metadata()`** — completed
-   - Added `self._check_idle_reconnect()` at method start
-   - Wrapped client call with `@_MEM0_RETRY` decorator
-   - Added `asyncio.timeout(self._timeout)` wrapper
-
-4. **Update `memory.py` — Add retry to `add_multimodal()`** — completed
-   - Same pattern as add_with_metadata
-
-5. **Update `memory.py` — Add retry to `get_all()`** — completed
-   - Same pattern
-
-6. **Update `memory.py` — Add retry to `update_memory()`** — completed
-   - Same pattern
-
-7. **Update `memory.py` — Add retry to `delete()`** — completed
-   - Same pattern
-
-8. **Update `memory.py` — Fix logging inconsistency** — completed
-   - Changed `logger.error(f"Failed to enable project-level graph: {e}")` to `logger.error("Failed to enable project-level graph: %s", e)`
-
-9. **Update `utils.py` — Add tool error helpers** — completed
-   - Added `all_tools_failed(tool_outputs: list[str]) -> bool`
-   - Added `any_tool_failed(tool_outputs: list[str]) -> bool`
-
-10. **Update `recall.py` — Import helper** — completed
-    - Added `all_tools_failed` to imports
-
-11. **Update `recall.py` — Deterministic validator** — completed
-    - Added code to extract tool outputs from `ctx.messages`
-    - Added check: if `all_tools_failed(tool_outputs)`, set error field and return without retry
-
-12. **Create `test_memory_service.py`** — completed
-    - 22 test cases across 6 test classes
-    - Covers: init, retry, graceful degradation, idle reconnect, multimodal, retry config
-
-13. **Create `test_recall_agent.py`** — completed
-    - 27 test cases across 6 test classes
-    - Covers: error helpers, validator resilience, deterministic error detection, agent config, schema, tool error prefix
-
-14. **Add reference comments to existing test files** — completed
-    - Added notes to `test_services.py` and `test_agents.py`
-
----
+### Phase 3: Test Verification
+- Task 11: Run full test suite verification — **completed** (1645 tests passing)
 
 ## Divergences from Plan
 
-None — implementation matched plan exactly.
+1. **What**: Fixed search_examples semantic path (plan validator finding)
+   - **Planned**: Plan only addressed get_examples() fallback path
+   - **Actual**: Also added override_user_id=uid to search_examples_semantic() call
+   - **Reason**: Plan validator identified this gap — the primary semantic search path was missing voice isolation
 
----
+2. **What**: Test assertion for test_update_memory_passes_correct_args
+   - **Planned**: Check call_args[0][0] == "mem-123" (positional arg)
+   - **Actual**: Check call_kwargs["memory_id"] == "mem-123" (keyword arg)
+   - **Reason**: Actual memory.py implementation uses memory_id=memory_id (keyword), not positional
+
+3. **What**: ask.py voice_user_id usage
+   - **Planned**: Plan was ambiguous about wiring uid to service calls
+   - **Actual**: Added noqa comment, uid defined but not passed to services
+   - **Reason**: ask.py tools query shared knowledge (topics, experiences) which are intentionally not user-scoped per plan Decision 4
 
 ## Validation Results
 
-### Level 1: Syntax & Style
-```
+\`\`\`bash
+# Level 1: Syntax validation
 memory.py OK
-retry.py OK
 recall.py OK
-utils.py OK
-```
+ask.py OK
+chief_of_staff.py OK
 
-### Level 2: Unit Tests
-```
-tests/test_memory_service.py: 22 passed
-tests/test_recall_agent.py: 27 passed
-```
+# Level 2: Memory service tests
+29 passed in 5.16s
 
-### Level 3: Full Test Suite
-```
-1638 passed in 19.93s
-```
+# Level 3: Agent tests
+275 passed in 2.20s
 
-### Level 4: Manual Validation
-```
-Retry decorator created with before_sleep_log
-use_jitter: True
-Jitter enabled
-Deterministic error detection works
-```
-
----
+# Full suite
+1645 passed in 21.06s
+\`\`\`
 
 ## Tests Added
 
-- `backend/tests/test_memory_service.py` — 22 tests, all passing
-  - `TestMemoryServiceInit` (2 tests)
-  - `TestMemoryServiceRetry` (8 tests)
-  - `TestMemoryServiceGracefulDegradation` (5 tests)
-  - `TestMemoryServiceIdleReconnect` (1 test)
-  - `TestMemoryServiceMultimodal` (4 tests)
-  - `TestMemoryServiceRetryConfig` (3 tests)
+- **TestMemoryServiceClose** (4 tests):
+  - test_close_calls_client_close
+  - test_close_handles_missing_close_method
+  - test_close_nullifies_client
+  - test_close_handles_exception_gracefully
 
-- `backend/tests/test_recall_agent.py` — 27 tests, all passing
-  - `TestToolErrorHelpers` (8 tests)
-  - `TestRecallValidatorResilience` (6 tests)
-  - `TestRecallValidatorDeterministicError` (2 tests)
-  - `TestRecallAgentConfiguration` (4 tests)
-  - `TestRecallResultSchema` (5 tests)
-  - `TestToolErrorPrefix` (2 tests)
+- **TestMemoryServiceRetry** (2 tests):
+  - test_update_memory_passes_correct_args
+  - test_delete_passes_correct_args
 
----
+- **TestMemoryServiceGracefulDegradation** (1 test):
+  - test_delete_all_returns_count
+
+**Total: 7 new tests** (1638 -> 1645)
 
 ## Issues & Notes
 
-- **PydanticAI attribute names**: The plan mentioned `recall_agent.retries` and `recall_agent._tools`, but the actual attributes are `recall_agent._max_result_retries` and `recall_agent._function_toolset.tools`. Tests were adjusted accordingly.
-
-- **RecallResult schema types**: The plan's test examples used plain strings for `matches` and `relations`, but the actual schema requires `MemoryMatch` and `Relation` objects. Tests were updated to use proper types.
-
-- **Test count increase**: From 1589 to 1638 (+49 tests) — the new consolidated test files add coverage without removing existing tests.
-
----
+- **Plan test count discrepancy**: Plan stated "8 total" tests but only listed 7 bullet points. Actual implementation added 7 tests as listed.
+- **Archon integration**: All 11 tasks tracked in Archon project, all marked done.
+- **Plan validator findings addressed**: Fixed the search_examples semantic path gap identified by plan-validator agent before it became a production bug.
 
 ## Ready for Commit
 
 - All changes complete: **yes**
 - All validations pass: **yes**
-- Ready for `/commit`: **yes**
-
----
-
-## Summary
-
-Successfully hardened the memory foundation with:
-
-1. **Consistent retry coverage** — All MemoryService methods now use `_MEM0_RETRY` with jitter
-2. **Observable retry logging** — `before_sleep_log` enabled at WARNING level
-3. **Thundering herd prevention** — `wait_random_exponential` adds jitter to retry delays
-4. **Deterministic error detection** — Validator checks tool outputs for `TOOL_ERROR_PREFIX` instead of relying on LLM instruction-following
-5. **Consolidated test coverage** — 49 new tests in dedicated files for MemoryService and recall_agent
+- Ready for /commit: **yes**

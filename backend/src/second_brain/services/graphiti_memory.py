@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from second_brain.services.abstract import MemoryServiceBase
@@ -44,14 +45,30 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     """
 
     def __init__(self, config: "BrainConfig") -> None:
-        from second_brain.services.graphiti import GraphitiService
-        self._graphiti: GraphitiService = GraphitiService(config)
+        self._config = config
         self.user_id: str = config.brain_user_id
         self._timeout: int = config.service_timeout_seconds
+        self._last_activity: float = time.monotonic()
+        self._idle_threshold: int = 240  # 4 minutes (< 5 min typical timeout)
+        self._graphiti: "GraphitiService" = self._init_graphiti()
 
     def _effective_user_id(self, override: str | None = None) -> str:
         """Return override if provided, else self.user_id (from config)."""
         return override if override else self.user_id
+
+    def _init_graphiti(self) -> "GraphitiService":
+        """Initialize or re-initialize GraphitiService."""
+        from second_brain.services.graphiti import GraphitiService
+        logger.info("GraphitiService client initialized")
+        return GraphitiService(self._config)
+
+    def _check_idle_reconnect(self) -> None:
+        """Re-instantiate GraphitiService if idle for too long."""
+        elapsed = time.monotonic() - self._last_activity
+        if elapsed > self._idle_threshold:
+            logger.debug("Graphiti idle for %.0fs, re-instantiating client", elapsed)
+            self._graphiti = self._init_graphiti()
+        self._last_activity = time.monotonic()
 
     async def add(
         self,
@@ -60,6 +77,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         enable_graph: bool | None = None,
     ) -> dict:
         """Add content as a Graphiti episode. Returns status dict."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 await self._graphiti.add_episode(
@@ -123,6 +141,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
         Populates BOTH memories (for reranking/formatting) and relations (for graph display).
         """
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 relations = await self._graphiti.search(
@@ -156,6 +175,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         - {"AND": [{"key": "val"}, ...]} → extracts values, prepends to query
         - {"key": {"in": [...]}} → joins list values, prepends to query
         """
+        self._check_idle_reconnect()
         augmented_query = query
         if metadata_filters:
             parts: list[str] = []
@@ -198,6 +218,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         override_user_id: str | None = None,
     ) -> SearchResult:
         """Search by category by prepending category to query string."""
+        self._check_idle_reconnect()
         try:
             combined = f"{category} {query}"
             async with asyncio.timeout(self._timeout):
@@ -217,6 +238,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def get_all(self) -> list[dict]:
         """Retrieve all episodes for the current user's group."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 episodes = await self._graphiti.get_episodes(self.user_id)
@@ -241,6 +263,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def get_memory_count(self) -> int:
         """Count episodes for the current user's group."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 return await self._graphiti.get_episode_count(self.user_id)
@@ -269,6 +292,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def delete(self, memory_id: str) -> None:
         """Delete a memory (episode) by its UUID."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 success = await self._graphiti.remove_episode(memory_id)
@@ -282,6 +306,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def get_by_id(self, memory_id: str) -> dict | None:
         """Retrieve a specific episode by UUID."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 ep = await self._graphiti.get_episode_by_id(memory_id)
@@ -305,6 +330,7 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
 
     async def delete_all(self) -> int:
         """Delete all episodes for the current user's group."""
+        self._check_idle_reconnect()
         try:
             async with asyncio.timeout(self._timeout):
                 return await self._graphiti.delete_group_data(self.user_id)

@@ -311,6 +311,14 @@ class BrainConfig(BaseSettings):
         default=True,
         description="Enable Mem0 Platform native reranking (rerank=True). Adds ~150-200ms latency but improves result ordering.",
     )
+    mem0_filter_memories: bool = Field(
+        default=False,
+        description="Enable Mem0 Platform memory filtering (filter_memories=True). Adds ~200-300ms latency but maximizes precision by removing tangentially related results.",
+    )
+    mem0_use_criteria: bool = Field(
+        default=True,
+        description="Enable Mem0 Criteria Retrieval scoring when criteria are configured. Set to False to bypass criteria scoring globally. Adds ~300ms+ latency per search.",
+    )
     retrieval_oversample_factor: int = Field(
         default=3,
         ge=1,
@@ -332,9 +340,9 @@ class BrainConfig(BaseSettings):
 
     # Service-level timeouts (used in sub-plan 02)
     service_timeout_seconds: int = Field(
-        default=15, ge=1, le=60,
-        description="Timeout for individual service calls (Mem0, Supabase). "
-        "Separate from api_timeout_seconds which covers the full MCP tool.",
+        default=15, ge=5, le=60,
+        description="Timeout for individual service calls (Mem0, Supabase). Range: 5-60. "
+        "Must be less than api_timeout_seconds.",
     )
 
     # Batch operation settings
@@ -566,11 +574,25 @@ class BrainConfig(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _warn_default_user_id(self) -> "BrainConfig":
+    def _validate_user_isolation(self) -> "BrainConfig":
+        """Enforce user isolation in multi-user deployments.
+
+        If ALLOWED_USER_IDS has multiple users, BRAIN_USER_ID must be set
+        to prevent data mixing between users.
+        """
         if not self.brain_user_id:
+            user_count = len(self.allowed_user_ids_list)
+            if user_count > 1:
+                raise ValueError(
+                    f"Multi-user deployment detected ({user_count} users in ALLOWED_USER_IDS) "
+                    f"but BRAIN_USER_ID is not set. Set BRAIN_USER_ID to one of: "
+                    f"{', '.join(self.allowed_user_ids_list[:5])} "
+                    f"to enable user-scoped data isolation."
+                )
+            # Single-user or no allowed_user_ids: warn but allow
             logger.warning(
                 "BRAIN_USER_ID is not set — data will not be user-scoped. "
-                "Set BRAIN_USER_ID in your .env for multi-user deployments."
+                "Set BRAIN_USER_ID in your .env for production deployments."
             )
         return self
 
@@ -578,6 +600,18 @@ class BrainConfig(BaseSettings):
     def _warn_missing_api_key(self) -> "BrainConfig":
         if not self.brain_api_key:
             logger.warning("BRAIN_API_KEY not set -- REST API will accept unauthenticated requests")
+        return self
+
+    @model_validator(mode="after")
+    def _warn_timeout_configuration(self) -> "BrainConfig":
+        """Warn if service timeout is not less than API timeout."""
+        if self.service_timeout_seconds >= self.api_timeout_seconds:
+            logger.warning(
+                "SERVICE_TIMEOUT_SECONDS=%d >= API_TIMEOUT_SECONDS=%d — "
+                "service calls may never complete before API timeout. "
+                "Recommended: SERVICE_TIMEOUT_SECONDS < API_TIMEOUT_SECONDS",
+                self.service_timeout_seconds, self.api_timeout_seconds,
+            )
         return self
 
     @property

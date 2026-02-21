@@ -57,7 +57,10 @@ chief_of_staff = Agent(
         "- Research + answer: ['recall', 'ask']\n"
         "- Full content pipeline: ['recall', 'create', 'review', 'learn']\n\n"
         "Always explain your routing reasoning. Load brain context first to "
-        "make informed routing decisions."
+        "make informed routing decisions.\n\n"
+        "USER PROFILE ROUTING:\n"
+        "If voice_user_id is provided, pass it to search_brain_context. This scopes "
+        "context search to the user's perspective when routing decisions."
     ),
 )
 
@@ -125,10 +128,15 @@ async def load_brain_overview(ctx: RunContext[BrainDeps]) -> str:
 
 
 @chief_of_staff.tool
-async def search_brain_context(ctx: RunContext[BrainDeps], query: str) -> str:
+async def search_brain_context(
+    ctx: RunContext[BrainDeps], query: str, voice_user_id: str = ""
+) -> str:
     """Search brain memory for context relevant to routing the request."""
+    uid = voice_user_id if voice_user_id else None
     try:
-        results = await ctx.deps.memory_service.search(query, limit=5)
+        results = await ctx.deps.memory_service.search(
+            query, limit=5, override_user_id=uid
+        )
         if not results or not results.memories:
             return "No relevant context found in brain memory."
         return format_memories(results.memories, limit=5)

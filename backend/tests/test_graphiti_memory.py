@@ -1,6 +1,7 @@
 """Tests for GraphitiMemoryAdapter."""
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -355,3 +356,214 @@ class TestGraphitiMemoryAdapter:
         """setup_custom_instructions() accepts custom instructions (no-op)."""
         result = await adapter.setup_custom_instructions(instructions="Custom rules")
         assert result is True
+
+
+class TestGraphitiMemoryTimeout:
+    """Tests for timeout protection in GraphitiMemoryAdapter."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.brain_user_id = "test-user"
+        config.service_timeout_seconds = 0.01  # Very short timeout for tests
+        return config
+
+    @pytest.fixture
+    def slow_graphiti(self):
+        """GraphitiService that times out."""
+        gs = AsyncMock()
+
+        async def slow_search(*args, **kwargs):
+            await asyncio.sleep(100)  # Will be cancelled by timeout
+            return []
+
+        gs.search = slow_search
+        return gs
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_returns_empty_on_timeout(
+        self, mock_gs_cls, mock_config, slow_graphiti
+    ):
+        """search() returns empty SearchResult on timeout."""
+        mock_gs_cls.return_value = slow_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.search("test query")
+
+        assert result.memories == []
+        assert result.relations == []
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_add_returns_empty_on_timeout(self, mock_gs_cls, mock_config):
+        """add() returns empty dict on timeout."""
+        slow_graphiti = AsyncMock()
+
+        async def slow_add(*args, **kwargs):
+            await asyncio.sleep(100)
+
+        slow_graphiti.add_episode = slow_add
+        mock_gs_cls.return_value = slow_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.add("test content")
+
+        assert result == {}
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    def test_timeout_uses_config_value(self, mock_gs_cls):
+        """Adapter uses service_timeout_seconds from config."""
+        config = MagicMock()
+        config.brain_user_id = "test-user"
+        config.service_timeout_seconds = 42.0
+        mock_gs_cls.return_value = AsyncMock()
+
+        adapter = GraphitiMemoryAdapter(config)
+
+        assert adapter._timeout == 42.0
+
+
+class TestGraphitiMemoryOverrideUserId:
+    """Tests for override_user_id in GraphitiMemoryAdapter."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.brain_user_id = "default-user"
+        config.service_timeout_seconds = 30
+        return config
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_uses_override_user_id(self, mock_gs_cls, mock_config):
+        """search() passes override_user_id to GraphitiService."""
+        mock_gs = AsyncMock()
+        mock_gs.search.return_value = []
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        await adapter.search("test query", override_user_id="override-user")
+
+        call_kwargs = mock_gs.search.call_args.kwargs
+        assert call_kwargs.get("group_id") == "override-user"
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_uses_default_when_no_override(self, mock_gs_cls, mock_config):
+        """search() uses brain_user_id when no override."""
+        mock_gs = AsyncMock()
+        mock_gs.search.return_value = []
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        await adapter.search("test query")
+
+        call_kwargs = mock_gs.search.call_args.kwargs
+        assert call_kwargs.get("group_id") == "default-user"
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_with_filters_uses_override(self, mock_gs_cls, mock_config):
+        """search_with_filters() respects override_user_id."""
+        mock_gs = AsyncMock()
+        mock_gs.search.return_value = []
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        await adapter.search_with_filters("test", override_user_id="uttam")
+
+        call_kwargs = mock_gs.search.call_args.kwargs
+        assert call_kwargs.get("group_id") == "uttam"
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    def test_effective_user_id_helper(self, mock_gs_cls, mock_config):
+        """_effective_user_id returns correct user."""
+        mock_gs_cls.return_value = AsyncMock()
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+
+        assert adapter._effective_user_id("override") == "override"
+        assert adapter._effective_user_id(None) == "default-user"
+        assert adapter._effective_user_id("") == "default-user"
+
+
+class TestGraphitiMemoryIdleReconnect:
+    """Tests for idle reconnect logic in GraphitiMemoryAdapter."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.brain_user_id = "test-user"
+        config.service_timeout_seconds = 30
+        return config
+
+    @patch("time.monotonic")
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_reconnects_after_idle_threshold(
+        self, mock_gs_cls, mock_time, mock_config
+    ):
+        """Client is re-instantiated after idle threshold exceeded."""
+        # First call at t=0
+        mock_time.return_value = 0
+        mock_gs = AsyncMock()
+        mock_gs.search = AsyncMock(return_value=[])
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        initial_call_count = mock_gs_cls.call_count
+
+        # Simulate 5 minutes (300s) passing — exceeds 240s threshold
+        mock_time.return_value = 300
+
+        await adapter.search("test")
+
+        # Client should have been re-instantiated (2 total: init + reconnect)
+        assert mock_gs_cls.call_count == initial_call_count + 1
+
+    @patch("time.monotonic")
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_no_reconnect_when_recent_activity(
+        self, mock_gs_cls, mock_time, mock_config
+    ):
+        """Client is NOT re-instantiated when activity is recent."""
+        mock_time.return_value = 0
+        mock_gs = AsyncMock()
+        mock_gs.search = AsyncMock(return_value=[])
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        initial_call_count = mock_gs_cls.call_count
+
+        # Simulate only 60s passing — well under 240s threshold
+        mock_time.return_value = 60
+
+        await adapter.search("test")
+
+        # No reconnect — same call count
+        assert mock_gs_cls.call_count == initial_call_count
+
+    @patch("time.monotonic")
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_activity_updates_on_every_call(
+        self, mock_gs_cls, mock_time, mock_config
+    ):
+        """_last_activity is updated on every method call."""
+        mock_time.return_value = 0
+        mock_gs = AsyncMock()
+        mock_gs.search = AsyncMock(return_value=[])
+        mock_gs.add_episode = AsyncMock(return_value=None)
+        mock_gs_cls.return_value = mock_gs
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+
+        # First search at t=100
+        mock_time.return_value = 100
+        await adapter.search("test")
+
+        # Add at t=200 (only 100s since last activity, not 200s since init)
+        mock_time.return_value = 200
+        await adapter.add("content")
+
+        # Search at t=300 (only 100s since last activity)
+        mock_time.return_value = 300
+        await adapter.search("test2")
+
+        # No reconnect because each call updates activity timestamp
+        # Only 1 GraphitiService instantiation (the initial one)
+        assert mock_gs_cls.call_count == 1

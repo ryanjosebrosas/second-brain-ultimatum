@@ -72,9 +72,9 @@ After Phase 1 scopes the feature, launch **2 parallel Task agents** for codebase
 
 **Launch simultaneously with Phase 3 and 3b agents** — all research agents run in parallel.
 
-### Agent A: Similar Implementations & Integration Points (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
+### Agent A: Similar Implementations & Integration Points (Opus)
+- **subagent_type**: `research-codebase`
+- **model**: `opus`
 - **description**: "Find similar code and integration points"
 - **Dynamic prompt must include**:
   - The feature description and systems affected from Phase 1
@@ -83,9 +83,9 @@ After Phase 1 scopes the feature, launch **2 parallel Task agents** for codebase
   - Instruction: "Identify which existing files need changes and what new files to create"
   - Instruction: "Return free-form findings with code snippets and file:line references"
 
-### Agent B: Project Patterns & Conventions (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
+### Agent B: Project Patterns & Conventions (Opus)
+- **subagent_type**: `research-codebase`
+- **model**: `opus`
 - **description**: "Extract project patterns"
 - **Dynamic prompt must include**:
   - Instruction to read 2-3 representative files in the feature area
@@ -104,9 +104,9 @@ After Phase 1 scopes the feature, launch **2 parallel Task agents** for codebase
 
 Launch **1 agent** simultaneously with Phase 2 agents. Skip if no external dependencies are involved (internal-only changes).
 
-### Agent C: Documentation & Best Practices (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
+### Agent C: Documentation & Best Practices (Opus)
+- **subagent_type**: `research-external`
+- **model**: `opus`
 - **description**: "Research external docs and best practices"
 - **Dynamic prompt must include**:
   - The specific libraries, frameworks, or APIs involved from Phase 1
@@ -123,9 +123,9 @@ Launch **1 agent** simultaneously with Phase 2 agents. Skip if no external depen
 
 Launch **1 agent** simultaneously with Phase 2 and Phase 3 agents. Skip if Archon MCP tools are not available.
 
-### Agent D: Archon Knowledge Base (Sonnet)
+### Agent D: Archon Knowledge Base (Opus)
 - **subagent_type**: `general-purpose`
-- **model**: `sonnet`
+- **model**: `opus`
 - **description**: "Search Archon RAG knowledge base"
 - **Dynamic prompt must include**:
   - The feature description and key technologies from Phase 1

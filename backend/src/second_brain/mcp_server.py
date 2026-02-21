@@ -152,6 +152,31 @@ def init_deps() -> None:
         logger.error("Failed to initialize deps: %s", e)
 
 
+async def _setup_mem0_project() -> None:
+    """Configure Mem0 project-level settings (criteria retrieval, custom instructions).
+
+    Only runs when memory_provider='mem0'. Failures are logged but don't block startup.
+    Called from __main__ after init_deps() but before server.run().
+    """
+    deps = _get_deps()
+    if deps.config.memory_provider != "mem0":
+        logger.debug("Skipping Mem0 project setup: memory_provider=%s", deps.config.memory_provider)
+        return
+
+    # Setup criteria retrieval (weighted scoring for searches)
+    criteria_ok = await deps.memory.setup_criteria_retrieval()
+    if not criteria_ok:
+        logger.warning("Mem0 criteria retrieval setup failed — using defaults")
+
+    # Setup custom instructions (memory extraction guidelines)
+    instructions_ok = await deps.memory.setup_custom_instructions()
+    if not instructions_ok:
+        logger.warning("Mem0 custom instructions setup failed — using defaults")
+
+    if criteria_ok and instructions_ok:
+        logger.info("Mem0 project configuration complete")
+
+
 def _get_model(agent_name: str | None = None) -> "Model | None":
     """Get model for a specific agent, or the global default.
 
@@ -201,6 +226,7 @@ async def recall(query: str) -> str:
                 model=model,
             )
     except TimeoutError:
+        logger.warning("MCP recall timed out after %ds", timeout)
         return f"Recall timed out after {timeout}s. Try a simpler query."
     except Exception as e:
         logger.error("Recall agent failed: %s", type(e).__name__)
@@ -473,6 +499,7 @@ async def ask(question: str) -> str:
                 model=model,
             )
     except TimeoutError:
+        logger.warning("MCP ask timed out after %ds", timeout)
         return f"Ask timed out after {timeout}s. Try a simpler question."
     output = result.output
 
@@ -522,6 +549,7 @@ async def learn(content: str, category: str = "general") -> str:
                 model=model,
             )
     except TimeoutError:
+        logger.warning("MCP learn timed out after %ds", timeout)
         return f"Learn timed out after {timeout}s. Try submitting less content."
     output = result.output
 
@@ -988,6 +1016,7 @@ async def create_content(
         async with asyncio.timeout(timeout):
             result = await create_agent.run(agent_prompt, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP create_content timed out after %ds", timeout)
         return f"Create timed out after {timeout}s. Try a simpler prompt."
     output = result.output
 
@@ -1044,6 +1073,7 @@ async def review_content(content: str, content_type: str | None = None,
         async with asyncio.timeout(timeout):
             result = await run_full_review(content, deps, model, content_type)
     except TimeoutError:
+        logger.warning("MCP review_content timed out after %ds", timeout)
         return f"Review timed out after {timeout}s. Try shorter content."
 
     parts = [f"# Review: {result.overall_score}/10 — {result.verdict}\n"]
@@ -3006,6 +3036,8 @@ if __name__ == "__main__":
     # See service_mcp.py:init_deps() for rationale.
     if _transport in ("http", "sse"):
         init_deps()
+        # Configure Mem0 project settings (criteria retrieval, custom instructions)
+        asyncio.run(_setup_mem0_project())
 
     try:
         if _transport in ("http", "sse"):

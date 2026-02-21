@@ -1,7 +1,7 @@
 ---
 name: code-review-performance
 description: Reviews code for performance issues including N+1 queries, inefficient algorithms, memory leaks, and unnecessary computations
-model: sonnet
+model: claude-sonnet-4-5-20250929
 tools: ["Read", "Glob", "Grep"]
 ---
 

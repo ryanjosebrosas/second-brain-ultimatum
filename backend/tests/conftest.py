@@ -1,6 +1,7 @@
 """Shared test fixtures for Second Brain tests."""
 
 import json
+import os
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock
@@ -8,6 +9,18 @@ from unittest.mock import MagicMock, AsyncMock
 from second_brain.config import BrainConfig
 from second_brain.deps import BrainDeps
 from second_brain.services.search_result import SearchResult
+
+
+@pytest.fixture(autouse=True)
+def single_user_default(monkeypatch):
+    """Set ALLOWED_USER_IDS to single user for tests to bypass multi-user enforcement.
+
+    This fixture runs automatically for all tests and sets ALLOWED_USER_IDS to "testuser"
+    unless the test explicitly sets it differently. This prevents tests that create
+    BrainConfig without brain_user_id from failing due to multi-user enforcement.
+    """
+    if "ALLOWED_USER_IDS" not in os.environ:
+        monkeypatch.setenv("ALLOWED_USER_IDS", "testuser")
 
 # ---------------------------------------------------------------------------
 # FastMCP 2.x compatibility: @server.tool() returns FunctionTool objects that
@@ -57,6 +70,7 @@ def brain_config_graph(tmp_path):
         graph_provider="mem0",
         supabase_url="https://test.supabase.co",
         supabase_key="test-key",
+        brain_user_id="testuser",
         brain_data_path=tmp_path,
         _env_file=None,
     )

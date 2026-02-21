@@ -1,7 +1,7 @@
 ---
 name: code-review-type-safety
 description: Reviews code for type safety violations, missing type hints, and type checking errors
-model: sonnet
+model: claude-sonnet-4-5-20250929
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---
 

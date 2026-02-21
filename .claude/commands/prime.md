@@ -4,7 +4,7 @@ description: Prime agent with codebase understanding
 
 # Prime: Load Project Context
 
-Load project context using parallel agents for speed and context isolation. Each agent analyzes one aspect and returns its formatted report section. Only the assembled report stays in this conversation.
+Load project context using parallel Explore agents for speed and context isolation. All agents use `Explore` type with `haiku` model — optimized for fast, read-only analysis.
 
 ## Step 1: Detect Context Mode
 
@@ -19,20 +19,22 @@ Check for code directories using a **single** Glob call with brace expansion:
 
 ---
 
-## Step 2A: System Mode — Launch 5 Parallel Agents
+## Step 2A: System Mode — Launch 4 Parallel Agents
 
 Launch ALL of the following Task agents **simultaneously**:
 
-### Agent 1: Commands Inventory (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
-- **description**: "Inventory slash commands"
+### Agent 1: Resources Inventory
+- **subagent_type**: `Explore`
+- **model**: `haiku`
+- **description**: "Inventory commands and agents"
 - **prompt**: |
-    You are analyzing a Claude Code project's available commands.
-    Run: `grep -r "^description:" .claude/commands/ 2>/dev/null` via Bash to get all command descriptions.
-    Also check for skills: `ls .claude/skills/ 2>/dev/null` via Bash.
+    You are inventorying a Claude Code project's available resources.
 
-    Return ONLY this formatted section (nothing else):
+    1. Run via Bash: `grep -r "^description:" .claude/commands/ 2>/dev/null | head -20`
+    2. Run via Bash: `ls .claude/skills/ 2>/dev/null`
+    3. Read `.claude/agents/README.md` for the agent catalog
+
+    Return ONLY this formatted section:
 
     ## Available Resources
     ### Commands
@@ -41,202 +43,159 @@ Launch ALL of the following Task agents **simultaneously**:
     {one row per command found}
 
     ### Agents
-    (Skip this section — another agent handles it)
+    - **Research**: {agent names}
+    - **Code Review**: {agent names}
+    - **Utility**: {agent names}
+    - **Specialist**: {agent names}
 
     ### Skills
-    {list any skills found, or "None" if empty}
+    {list any skills found, or "None"}
 
-### Agent 2: Agents Inventory (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
-- **description**: "Inventory subagents"
-- **prompt**: |
-    You are analyzing a Claude Code project's available agents.
-    Read the file `.claude/agents/README.md` for the complete agent catalog.
-    Extract each agent's name, category, and one-line purpose.
-
-    Return ONLY this formatted section (nothing else):
-
-    ### Agents
-    - **Research**: {agent names and purposes}
-    - **Code Review**: {agent names and purposes}
-    - **Utility**: {agent names and purposes}
-    - **Specialist**: {agent names and purposes}
-
-### Agent 3: Project Structure (Haiku)
+### Agent 2: Project Structure
 - **subagent_type**: `Explore`
+- **model**: `haiku`
 - **description**: "Map project structure"
 - **prompt**: |
     You are mapping a methodology/documentation project's structure.
-    Use Glob to find all .md files in: root, sections/, reference/, templates/, requests/.
-    Identify the key directories and their purposes.
+    Use Glob to find .md files in: root, sections/, reference/, templates/, requests/.
+    Identify key directories and their purposes.
 
-    Return ONLY this formatted section (nothing else):
+    Return ONLY this formatted section:
 
     ## Detection
     - **Mode**: System
     - **Signals**: {what you found — no code directories, only docs/templates}
 
     ## Project Overview
-    - **Type**: {project description based on what you found}
-    - **Tech Stack**: {languages, frameworks, tools — e.g., "Markdown, Claude Code CLI, Git"}
-    - **Structure**: {key directories and their purposes, 1 line each}
+    - **Type**: {project description}
+    - **Tech Stack**: {e.g., "Markdown, Claude Code CLI, Git"}
+    - **Structure**: {key directories, 1 line each}
 
-### Agent 4: Memory Context (Haiku)
+### Agent 3: Memory Context
 - **subagent_type**: `Explore`
+- **model**: `haiku`
 - **description**: "Read project memory"
 - **prompt**: |
-    You are extracting cross-session memory context.
-    Read the file `memory.md` if it exists. If it doesn't exist, note that.
+    Read the file `memory.md` if it exists.
 
-    Return ONLY this formatted section (nothing else):
+    Return ONLY this formatted section:
 
     ## Memory Context
-    - **Last Session**: {most recent date from Session Notes, or "No memory.md found"}
-    - **Key Decisions**: {bullet list from Key Decisions section, or "None recorded"}
-    - **Active Patterns**: {from Architecture Patterns section, or "None recorded"}
-    - **Gotchas**: {from Gotchas section, or "None recorded"}
-    - **Memory Health**: {if last session date is >7 days ago, warn "Stale — last updated {date}". Otherwise "Fresh"}
+    - **Last Session**: {most recent date, or "No memory.md found"}
+    - **Key Decisions**: {bullet list, or "None recorded"}
+    - **Active Patterns**: {bullet list, or "None recorded"}
+    - **Gotchas**: {bullet list, or "None recorded"}
+    - **Memory Health**: {if >7 days old, warn "Stale". Otherwise "Fresh"}
 
-### Agent 5: Git State (Haiku)
+### Agent 4: Git State
 - **subagent_type**: `Explore`
+- **model**: `haiku`
 - **description**: "Get git state"
 - **prompt**: |
-    You are checking the current git state of a project.
     Run via Bash: `git log -10 --oneline` and `git status`
 
-    Return ONLY this formatted section (nothing else):
+    Return ONLY this formatted section:
 
     ## Current State
     - **Branch**: {current branch name}
-    - **Status**: {clean/dirty, summary of changes if any}
-    - **Recent Work**: {list each of the last 10 commits as "- `hash` message"}
+    - **Status**: {clean/dirty, summary of changes}
+    - **Recent Work**: {list last 10 commits as "- `hash` message"}
 
 ---
 
-## Step 2B: Codebase Mode — Launch 6 Parallel Agents
+## Step 2B: Codebase Mode — Launch 4 Parallel Agents
 
 Launch ALL of the following Task agents **simultaneously**:
 
-### Agent 1: Architecture & Structure (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
-- **description**: "Analyze project architecture"
+### Agent 1: Architecture & Tech Stack
+- **subagent_type**: `Explore`
+- **model**: `haiku`
+- **description**: "Analyze architecture and stack"
 - **prompt**: |
-    You are analyzing a codebase's architecture and structure.
-    Run via Bash: `git ls-files` to list tracked files.
-    Run via Bash: `tree -L 3 -I 'node_modules|__pycache__|.git|dist|build' 2>/dev/null || ls -la`
-    Detect architectural layers by checking for these directory patterns:
-    - Routing/API: routes/, pages/, app/ (Next.js), controllers/, api/
-    - Business Logic: services/, use-cases/, domain/, agents/
-    - Data Layer: models/, schemas/, prisma/, migrations/, entities/
-    - Middleware: middleware/, guards/, interceptors/
-    - UI: components/, views/, layouts/, hooks/
-    - Utilities: utils/, helpers/, lib/, common/
-    - Config: config/, env/
-    - Tests: tests/, test/, __tests__/, spec/
+    You are analyzing a codebase's architecture and tech stack.
 
-    Return ONLY this formatted section (nothing else):
+    1. Run via Bash: `tree -L 2 -d -I 'node_modules|__pycache__|.git|dist|build|.pytest_cache|*.egg-info' 2>/dev/null || ls -la`
+    2. Read package manifest (package.json, pyproject.toml, Cargo.toml, go.mod)
+    3. Identify architectural layers from directory structure:
+       - API: routes/, api/, controllers/
+       - Business: services/, agents/, domain/
+       - Data: models/, schemas/, migrations/
+       - UI: components/, pages/, views/
+       - Tests: tests/, __tests__/
+
+    Return ONLY these formatted sections:
 
     ## Detection
     - **Mode**: Codebase
-    - **Signals**: {what code directories you found}
+    - **Signals**: {code directories found}
 
     ## Architecture
-    - **Entry Points**: {main files found — e.g., src/index.ts, main.py}
-    - **Layers**: {which architectural layers exist and how they connect}
-    - **Data Flow**: {how data moves through the system based on layers found}
-    - **Key Directories**: {important dirs and their purposes}
-
-### Agent 2: Tech Stack & Dependencies (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
-- **description**: "Analyze tech stack and dependencies"
-- **prompt**: |
-    You are analyzing a codebase's tech stack and dependencies.
-    Read the package manifest: look for package.json, pyproject.toml, Cargo.toml, go.mod, or similar.
-    Extract: language, framework, key dependencies with versions, dev dependencies, available scripts/commands, package manager, testing framework.
-
-    Return ONLY these formatted sections (nothing else):
+    - **Entry Points**: {main files — e.g., src/index.ts, main.py}
+    - **Layers**: {which layers exist}
+    - **Key Directories**: {important dirs, 1 line each}
 
     ## Tech Stack
-    - **Language**: {language and version if detectable}
-    - **Framework**: {primary framework and version}
-    - **Database**: {DB technology if found, or "None detected"}
-    - **Testing**: {test framework and approach}
-    - **Build Tools**: {package manager, bundler, etc.}
+    - **Language**: {language and version}
+    - **Framework**: {primary framework}
+    - **Database**: {DB technology or "None detected"}
+    - **Testing**: {test framework}
+    - **Key Dependencies**: {top 5-7 with versions}
 
-    ## Dependencies & Tooling
-    - **Key Dependencies**: {top 5-10 with versions}
-    - **Dev Dependencies**: {linter, formatter, type checker}
-    - **Scripts**: {available npm/make/task commands}
-
-### Agent 3: Code Conventions (Sonnet)
-- **subagent_type**: `general-purpose`
-- **model**: `sonnet`
-- **description**: "Identify code conventions"
+### Agent 2: Code Conventions & README
+- **subagent_type**: `Explore`
+- **model**: `haiku`
+- **description**: "Identify conventions and purpose"
 - **prompt**: |
-    You are identifying a codebase's conventions and patterns.
-    Read 1-2 representative service or controller files (pick files that look like core business logic).
-    Read the main entry point if present (main.py, index.ts, app.py, server.ts).
-    Also read schema/model definitions if present (prisma/schema.prisma, models.py, schema.graphql).
-    Skip .claude/ directory contents — those are tooling, not the app.
-    Limit: Read at most 4 files total.
+    You are identifying a codebase's conventions and purpose.
 
-    Return ONLY these formatted sections (nothing else):
+    1. Read README.md (if exists)
+    2. Read 1-2 core source files (services/, agents/, or main entry point)
+    3. Skip .claude/ directory — that's tooling
+
+    Limit: Read at most 3 files total.
+
+    Return ONLY these formatted sections:
 
     ## Project Overview
-    - **Purpose**: {what this application does, based on what you read}
-    - **Version**: {from manifest if available, or "Not specified"}
+    - **Purpose**: {what this app does — 1-2 sentences}
+    - **Key Capabilities**: {main features, comma-separated}
+    - **Setup**: {setup summary, or "See README"}
 
     ## Core Principles
-    - **Naming**: {conventions observed — camelCase, snake_case, PascalCase, etc.}
-    - **Error Handling**: {pattern used — try/catch, Result types, error middleware, etc.}
-    - **Code Organization**: {how files/modules are structured}
-    - **Testing Approach**: {unit, integration, e2e — what's present based on test files found}
+    - **Naming**: {snake_case, camelCase, PascalCase observed}
+    - **Error Handling**: {pattern used}
+    - **Code Organization**: {how modules are structured}
+    - **Testing**: {unit, integration, e2e — what's present}
 
-### Agent 4: README (Haiku)
+### Agent 3: Memory Context
 - **subagent_type**: `Explore`
-- **description**: "Read project README"
-- **prompt**: |
-    Read README.md if it exists. If no README exists, return "No README.md found."
-
-    Return ONLY this formatted section (nothing else):
-
-    ### README Summary
-    - **Purpose**: {what this project does — 1 sentence}
-    - **Key Capabilities**: {main features — comma-separated list}
-    - **Setup**: {setup instructions summary, or "None specified"}
-
-### Agent 5: Memory Context (Haiku)
-- **subagent_type**: `Explore`
+- **model**: `haiku`
 - **description**: "Read project memory"
 - **prompt**: |
-    You are extracting cross-session memory context.
-    Read the file `memory.md` if it exists. If it doesn't exist, note that.
+    Read the file `memory.md` if it exists.
 
-    Return ONLY this formatted section (nothing else):
+    Return ONLY this formatted section:
 
     ## Memory Context
-    - **Last Session**: {most recent date from Session Notes, or "No memory.md found"}
-    - **Key Decisions**: {bullet list from Key Decisions section, or "None recorded"}
-    - **Active Patterns**: {from Architecture Patterns section, or "None recorded"}
-    - **Gotchas**: {from Gotchas section, or "None recorded"}
-    - **Memory Health**: {if last session date is >7 days ago, warn "Stale". Otherwise "Fresh"}
+    - **Last Session**: {most recent date, or "No memory.md found"}
+    - **Key Decisions**: {bullet list, or "None recorded"}
+    - **Active Patterns**: {bullet list, or "None recorded"}
+    - **Gotchas**: {bullet list, or "None recorded"}
+    - **Memory Health**: {if >7 days old, warn "Stale". Otherwise "Fresh"}
 
-### Agent 6: Git State (Haiku)
+### Agent 4: Git State
 - **subagent_type**: `Explore`
+- **model**: `haiku`
 - **description**: "Get git state"
 - **prompt**: |
-    You are checking the current git state of a project.
     Run via Bash: `git log -10 --oneline` and `git status`
 
-    Return ONLY this formatted section (nothing else):
+    Return ONLY this formatted section:
 
     ## Current State
     - **Branch**: {current branch name}
-    - **Status**: {clean/dirty, summary of changes if any}
-    - **Recent Work**: {list each of the last 10 commits as "- `hash` message"}
+    - **Status**: {clean/dirty, summary of changes}
+    - **Recent Work**: {list last 10 commits as "- `hash` message"}
 
 ---
 
@@ -246,9 +205,23 @@ After ALL agents return, assemble the Prime Context Report:
 
 1. Start with `# Prime Context Report`
 2. Add each agent's returned section in this order:
-   - **System Mode**: Detection → Project Overview → Current State → Memory Context → Available Resources (Commands + Agents + Skills) → Suggested Next Steps
-   - **Codebase Mode**: Detection → Project Overview (merge Agent 3's overview with Agent 4's README Summary into one section) → Architecture → Tech Stack → Core Principles → Dependencies & Tooling → Current State → Memory Context → Suggested Next Steps
+   - **System Mode**: Detection → Project Overview → Available Resources → Current State → Memory Context → Suggested Next Steps
+   - **Codebase Mode**: Detection → Project Overview → Architecture → Tech Stack → Core Principles → Current State → Memory Context → Suggested Next Steps
 3. Add a `## Suggested Next Steps` section — synthesize from Current State + Memory Context to suggest what to work on next
 4. Present the assembled report to the user
 
 **CRITICAL**: Do NOT re-read files or re-run git commands. The agents already did all the work. Just assemble and present.
+
+---
+
+## Design Notes
+
+**Why Explore + Haiku?**
+- `Explore` agents have Bash access — can run git commands
+- All tasks are read-only (no Edit/Write needed)
+- `haiku` is 10x faster and cheaper than `sonnet`
+- Simple extraction tasks don't need complex reasoning
+
+**Consolidation:**
+- System Mode: 5 → 4 agents (merged Commands + Agents inventory)
+- Codebase Mode: 6 → 4 agents (merged Architecture + Tech Stack, merged Conventions + README)

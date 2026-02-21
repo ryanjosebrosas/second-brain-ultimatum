@@ -2699,3 +2699,133 @@ class TestMultiUserVoice:
             assert _validate_user_id(" Robert ") == "robert"
         finally:
             mod._deps = original_deps
+
+
+class TestMCPTimeoutLogging:
+    """Tests for timeout logging in MCP tools."""
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.recall_agent")
+    async def test_recall_logs_timeout(self, mock_agent, mock_deps_fn, mock_model_fn, caplog):
+        """Recall tool logs warning on timeout."""
+        import logging
+        from second_brain.mcp_server import recall
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            result = await recall(query="test query")
+
+        assert "timed out" in result.lower()
+        assert "MCP recall timed out" in caplog.text
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.ask_agent")
+    async def test_ask_logs_timeout(self, mock_agent, mock_deps_fn, mock_model_fn, caplog):
+        """Ask tool logs warning on timeout."""
+        import logging
+        from second_brain.mcp_server import ask
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            result = await ask(question="test question")
+
+        assert "timed out" in result.lower()
+        assert "MCP ask timed out" in caplog.text
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.learn_agent")
+    async def test_learn_logs_timeout(self, mock_agent, mock_deps_fn, mock_model_fn, caplog):
+        """Learn tool logs warning on timeout."""
+        import logging
+        from second_brain.mcp_server import learn
+
+        mock_agent.run = AsyncMock(side_effect=TimeoutError())
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            result = await learn(content="test content")
+
+        assert "timed out" in result.lower()
+        assert "MCP learn timed out" in caplog.text
+
+    @patch("second_brain.mcp_server._get_model")
+    @patch("second_brain.mcp_server._get_deps")
+    @patch("second_brain.mcp_server.run_full_review")
+    async def test_review_logs_timeout(self, mock_review, mock_deps_fn, mock_model_fn, caplog):
+        """Review tool logs warning on timeout."""
+        import logging
+        from second_brain.mcp_server import review_content
+
+        mock_review.side_effect = TimeoutError()
+        mock_deps_fn.return_value = _mock_deps()
+        mock_model_fn.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            result = await review_content(content="test content")
+
+        assert "timed out" in result.lower()
+        assert "MCP review_content timed out" in caplog.text
+
+
+class TestMem0AutoSetup:
+    """Tests for automatic Mem0 project setup."""
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_setup_calls_mem0_methods_when_provider_is_mem0(self, mock_get_deps):
+        """Setup calls criteria and instructions methods for mem0 provider."""
+        from second_brain.mcp_server import _setup_mem0_project
+
+        mock_deps = MagicMock()
+        mock_deps.config.memory_provider = "mem0"
+        mock_deps.memory.setup_criteria_retrieval = AsyncMock(return_value=True)
+        mock_deps.memory.setup_custom_instructions = AsyncMock(return_value=True)
+        mock_get_deps.return_value = mock_deps
+
+        await _setup_mem0_project()
+
+        mock_deps.memory.setup_criteria_retrieval.assert_called_once()
+        mock_deps.memory.setup_custom_instructions.assert_called_once()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_setup_skips_for_graphiti_provider(self, mock_get_deps):
+        """Setup skips Mem0 methods when provider is graphiti."""
+        from second_brain.mcp_server import _setup_mem0_project
+
+        mock_deps = MagicMock()
+        mock_deps.config.memory_provider = "graphiti"
+        mock_deps.memory.setup_criteria_retrieval = AsyncMock()
+        mock_deps.memory.setup_custom_instructions = AsyncMock()
+        mock_get_deps.return_value = mock_deps
+
+        await _setup_mem0_project()
+
+        mock_deps.memory.setup_criteria_retrieval.assert_not_called()
+        mock_deps.memory.setup_custom_instructions.assert_not_called()
+
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_setup_continues_on_criteria_failure(self, mock_get_deps, caplog):
+        """Setup continues to instructions even if criteria fails."""
+        import logging
+        from second_brain.mcp_server import _setup_mem0_project
+
+        mock_deps = MagicMock()
+        mock_deps.config.memory_provider = "mem0"
+        mock_deps.memory.setup_criteria_retrieval = AsyncMock(return_value=False)
+        mock_deps.memory.setup_custom_instructions = AsyncMock(return_value=True)
+        mock_get_deps.return_value = mock_deps
+
+        with caplog.at_level(logging.WARNING):
+            await _setup_mem0_project()
+
+        mock_deps.memory.setup_custom_instructions.assert_called_once()
+        assert "criteria retrieval setup failed" in caplog.text

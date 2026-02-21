@@ -1,7 +1,7 @@
 ---
 name: code-review-security
 description: Reviews code for security vulnerabilities including SQL injection, XSS, exposed secrets, and insecure data handling
-model: sonnet
+model: claude-sonnet-4-5-20250929
 tools: ["Read", "Glob", "Grep", "Bash"]
 ---
 

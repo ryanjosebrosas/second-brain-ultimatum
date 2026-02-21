@@ -955,11 +955,14 @@ class TestAgentModelOverrides:
 class TestAllowedUserIds:
     """Tests for allowed_user_ids config field and validators."""
 
-    def test_default_allowed_user_ids(self, tmp_path):
+    def test_default_allowed_user_ids(self, tmp_path, monkeypatch):
+        # Unset autouse fixture's ALLOWED_USER_IDS to test actual defaults
+        monkeypatch.delenv("ALLOWED_USER_IDS", raising=False)
         config = BrainConfig(
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
             brain_data_path=tmp_path,
+            brain_user_id="uttam",  # Required for default multi-user
             _env_file=None,
         )
         ids = config.allowed_user_ids_list
@@ -973,6 +976,7 @@ class TestAllowedUserIds:
         monkeypatch.setenv("SUPABASE_KEY", "test-key")
         monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
         monkeypatch.setenv("ALLOWED_USER_IDS", "alice,bob,charlie")
+        monkeypatch.setenv("BRAIN_USER_ID", "alice")  # Required for multi-user
         config = BrainConfig(_env_file=None)
         assert config.allowed_user_ids_list == ["alice", "bob", "charlie"]
 
@@ -1000,27 +1004,83 @@ class TestAllowedUserIds:
         assert config.allowed_user_ids_list.count("uttam") == 1
 
     def test_empty_brain_user_id_skips_auto_add(self, tmp_path):
-        """Empty brain_user_id doesn't trigger auto-add."""
+        """Empty brain_user_id doesn't trigger auto-add (single user)."""
         config = BrainConfig(
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
             brain_data_path=tmp_path,
             brain_user_id="",
-            allowed_user_ids="uttam,robert",
+            allowed_user_ids="solo_user",  # Single user to avoid multi-user enforcement
             _env_file=None,
         )
-        assert config.allowed_user_ids_list == ["uttam", "robert"]
+        assert config.allowed_user_ids_list == ["solo_user"]
 
     def test_custom_list_replaces_default(self, tmp_path):
         config = BrainConfig(
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
             brain_data_path=tmp_path,
+            brain_user_id="alice",  # Required for multi-user
             allowed_user_ids="alice,bob",
             _env_file=None,
         )
         assert "uttam" not in config.allowed_user_ids_list
         assert config.allowed_user_ids_list == ["alice", "bob"]
+
+    def test_raises_when_multi_user_without_brain_user_id(self, tmp_path):
+        """Multi-user deployment without brain_user_id raises ValueError."""
+        with pytest.raises(ValidationError, match="Multi-user deployment detected"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="",
+                allowed_user_ids="alice,bob,charlie",
+                _env_file=None,
+            )
+
+    def test_accepts_multi_user_with_brain_user_id(self, tmp_path):
+        """Multi-user deployment with brain_user_id is valid."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="alice",
+            allowed_user_ids="alice,bob,charlie",
+            _env_file=None,
+        )
+        assert config.brain_user_id == "alice"
+        assert len(config.allowed_user_ids_list) == 3
+
+    def test_warns_single_user_without_brain_user_id(self, tmp_path, caplog):
+        """Single-user deployment without brain_user_id warns but doesn't raise."""
+        import logging
+        with caplog.at_level(logging.WARNING):
+            config = BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="",
+                allowed_user_ids="solo_user",
+                _env_file=None,
+            )
+        assert config.brain_user_id == ""
+        assert "data will not be user-scoped" in caplog.text
+
+    def test_default_allowed_users_requires_brain_user_id(self, tmp_path, monkeypatch):
+        """Default 4-user config requires brain_user_id to be set."""
+        # Unset autouse fixture's ALLOWED_USER_IDS to test actual defaults
+        monkeypatch.delenv("ALLOWED_USER_IDS", raising=False)
+        # Default allowed_user_ids is "uttam,robert,luke,brainforge" (4 users)
+        with pytest.raises(ValidationError, match="Multi-user deployment detected"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="",
+                # allowed_user_ids defaults to multi-user
+                _env_file=None,
+            )
 
 
 class TestMem0RerankConfig:
@@ -1042,5 +1102,70 @@ class TestMem0RerankConfig:
         monkeypatch.setenv("SUPABASE_KEY", "test-key")
         monkeypatch.setenv("BRAIN_DATA_PATH", str(tmp_path))
         monkeypatch.setenv("MEM0_RERANK", "false")
+        monkeypatch.setenv("BRAIN_USER_ID", "testuser")  # Required for default multi-user
         config = BrainConfig(_env_file=None)
         assert config.mem0_rerank is False
+
+
+class TestServiceTimeoutBounds:
+    """Tests for service_timeout_seconds field constraints."""
+
+    def test_rejects_timeout_below_minimum(self, tmp_path):
+        """service_timeout_seconds must be >= 5."""
+        with pytest.raises(ValidationError, match="greater than or equal to 5"):
+            BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="testuser",
+                allowed_user_ids="testuser",
+                service_timeout_seconds=4,
+                _env_file=None,
+            )
+
+    def test_accepts_minimum_timeout(self, tmp_path):
+        """service_timeout_seconds=5 is valid."""
+        config = BrainConfig(
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            brain_user_id="testuser",
+            allowed_user_ids="testuser",
+            service_timeout_seconds=5,
+            _env_file=None,
+        )
+        assert config.service_timeout_seconds == 5
+
+    def test_warns_when_service_timeout_equals_api_timeout(self, tmp_path, caplog):
+        """Warns when service timeout >= api timeout."""
+        import logging
+        with caplog.at_level(logging.WARNING):
+            config = BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="testuser",
+                allowed_user_ids="testuser",
+                service_timeout_seconds=30,
+                api_timeout_seconds=30,
+                _env_file=None,
+            )
+        assert config.service_timeout_seconds == 30
+        assert "service calls may never complete" in caplog.text
+
+    def test_no_warning_when_service_timeout_less_than_api(self, tmp_path, caplog):
+        """No warning when service timeout < api timeout (normal case)."""
+        import logging
+        with caplog.at_level(logging.WARNING):
+            config = BrainConfig(
+                supabase_url="https://test.supabase.co",
+                supabase_key="test-key",
+                brain_data_path=tmp_path,
+                brain_user_id="testuser",
+                allowed_user_ids="testuser",
+                service_timeout_seconds=15,
+                api_timeout_seconds=30,
+                _env_file=None,
+            )
+        assert config.service_timeout_seconds == 15
+        assert "service calls may never complete" not in caplog.text

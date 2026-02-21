@@ -12,13 +12,13 @@ These agents handle **parallel research** — exploring your codebase and extern
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| **research-codebase** | Sonnet | Read, Glob, Grep | File discovery, pattern extraction, codebase exploration |
-| **research-external** | Sonnet | Read, Glob, Grep, WebSearch, WebFetch | Documentation search, best practices, version compatibility |
+| **research-codebase** | Opus | Read, Glob, Grep | File discovery, pattern extraction, codebase exploration |
+| **research-external** | Opus | Read, Glob, Grep, WebSearch, WebFetch | Documentation search, best practices, version compatibility |
 
 ### When to Use
 
-- **research-codebase** (Sonnet): Parallel codebase exploration during planning, finding files and patterns, extracting code examples with line numbers. Read-only tools keep it safe.
-- **research-external** (Sonnet): Documentation search, best practices research, version compatibility checks, migration guides.
+- **research-codebase** (Opus): Parallel codebase exploration during planning, finding files and patterns, extracting code examples with line numbers. Read-only tools keep it safe. Opus for synthesis quality.
+- **research-external** (Opus): Documentation search, best practices research, version compatibility checks, migration guides. Opus for judgment on doc relevance.
 
 ### Usage Examples
 
@@ -32,7 +32,7 @@ Use the research-external agent to find the React 19 migration guide and breakin
 
 ### Model Selection
 
-Both research agents use **Sonnet** for consistent quality across codebase and external research.
+Both research agents use **Opus** for best synthesis and judgment quality during planning research.
 
 ### Parallel Research in /planning
 
@@ -293,7 +293,12 @@ Use the specialist-tech-writer agent to review the README for completeness.
 
 ## Model Summary
 
-All 12 agents use **Sonnet** for consistent, high-quality output across all categories.
+| Category | Model | Reasoning |
+|----------|-------|-----------|
+| **Research** | Opus | Synthesis and judgment during planning |
+| **Code Review** | Sonnet | Analysis and pattern matching |
+| **Utility** | Sonnet | Validation and generation |
+| **Specialist** | Sonnet | Domain expertise with methodology |
 
 > **Typical usage**: Running all 12 agents simultaneously is rare. Most sessions use
 > 2-4 agents per command.

@@ -44,7 +44,11 @@ recall_agent = Agent(
         "backend service failures), do NOT keep retrying the same failing tools. "
         "Instead, set the error field to describe which services are down and return "
         "whatever partial results you have (even if empty). This prevents unnecessary "
-        "retries when the problem is infrastructure, not your search strategy."
+        "retries when the problem is infrastructure, not your search strategy.\n\n"
+        "USER PROFILE ROUTING:\n"
+        "If voice_user_id is provided, pass it to all search tools. This scopes "
+        "search results to that user's patterns and examples while still including "
+        "shared brain knowledge."
     ),
 )
 
@@ -94,9 +98,10 @@ async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> R
 
 @recall_agent.tool
 async def search_semantic_memory(
-    ctx: RunContext[BrainDeps], query: str
+    ctx: RunContext[BrainDeps], query: str, voice_user_id: str = ""
 ) -> str:
     """Search Mem0 semantic memory and pgvector in parallel for relevant content."""
+    uid = voice_user_id if voice_user_id else None
     try:
 
 
@@ -110,7 +115,9 @@ async def search_semantic_memory(
         if ctx.deps.embedding_service:
             embed_coro = ctx.deps.embedding_service.embed_query(expanded)
 
-        mem0_coro = ctx.deps.memory_service.search(expanded, limit=search_limit)
+        mem0_coro = ctx.deps.memory_service.search(
+            expanded, limit=search_limit, override_user_id=uid
+        )
 
         if embed_coro:
             embed_result, mem0_result = await asyncio.gather(
@@ -185,9 +192,10 @@ async def search_semantic_memory(
 
 @recall_agent.tool
 async def search_patterns(
-    ctx: RunContext[BrainDeps], topic: str | None = None
+    ctx: RunContext[BrainDeps], topic: str | None = None, voice_user_id: str = ""
 ) -> str:
     """Search the pattern registry using hybrid + semantic search in parallel."""
+    uid = voice_user_id if voice_user_id else None
     try:
 
 
@@ -208,6 +216,7 @@ async def search_patterns(
             topic or "patterns",
             metadata_filters=filters,
             limit=10,
+            override_user_id=uid,
         )
 
         if embed_coro:
@@ -343,11 +352,13 @@ async def search_experiences(
 
 @recall_agent.tool
 async def search_examples(
-    ctx: RunContext[BrainDeps], query: str | None = None, content_type: str | None = None
+    ctx: RunContext[BrainDeps], query: str | None = None, content_type: str | None = None,
+    voice_user_id: str = ""
 ) -> str:
     """Search content examples by semantic similarity or content type filter.
 
     Use query for semantic search, content_type for exact filter, or both."""
+    uid = voice_user_id if voice_user_id else None
     try:
         examples = []
 
@@ -362,11 +373,14 @@ async def search_examples(
             examples = await ctx.deps.storage_service.search_examples_semantic(
                 embedding=embedding,
                 limit=ctx.deps.config.memory_search_limit,
+                override_user_id=uid,
             )
 
         # Fallback: exact-match filter when semantic search returns nothing
         if not examples:
-            examples = await ctx.deps.storage_service.get_examples(content_type=content_type)
+            examples = await ctx.deps.storage_service.get_examples(
+                content_type=content_type, override_user_id=uid
+            )
 
         if not examples:
             if embedding is None and query and ctx.deps.embedding_service:

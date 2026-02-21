@@ -1,7 +1,7 @@
 ---
 name: test-generator
 description: Use this agent to analyze changed code and suggest test cases following the project's existing test patterns. Identifies untested functions, edge cases, and missing coverage.
-model: sonnet
+model: claude-sonnet-4-5-20250929
 tools: ["Read", "Glob", "Grep"]
 ---
 
