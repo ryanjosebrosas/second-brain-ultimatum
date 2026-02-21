@@ -1260,6 +1260,10 @@ async def graph_search(query: str, limit: int = 10) -> str:
         query: What to search for in the graph (e.g., "content strategy")
         limit: Maximum relationships to return (default: 10)
     """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Graphiti is not enabled. Set GRAPHITI_ENABLED=true in your .env file."
@@ -1327,6 +1331,10 @@ async def graph_entity_search(query: str, limit: int = 10) -> str:
         query: Entity name or description to search for
         limit: Maximum results (default: 10)
     """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Entity search unavailable — Graphiti not configured."
@@ -1370,6 +1378,10 @@ async def graph_entity_context(entity_uuid: str) -> str:
     Args:
         entity_uuid: UUID of the entity (from graph_entity_search results)
     """
+    try:
+        entity_uuid = _validate_mcp_input(entity_uuid, label="entity_uuid")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Entity context unavailable — Graphiti not configured."
@@ -1423,6 +1435,10 @@ async def graph_traverse(entity_uuid: str, max_hops: int = 2, limit: int = 20) -
         max_hops: Maximum relationship hops to follow (default: 2, max: 5)
         limit: Maximum total relationships to return (default: 20)
     """
+    try:
+        entity_uuid = _validate_mcp_input(entity_uuid, label="entity_uuid")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Graph traversal unavailable — Graphiti not configured."
@@ -1464,6 +1480,11 @@ async def graph_communities(query: str = "", limit: int = 5) -> str:
         query: Optional filter to find communities related to a topic
         limit: Maximum communities to return (default: 5)
     """
+    if query:
+        try:
+            query = _validate_mcp_input(query, label="query")
+        except ValueError as e:
+            return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Community search unavailable — Graphiti not configured."
@@ -1516,6 +1537,10 @@ async def graph_advanced_search(
         created_after: ISO date filter (e.g., "2024-01-01")
         created_before: ISO date filter (e.g., "2024-12-31")
     """
+    try:
+        query = _validate_mcp_input(query, label="query")
+    except ValueError as e:
+        return str(e)
     deps = _get_deps()
     if not deps.graphiti_service:
         return "Advanced search unavailable — Graphiti not configured."
@@ -2885,6 +2910,16 @@ async def list_templates(content_type: str = "", tag: str = "") -> str:
         content_type: Optional filter by content type slug (linkedin, email, etc.)
         tag: Optional filter by tag
     """
+    if content_type:
+        try:
+            content_type = _validate_mcp_input(content_type, label="content_type")
+        except ValueError as e:
+            return str(e)
+    if tag:
+        try:
+            tag = _validate_mcp_input(tag, label="tag")
+        except ValueError as e:
+            return str(e)
     deps = _get_deps()
     timeout = deps.config.api_timeout_seconds
     try:

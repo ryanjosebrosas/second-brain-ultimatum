@@ -948,6 +948,11 @@ class TestMCPGraphSearch:
         assert "relates_to" in result
         assert "Topic B" in result
 
+    async def test_graph_search_empty_input(self):
+        from second_brain.mcp_server import graph_search
+        result = await graph_search(query="")
+        assert "cannot be empty" in result
+
 
 class TestGraphHealth:
     """Test graph_health MCP tool."""
@@ -1029,6 +1034,11 @@ class TestGraphEntitySearch:
         result = await graph_entity_search(query="nothing")
         assert "no entities" in result.lower()
 
+    async def test_graph_entity_search_empty_input(self):
+        from second_brain.mcp_server import graph_entity_search
+        result = await graph_entity_search(query="")
+        assert "cannot be empty" in result
+
 
 class TestGraphEntityContext:
     """Test graph_entity_context MCP tool."""
@@ -1070,6 +1080,11 @@ class TestGraphEntityContext:
         result = await graph_entity_context(entity_uuid="nonexistent")
         assert "not found" in result.lower()
 
+    async def test_graph_entity_context_empty_input(self):
+        from second_brain.mcp_server import graph_entity_context
+        result = await graph_entity_context(entity_uuid="")
+        assert "cannot be empty" in result
+
 
 class TestGraphTraverse:
     """Test graph_traverse MCP tool."""
@@ -1106,6 +1121,11 @@ class TestGraphTraverse:
         from second_brain.mcp_server import graph_traverse
         result = await graph_traverse(entity_uuid="e1")
         assert "no connections" in result.lower()
+
+    async def test_graph_traverse_empty_input(self):
+        from second_brain.mcp_server import graph_traverse
+        result = await graph_traverse(entity_uuid="")
+        assert "cannot be empty" in result
 
 
 class TestGraphCommunities:
@@ -1184,6 +1204,11 @@ class TestGraphAdvancedSearch:
         from second_brain.mcp_server import graph_advanced_search
         result = await graph_advanced_search(query="nothing")
         assert "no results" in result.lower()
+
+    async def test_graph_advanced_search_empty_input(self):
+        from second_brain.mcp_server import graph_advanced_search
+        result = await graph_advanced_search(query="")
+        assert "cannot be empty" in result
 
 
 class TestConsolidateBrain:
