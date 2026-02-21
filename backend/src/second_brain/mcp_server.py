@@ -370,6 +370,7 @@ async def quick_recall(query: str, limit: int = 10) -> str:
             relations = await search_with_graph_fallback(deps, query, base_relations)
 
     except TimeoutError:
+        logger.warning("MCP quick_recall timed out after %ds", timeout)
         return f"Quick recall timed out after {timeout}s. Try a simpler query."
     except Exception as e:
         logger.error("Quick recall failed: %s", type(e).__name__)
@@ -432,6 +433,7 @@ async def recall_deep(query: str, limit: int = 15) -> str:
 
             result = await deep_recall_search(deps, query, limit=limit)
     except TimeoutError:
+        logger.warning("MCP recall_deep timed out after %ds", timeout)
         return f"Deep recall timed out after {timeout}s. Try a simpler query or use quick_recall()."
     except Exception as e:
         logger.error("Deep recall failed: %s", type(e).__name__)
@@ -623,6 +625,7 @@ async def learn_image(image_url: str, context: str = "", category: str = "visual
         else:
             results.append("Mem0 storage returned empty result")
     except TimeoutError:
+        logger.warning("MCP learn_image Mem0 storage timed out after %ds", timeout)
         results.append(f"Mem0 storage timed out after {timeout}s")
     except Exception as e:
         results.append(f"Mem0 storage failed: {type(e).__name__}")
@@ -726,6 +729,7 @@ async def learn_document(
         else:
             results.append("Mem0 storage returned empty result")
     except TimeoutError:
+        logger.warning("MCP learn_document Mem0 storage timed out after %ds", timeout)
         results.append(f"Mem0 storage timed out after {timeout}s")
     except Exception as e:
         results.append(f"Mem0 storage failed: {type(e).__name__}")
@@ -884,6 +888,7 @@ async def multimodal_vector_search(
                 limit=limit,
             )
     except TimeoutError:
+        logger.warning("MCP multimodal_vector_search timed out after %ds", timeout)
         return f"Multimodal search timed out after {timeout}s."
     except ValueError as e:
         return str(e)
@@ -975,6 +980,7 @@ async def create_content(
                     writer_prompt, deps=deps, model=model,
                 )
         except TimeoutError:
+            logger.warning("MCP create_content linkedin_writer timed out after %ds", timeout)
             return f"LinkedIn post creation timed out after {timeout}s."
         out = result.output
         parts = [
@@ -1319,6 +1325,7 @@ async def graph_entity_search(query: str, limit: int = 10) -> str:
             formatted.append(line)
         return "\n".join(formatted)
     except TimeoutError:
+        logger.warning("MCP graph_entity_search timed out after %ds", deps.config.api_timeout_seconds)
         return f"Entity search timed out after {deps.config.api_timeout_seconds}s."
     except Exception as e:
         logger.warning("graph_entity_search failed: %s", type(e).__name__)
@@ -1368,6 +1375,7 @@ async def graph_entity_context(entity_uuid: str) -> str:
                     formatted.append(f"- ← {r.get('connected_entity', '?')}: {fact}")
         return "\n".join(formatted)
     except TimeoutError:
+        logger.warning("MCP graph_entity_context timed out after %ds", deps.config.api_timeout_seconds)
         return f"Entity context timed out after {deps.config.api_timeout_seconds}s."
     except Exception as e:
         logger.warning("graph_entity_context failed: %s", type(e).__name__)
@@ -1409,6 +1417,7 @@ async def graph_traverse(entity_uuid: str, max_hops: int = 2, limit: int = 20) -
             formatted.append(f"- {src} --[{rel}]--> {tgt}")
         return "\n".join(formatted)
     except TimeoutError:
+        logger.warning("MCP graph_traverse timed out")
         return "Graph traversal timed out."
     except Exception as e:
         logger.warning("graph_traverse failed: %s", type(e).__name__)
@@ -1449,6 +1458,7 @@ async def graph_communities(query: str = "", limit: int = 5) -> str:
                 formatted.append(f"  {summary}")
         return "\n".join(formatted)
     except TimeoutError:
+        logger.warning("MCP graph_communities timed out")
         return "Community search timed out."
     except Exception as e:
         logger.warning("graph_communities failed: %s", type(e).__name__)
@@ -1518,6 +1528,7 @@ async def graph_advanced_search(
                 formatted.append(f"- **{c.get('name', '?')}**: {c.get('summary', '')}")
         return "\n".join(formatted)
     except TimeoutError:
+        logger.warning("MCP graph_advanced_search timed out")
         return "Advanced search timed out."
     except Exception as e:
         logger.warning("graph_advanced_search failed: %s", type(e).__name__)
@@ -1553,6 +1564,7 @@ async def consolidate_brain(min_cluster_size: int = 3) -> str:
                 model=model,
             )
     except TimeoutError:
+        logger.warning("MCP consolidate_brain timed out after %ds", timeout)
         return f"Consolidation timed out after {timeout}s. Try again later."
     output = result.output
 
@@ -1780,6 +1792,7 @@ async def vector_search(
                 limit=limit,
             )
     except TimeoutError:
+        logger.warning("MCP vector_search timed out after %ds", timeout)
         return f"Vector search timed out after {timeout}s."
     except ValueError as e:
         return str(e)
@@ -2396,6 +2409,7 @@ async def coaching_session(request: str, session_type: str = "morning") -> str:
         async with asyncio.timeout(timeout):
             result = await coach_agent.run(prompt, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP coaching_session timed out after %ds", timeout)
         return f"Coaching session timed out after {timeout}s."
     out = result.output
     parts = [f"Session: {out.session_type}", f"Next action: {out.next_action}"]
@@ -2429,6 +2443,7 @@ async def prioritize_tasks(tasks: str) -> str:
         async with asyncio.timeout(timeout):
             result = await pmo_agent.run(tasks, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP prioritize_tasks timed out after %ds", timeout)
         return f"Task prioritization timed out after {timeout}s."
     out = result.output
     lines = [out.coaching_message]
@@ -2461,6 +2476,7 @@ async def compose_email(request: str) -> str:
         async with asyncio.timeout(timeout):
             result = await email_agent.run(request, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP compose_email timed out after %ds", timeout)
         return f"Email composition timed out after {timeout}s."
     out = result.output
     return f"Subject: {out.subject}\n\n{out.body}\n\nStatus: {out.status}"
@@ -2491,6 +2507,7 @@ async def ask_claude_specialist(question: str) -> str:
         async with asyncio.timeout(timeout):
             result = await specialist_agent.run(question, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP ask_claude_specialist timed out after %ds", timeout)
         return f"Specialist query timed out after {timeout}s."
     out = result.output
     return f"[{out.confidence_level}] {out.answer}"
@@ -2531,6 +2548,7 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
             async with asyncio.timeout(timeout):
                 routing = await chief_of_staff.run(request, deps=deps, model=model)
         except TimeoutError:
+            logger.warning("MCP run_brain_pipeline routing timed out after %ds", timeout)
             return f"Pipeline routing timed out after {timeout}s."
         routing_output = routing.output
         if routing_output.target_agent == "pipeline":
@@ -2557,6 +2575,7 @@ async def run_brain_pipeline(request: str, steps: str = "") -> str:
                 model=model,
             )
     except TimeoutError:
+        logger.warning("MCP run_brain_pipeline execution timed out after %ds (%d steps)", pipeline_timeout, len(step_list))
         return f"Pipeline timed out after {pipeline_timeout}s ({len(step_list)} steps). Try fewer steps or a simpler request."
     final = results.get("final")
     return str(final) if final else "Pipeline completed with no output."
@@ -2588,6 +2607,7 @@ async def analyze_clarity(content: str) -> str:
         async with asyncio.timeout(timeout):
             result = await clarity_agent.run(content, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP analyze_clarity timed out after %ds", timeout)
         return f"Clarity analysis timed out after {timeout}s."
     out = result.output
     lines = [f"Readability: {out.overall_readability} ({out.critical_count} critical)"]
@@ -2621,6 +2641,7 @@ async def synthesize_feedback(findings: str) -> str:
         async with asyncio.timeout(timeout):
             result = await synthesizer_agent.run(findings, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP synthesize_feedback timed out after %ds", timeout)
         return f"Feedback synthesis timed out after {timeout}s."
     out = result.output
     lines = [f"{out.total_themes_output} themes, {out.implementation_hours:.1f}h total"]
@@ -2654,6 +2675,7 @@ async def find_template_opportunities(deliverable: str) -> str:
         async with asyncio.timeout(timeout):
             result = await template_builder_agent.run(deliverable, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP find_template_opportunities timed out after %ds", timeout)
         return f"Template analysis timed out after {timeout}s."
     out = result.output
     lines = [
@@ -2877,6 +2899,7 @@ async def write_linkedin_hooks(
         async with asyncio.timeout(timeout):
             result = await hook_writer_agent.run(prompt, deps=deps, model=model)
     except TimeoutError:
+        logger.warning("MCP write_linkedin_hooks timed out after %ds", timeout)
         return f"Hook writing timed out after {timeout}s."
     out = result.output
 
@@ -2935,6 +2958,7 @@ async def linkedin_comment(
                 prompt, deps=deps, model=model,
             )
     except TimeoutError:
+        logger.warning("MCP linkedin_comment timed out after %ds", timeout)
         return f"Comment generation timed out after {timeout}s."
     out = result.output
 
@@ -3000,6 +3024,7 @@ async def linkedin_reply(
                 prompt, deps=deps, model=model,
             )
     except TimeoutError:
+        logger.warning("MCP linkedin_reply timed out after %ds", timeout)
         return f"Reply generation timed out after {timeout}s."
     out = result.output
 
