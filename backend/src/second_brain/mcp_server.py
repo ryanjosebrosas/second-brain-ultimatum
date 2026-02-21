@@ -164,12 +164,12 @@ async def _setup_mem0_project() -> None:
         return
 
     # Setup criteria retrieval (weighted scoring for searches)
-    criteria_ok = await deps.memory.setup_criteria_retrieval()
+    criteria_ok = await deps.memory_service.setup_criteria_retrieval()
     if not criteria_ok:
         logger.warning("Mem0 criteria retrieval setup failed — using defaults")
 
     # Setup custom instructions (memory extraction guidelines)
-    instructions_ok = await deps.memory.setup_custom_instructions()
+    instructions_ok = await deps.memory_service.setup_custom_instructions()
     if not instructions_ok:
         logger.warning("Mem0 custom instructions setup failed — using defaults")
 
@@ -1125,7 +1125,12 @@ async def search_examples(content_type: str | None = None) -> str:
         content_type: Filter by type (linkedin, email, case-study) or None for all.
     """
     deps = _get_deps()
-    examples = await deps.storage_service.get_examples(content_type=content_type)
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            examples = await deps.storage_service.get_examples(content_type=content_type)
+    except TimeoutError:
+        return f"Example search timed out after {timeout}s."
     if not examples:
         return "No content examples found. Add examples to memory/examples/ and run migrate."
     parts = ["# Content Examples\n"]
@@ -1152,7 +1157,12 @@ async def search_knowledge(category: str | None = None) -> str:
                   None for all entries.
     """
     deps = _get_deps()
-    knowledge = await deps.storage_service.get_knowledge(category=category)
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            knowledge = await deps.storage_service.get_knowledge(category=category)
+    except TimeoutError:
+        return f"Knowledge search timed out after {timeout}s."
     if not knowledge:
         return "No knowledge entries found. Add content to memory/knowledge-repo/ and run migrate."
     parts = ["# Knowledge Repository\n"]
@@ -1210,7 +1220,12 @@ async def brain_health() -> str:
     from second_brain.services.health import HealthService
 
     deps = _get_deps()
-    metrics = await HealthService().compute(deps)
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            metrics = await HealthService().compute(deps)
+    except TimeoutError:
+        return f"Brain health check timed out after {timeout}s."
 
     parts = [
         "# Brain Health\n",
@@ -1249,7 +1264,12 @@ async def graph_search(query: str, limit: int = 10) -> str:
     if not deps.graphiti_service:
         return "Graphiti is not enabled. Set GRAPHITI_ENABLED=true in your .env file."
 
-    results = await deps.graphiti_service.search(query, limit=limit)
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            results = await deps.graphiti_service.search(query, limit=limit)
+    except TimeoutError:
+        return f"Graph search timed out after {timeout}s."
     if not results:
         return f"No graph relationships found for: {query}"
 
@@ -1276,7 +1296,12 @@ async def graph_health() -> str:
     if not deps.graphiti_service:
         return "Graphiti is not enabled. Set GRAPHITI_ENABLED=true in your .env file."
 
-    health = await deps.graphiti_service.health_check()
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            health = await deps.graphiti_service.health_check()
+    except TimeoutError:
+        return f"Graph health check timed out after {timeout}s."
     parts = [
         "# Graph Health\n",
         f"Status: {health.get('status', 'unknown')}",
@@ -1602,8 +1627,13 @@ async def growth_report(days: int = 30) -> str:
     from second_brain.services.health import HealthService
 
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     health = HealthService()
-    metrics = await health.compute_growth(deps, days=days)
+    try:
+        async with asyncio.timeout(timeout):
+            metrics = await health.compute_growth(deps, days=days)
+    except TimeoutError:
+        return f"Growth report timed out after {timeout}s."
 
     parts = [
         f"# Growth Report ({days} days)\n",
@@ -1671,8 +1701,13 @@ async def list_content_types() -> str:
     built-in flag.
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     registry = deps.get_content_type_registry()
-    all_types = await registry.get_all()
+    try:
+        async with asyncio.timeout(timeout):
+            all_types = await registry.get_all()
+    except TimeoutError:
+        return f"Content type listing timed out after {timeout}s."
     if not all_types:
         return "No content types available."
 
@@ -2025,12 +2060,16 @@ async def update_project(
     if not fields:
         return "No fields to update. Provide at least one of: name, description, category."
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        result = await deps.storage_service.update_project(project_id, fields)
+        async with asyncio.timeout(timeout):
+            result = await deps.storage_service.update_project(project_id, fields)
         if not result:
             return f"Project not found: {project_id}"
         changed = ", ".join(fields.keys())
         return f"Project updated: {result.get('name', project_id)}\nChanged: {changed}"
+    except TimeoutError:
+        return f"Project update timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to update project: %s", e)
         return "Failed to update project. Check server logs for details."
@@ -2053,16 +2092,20 @@ async def delete_project(project_id: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        # Fetch project first to get the name for confirmation message
-        proj = await deps.storage_service.get_project(project_id)
-        if not proj:
-            return f"Project not found: {project_id}"
-        project_name = proj.get("name", project_id)
-        deleted = await deps.storage_service.delete_project(project_id)
+        async with asyncio.timeout(timeout):
+            # Fetch project first to get the name for confirmation message
+            proj = await deps.storage_service.get_project(project_id)
+            if not proj:
+                return f"Project not found: {project_id}"
+            project_name = proj.get("name", project_id)
+            deleted = await deps.storage_service.delete_project(project_id)
         if deleted:
             return f"Deleted project: {project_name}"
         return f"Failed to delete project: {project_id}"
+    except TimeoutError:
+        return f"Project deletion timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to delete project: %s", e)
         return "Failed to delete project. Check server logs for details."
@@ -2096,13 +2139,15 @@ async def add_artifact(
     if artifact_type not in valid_types:
         return f"Invalid artifact_type '{artifact_type}'. Use: {', '.join(sorted(valid_types))}"
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         artifact_data: dict = {"project_id": project_id, "artifact_type": artifact_type}
         if title:
             artifact_data["title"] = title
         if content:
             artifact_data["content"] = content
-        result = await deps.storage_service.add_project_artifact(artifact_data)
+        async with asyncio.timeout(timeout):
+            result = await deps.storage_service.add_project_artifact(artifact_data)
         if result:
             return (
                 f"Artifact added: {artifact_type}"
@@ -2110,6 +2155,8 @@ async def add_artifact(
                 + f"\nArtifact ID: {result.get('id', 'unknown')}"
             )
         return "Failed to add artifact."
+    except TimeoutError:
+        return f"Artifact creation timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to add artifact: %s", e)
         return "Failed to add artifact. Check server logs for details."
@@ -2132,11 +2179,15 @@ async def delete_artifact(artifact_id: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        deleted = await deps.storage_service.delete_project_artifact(artifact_id)
+        async with asyncio.timeout(timeout):
+            deleted = await deps.storage_service.delete_project_artifact(artifact_id)
         if deleted:
             return f"Deleted artifact: {artifact_id}"
         return f"Artifact not found: {artifact_id}"
+    except TimeoutError:
+        return f"Artifact deletion timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to delete artifact: %s", e)
         return "Failed to delete artifact. Check server logs for details."
@@ -2161,10 +2212,12 @@ async def search_experiences(
         limit: Maximum experiences to return (default: 20)
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        experiences = await deps.storage_service.get_experiences(
-            category=category, limit=limit
-        )
+        async with asyncio.timeout(timeout):
+            experiences = await deps.storage_service.get_experiences(
+                category=category, limit=limit
+            )
         if not experiences:
             cat_note = f" in category '{category}'" if category else ""
             return f"No experiences found{cat_note}. Record some with `learn`."
@@ -2180,6 +2233,8 @@ async def search_experiences(
                 parts.append(f"ID: {exp['id']}")
             parts.append("")
         return "\n".join(parts)
+    except TimeoutError:
+        return f"Experience search timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to search experiences: %s", e)
         return "Failed to search experiences. Check server logs for details."
@@ -2208,10 +2263,12 @@ async def search_patterns(
         limit: Maximum results (default: 30)
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        patterns = await deps.storage_service.get_patterns(
-            topic=topic, confidence=confidence
-        )
+        async with asyncio.timeout(timeout):
+            patterns = await deps.storage_service.get_patterns(
+                topic=topic, confidence=confidence
+            )
         # Client-side keyword filter
         if keyword:
             kw = keyword.lower()
@@ -2234,6 +2291,8 @@ async def search_patterns(
                 parts.append(f"ID: {p['id']}")
             parts.append("")
         return "\n".join(parts)
+    except TimeoutError:
+        return f"Pattern search timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to search patterns: %s", e)
         return "Failed to search patterns. Check server logs for details."
@@ -2268,6 +2327,7 @@ async def ingest_example(
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         example_data: dict = {
             "content_type": content_type,
@@ -2276,7 +2336,8 @@ async def ingest_example(
         }
         if notes:
             example_data["notes"] = notes
-        result = await deps.storage_service.upsert_example(example_data)
+        async with asyncio.timeout(timeout):
+            result = await deps.storage_service.upsert_example(example_data)
         if result:
             return (
                 f"Example added: {title}\n"
@@ -2284,6 +2345,8 @@ async def ingest_example(
                 f"ID: {result.get('id', 'unknown')}"
             )
         return "Failed to ingest example."
+    except TimeoutError:
+        return f"Example ingestion timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to ingest example: %s", e)
         return "Failed to ingest example. Check server logs for details."
@@ -2318,6 +2381,7 @@ async def ingest_knowledge(
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         knowledge_data: dict = {
             "category": category,
@@ -2326,7 +2390,8 @@ async def ingest_knowledge(
         }
         if tags:
             knowledge_data["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
-        result = await deps.storage_service.upsert_knowledge(knowledge_data)
+        async with asyncio.timeout(timeout):
+            result = await deps.storage_service.upsert_knowledge(knowledge_data)
         if result:
             return (
                 f"Knowledge added: {title}\n"
@@ -2334,6 +2399,8 @@ async def ingest_knowledge(
                 f"ID: {result.get('id', 'unknown')}"
             )
         return "Failed to ingest knowledge."
+    except TimeoutError:
+        return f"Knowledge ingestion timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to ingest knowledge: %s", e)
         return "Failed to ingest knowledge. Check server logs for details."
@@ -2351,10 +2418,12 @@ async def brain_setup() -> str:
     and next actions for missing categories.
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         from second_brain.services.health import HealthService
         health = HealthService()
-        status = await health.compute_setup_status(deps)
+        async with asyncio.timeout(timeout):
+            status = await health.compute_setup_status(deps)
         completed = status.get("completed_count", 0)
         total = status.get("total_steps", 0)
         pct = int(completed / total * 100) if total > 0 else 0
@@ -2370,6 +2439,8 @@ async def brain_setup() -> str:
         else:
             parts.append("\nBrain is fully configured!")
         return "\n".join(parts)
+    except TimeoutError:
+        return f"Setup status check timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to check setup: %s", e)
         return "Failed to check setup. Check server logs for details."
@@ -2387,10 +2458,14 @@ async def pattern_registry() -> str:
     and topic groupings.
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         from second_brain.agents.utils import format_pattern_registry
-        registry = await deps.storage_service.get_pattern_registry()
+        async with asyncio.timeout(timeout):
+            registry = await deps.storage_service.get_pattern_registry()
         return format_pattern_registry(registry, config=deps.config)
+    except TimeoutError:
+        return f"Pattern registry load timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to load pattern registry: %s", e)
         return "Failed to load pattern registry. Check server logs for details."
@@ -2811,11 +2886,13 @@ async def list_templates(content_type: str = "", tag: str = "") -> str:
         tag: Optional filter by tag
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         tags = [tag] if tag else None
-        templates = await deps.storage_service.get_templates(
-            content_type=content_type or None, tags=tags,
-        )
+        async with asyncio.timeout(timeout):
+            templates = await deps.storage_service.get_templates(
+                content_type=content_type or None, tags=tags,
+            )
         if not templates:
             return "No templates found in the bank."
         lines = [f"{len(templates)} templates found:"]
@@ -2828,6 +2905,8 @@ async def list_templates(content_type: str = "", tag: str = "") -> str:
                 f"  ID: {t.get('id', 'unknown')}"
             )
         return "\n".join(lines)
+    except TimeoutError:
+        return f"Template listing timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to list templates: %s", e)
         return "Failed to list templates. Check server logs for details."

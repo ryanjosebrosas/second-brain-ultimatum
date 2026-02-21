@@ -1,5 +1,6 @@
 """Tests for MCP server tool functions."""
 
+import asyncio
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -92,7 +93,7 @@ class TestMCPTools:
     async def test_brain_health_tool(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
             {"confidence": "MEDIUM", "topic": "messaging", "date_updated": "2026-02-14"},
@@ -152,7 +153,7 @@ class TestMCPTools:
     async def test_brain_health_growing_status(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"}
             for _ in range(10)
@@ -223,7 +224,7 @@ class TestMCPTools:
     async def test_brain_health_with_topics(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
             {"confidence": "LOW", "topic": "content", "date_updated": "2026-02-14"},
@@ -244,7 +245,7 @@ class TestMCPTools:
     async def test_brain_health_with_memory_count(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[])
         mock_deps.storage_service.get_experiences = AsyncMock(return_value=[])
         mock_deps.memory_service.get_memory_count = AsyncMock(return_value=99)
@@ -261,7 +262,7 @@ class TestMCPTools:
     async def test_brain_health_memory_unavailable(self, mock_deps_fn):
         from second_brain.mcp_server import brain_health
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_patterns = AsyncMock(return_value=[
             {"confidence": "HIGH", "topic": "content", "date_updated": "2026-02-15"},
         ])
@@ -280,7 +281,7 @@ class TestMCPTools:
     async def test_search_examples_tool(self, mock_deps_fn):
         from second_brain.mcp_server import search_examples
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_examples = AsyncMock(return_value=[
             {"content_type": "linkedin", "title": "Hooks That Work", "content": "5 hooks..."},
         ])
@@ -294,7 +295,7 @@ class TestMCPTools:
     async def test_search_examples_empty(self, mock_deps_fn):
         from second_brain.mcp_server import search_examples
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
         mock_deps_fn.return_value = mock_deps
 
@@ -305,7 +306,7 @@ class TestMCPTools:
     async def test_search_knowledge_tool(self, mock_deps_fn):
         from second_brain.mcp_server import search_knowledge
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_knowledge = AsyncMock(return_value=[
             {"category": "frameworks", "title": "Value Ladder", "content": "Framework..."},
         ])
@@ -319,7 +320,7 @@ class TestMCPTools:
     async def test_search_knowledge_empty(self, mock_deps_fn):
         from second_brain.mcp_server import search_knowledge
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_knowledge = AsyncMock(return_value=[])
         mock_deps_fn.return_value = mock_deps
 
@@ -923,7 +924,7 @@ class TestMCPGraphSearch:
     async def test_graph_search_no_results(self, mock_get_deps):
         mock_graphiti = AsyncMock()
         mock_graphiti.search = AsyncMock(return_value=[])
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.graphiti_service = mock_graphiti
         mock_get_deps.return_value = mock_deps
 
@@ -937,7 +938,7 @@ class TestMCPGraphSearch:
         mock_graphiti.search = AsyncMock(return_value=[
             {"source": "Pattern A", "relationship": "relates_to", "target": "Topic B"},
         ])
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.graphiti_service = mock_graphiti
         mock_get_deps.return_value = mock_deps
 
@@ -967,7 +968,7 @@ class TestGraphHealth:
             "status": "healthy",
             "backend": "neo4j",
         })
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.graphiti_service = mock_graphiti
         mock_get_deps.return_value = mock_deps
         from second_brain.mcp_server import graph_health
@@ -983,7 +984,7 @@ class TestGraphHealth:
             "backend": "falkordb",
             "error": "Connection timeout",
         })
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.graphiti_service = mock_graphiti
         mock_get_deps.return_value = mock_deps
         from second_brain.mcp_server import graph_health
@@ -1257,7 +1258,7 @@ class TestGrowthReport:
             topics={"Content": 5},
         )
         mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
-        mock_deps_fn.return_value = MagicMock()
+        mock_deps_fn.return_value = _mock_deps()
 
         result = await growth_report(days=30)
         assert "Growth Report" in result
@@ -1278,7 +1279,7 @@ class TestGrowthReport:
             review_score_trend="improving",
         )
         mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
-        mock_deps_fn.return_value = MagicMock()
+        mock_deps_fn.return_value = _mock_deps()
 
         result = await growth_report(days=7)
         assert "Quality Metrics" in result
@@ -1296,7 +1297,7 @@ class TestGrowthReport:
             stale_patterns=["Old Pattern", "Forgotten Rule"],
         )
         mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
-        mock_deps_fn.return_value = MagicMock()
+        mock_deps_fn.return_value = _mock_deps()
         result = await growth_report(days=30)
         assert "Stale Patterns" in result
         assert "Old Pattern" in result
@@ -1313,7 +1314,7 @@ class TestGrowthReport:
             topics={"Content": 5, "Messaging": 3},
         )
         mock_hs_cls.return_value.compute_growth = AsyncMock(return_value=mock_metrics)
-        mock_deps_fn.return_value = MagicMock()
+        mock_deps_fn.return_value = _mock_deps()
         result = await growth_report(days=30)
         assert "Content" in result
         assert "Messaging" in result
@@ -1331,7 +1332,7 @@ class TestListContentTypes:
         )
         mock_registry = MagicMock()
         mock_registry.get_all = AsyncMock(return_value={"linkedin": linkedin_config})
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
         mock_deps_fn.return_value = mock_deps
 
@@ -1346,7 +1347,7 @@ class TestListContentTypes:
 
         mock_registry = MagicMock()
         mock_registry.get_all = AsyncMock(return_value={})
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
         mock_deps_fn.return_value = mock_deps
 
@@ -1431,7 +1432,7 @@ class TestProjectMCPTools:
     async def test_create_project(self, mock_deps_fn):
         from second_brain.mcp_server import create_project
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.create_project = AsyncMock(
             return_value={"id": "proj-1", "name": "Test"}
         )
@@ -1446,7 +1447,7 @@ class TestProjectMCPTools:
     async def test_create_project_failure(self, mock_deps_fn):
         from second_brain.mcp_server import create_project
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.create_project = AsyncMock(return_value=None)
         mock_deps_fn.return_value = mock_deps
 
@@ -1457,7 +1458,7 @@ class TestProjectMCPTools:
     async def test_project_status(self, mock_deps_fn):
         from second_brain.mcp_server import project_status
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_project = AsyncMock(return_value={
             "name": "My Project", "lifecycle_stage": "executing",
             "category": "content", "project_artifacts": [],
@@ -1472,7 +1473,7 @@ class TestProjectMCPTools:
     async def test_project_status_not_found(self, mock_deps_fn):
         from second_brain.mcp_server import project_status
 
-        mock_deps = MagicMock()
+        mock_deps = _mock_deps()
         mock_deps.storage_service.get_project = AsyncMock(return_value=None)
         mock_deps_fn.return_value = mock_deps
 
@@ -2829,3 +2830,107 @@ class TestMem0AutoSetup:
 
         mock_deps.memory.setup_custom_instructions.assert_called_once()
         assert "criteria retrieval setup failed" in caplog.text
+
+
+class TestMCPToolTimeouts:
+    """Tests for timeout wrapping on service-calling MCP tools."""
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_project_crud_timeout(self, mock_deps_fn):
+        """Project CRUD tools return timeout message when service hangs."""
+        from second_brain.mcp_server import list_projects
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.01  # Very short timeout
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        deps.storage_service = MagicMock()
+        deps.storage_service.list_projects = hang
+        mock_deps_fn.return_value = deps
+
+        result = await list_projects()
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_search_tools_timeout(self, mock_deps_fn):
+        """Search tools return timeout message when service hangs."""
+        from second_brain.mcp_server import search_examples
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.01
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        deps.storage_service = MagicMock()
+        deps.storage_service.get_examples = hang
+        mock_deps_fn.return_value = deps
+
+        result = await search_examples()
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_health_tools_timeout(self, mock_deps_fn):
+        """Health tools return timeout message when service hangs."""
+        from second_brain.mcp_server import brain_health
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.01
+        mock_deps_fn.return_value = deps
+
+        async def hanging_compute(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        with patch("second_brain.services.health.HealthService") as mock_hs:
+            instance = MagicMock()
+            instance.compute = hanging_compute
+            mock_hs.return_value = instance
+
+            result = await brain_health()
+            assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_ingest_tools_timeout(self, mock_deps_fn):
+        """Ingest tools return timeout message when service hangs."""
+        from second_brain.mcp_server import ingest_example
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.01
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        deps.storage_service = MagicMock()
+        deps.storage_service.upsert_example = hang
+        mock_deps_fn.return_value = deps
+
+        result = await ingest_example(
+            content_type="test", title="test", content="test content"
+        )
+        assert "timed out" in result.lower()
+
+    @patch("second_brain.mcp_server._deps_failed", False)
+    @patch("second_brain.mcp_server._get_deps")
+    async def test_content_type_tools_timeout(self, mock_deps_fn):
+        """Content type tools return timeout message when registry hangs."""
+        from second_brain.mcp_server import list_content_types
+
+        deps = _mock_deps()
+        deps.config.api_timeout_seconds = 0.01
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        mock_registry = MagicMock()
+        mock_registry.get_all = hang
+        deps.get_content_type_registry = MagicMock(return_value=mock_registry)
+        mock_deps_fn.return_value = deps
+
+        result = await list_content_types()
+        assert "timed out" in result.lower()
