@@ -1,5 +1,6 @@
 """Embedding generation service — Voyage AI primary, OpenAI fallback."""
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,7 @@ class EmbeddingService:
         self._openai_client = None
         self._model = config.embedding_model
         self._dimensions = config.embedding_dimensions
+        self._timeout = config.service_timeout_seconds
 
         # Determine backend
         if config.voyage_api_key:
@@ -56,7 +58,12 @@ class EmbeddingService:
             )
             return response.data[0].embedding
 
-        return await async_retry(_call)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await async_retry(_call)
+        except TimeoutError:
+            logger.warning("EmbeddingService.embed (OpenAI) timed out after %ds", self._timeout)
+            return []
 
     async def embed_query(self, text: str) -> list[float]:
         """Generate embedding optimized for search queries.
@@ -77,17 +84,24 @@ class EmbeddingService:
         client = self._get_openai_client()
         batch_size = self.config.embedding_batch_size
         all_embeddings: list[list[float]] = []
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
 
-            def _call(b=batch):
-                response = client.embeddings.create(
-                    input=b, model=self._model, dimensions=self._dimensions,
-                )
-                return [item.embedding for item in response.data]
+        try:
+            async with asyncio.timeout(self._timeout):
+                for i in range(0, len(texts), batch_size):
+                    batch = texts[i:i + batch_size]
 
-            embeddings = await async_retry(_call)
-            all_embeddings.extend(embeddings)
+                    def _call(b=batch):
+                        response = client.embeddings.create(
+                            input=b, model=self._model, dimensions=self._dimensions,
+                        )
+                        return [item.embedding for item in response.data]
+
+                    embeddings = await async_retry(_call)
+                    all_embeddings.extend(embeddings)
+        except TimeoutError:
+            logger.warning("EmbeddingService.embed_batch (OpenAI) timed out after %ds", self._timeout)
+            return []
+
         return all_embeddings
 
     async def embed_multimodal(

@@ -1,5 +1,6 @@
 """Voyage AI embedding and reranking service."""
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,7 @@ class VoyageService:
         self._embed_model = config.voyage_embedding_model
         self._rerank_model = config.voyage_rerank_model
         self._dimensions = config.embedding_dimensions
+        self._timeout = config.service_timeout_seconds
 
     def _get_client(self):
         """Lazy-init Voyage client."""
@@ -48,7 +50,12 @@ class VoyageService:
             )
             return result.embeddings[0]
 
-        return await async_retry(_call)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await async_retry(_call)
+        except TimeoutError:
+            logger.warning("VoyageService.embed timed out after %ds", self._timeout)
+            return []
 
     async def embed_query(self, text: str) -> list[float]:
         """Generate embedding for a search query (uses input_type='query')."""
@@ -63,7 +70,12 @@ class VoyageService:
             )
             return result.embeddings[0]
 
-        return await async_retry(_call)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await async_retry(_call)
+        except TimeoutError:
+            logger.warning("VoyageService.embed_query timed out after %ds", self._timeout)
+            return []
 
     async def embed_batch(
         self, texts: list[str], input_type: str = "document"
@@ -77,20 +89,25 @@ class VoyageService:
         batch_size = min(self.config.embedding_batch_size, 128)
         all_embeddings: list[list[float]] = []
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+        try:
+            async with asyncio.timeout(self._timeout):
+                for i in range(0, len(texts), batch_size):
+                    batch = texts[i:i + batch_size]
 
-            def _call(b=batch):
-                inputs = [[t] for t in b]
-                result = client.multimodal_embed(
-                    inputs,
-                    model=self._embed_model,
-                    input_type=input_type,
-                )
-                return result.embeddings
+                    def _call(b=batch):
+                        inputs = [[t] for t in b]
+                        result = client.multimodal_embed(
+                            inputs,
+                            model=self._embed_model,
+                            input_type=input_type,
+                        )
+                        return result.embeddings
 
-            embeddings = await async_retry(_call)
-            all_embeddings.extend(embeddings)
+                    embeddings = await async_retry(_call)
+                    all_embeddings.extend(embeddings)
+        except TimeoutError:
+            logger.warning("VoyageService.embed_batch timed out after %ds", self._timeout)
+            return []
 
         return all_embeddings
 
@@ -122,7 +139,12 @@ class VoyageService:
             )
             return result.embeddings
 
-        return await async_retry(_call)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await async_retry(_call)
+        except TimeoutError:
+            logger.warning("VoyageService.multimodal_embed timed out after %ds", self._timeout)
+            return []
 
     async def rerank(
         self,
@@ -164,7 +186,12 @@ class VoyageService:
                 for r in result.results
             ]
 
-        return await async_retry(_call)
+        try:
+            async with asyncio.timeout(self._timeout):
+                return await async_retry(_call)
+        except TimeoutError:
+            logger.warning("VoyageService.rerank timed out after %ds", self._timeout)
+            return []
 
     async def rerank_with_instructions(
         self,

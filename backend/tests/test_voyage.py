@@ -501,3 +501,243 @@ class TestVoyageMultimodal:
 
         call_kwargs = mock_client.multimodal_embed.call_args[1]
         assert "output_dimension" not in call_kwargs
+
+
+class TestVoyageServiceTimeout:
+    """Tests for VoyageService timeout behavior."""
+
+    @pytest.fixture
+    def timeout_config(self):
+        """Mock config with very short timeout for instant triggering."""
+        config = MagicMock()
+        config.voyage_api_key = "test-key"
+        config.voyage_embedding_model = "voyage-4-lite"
+        config.voyage_rerank_model = "rerank-2-lite"
+        config.voyage_rerank_top_k = 5
+        config.embedding_dimensions = 1024
+        config.embedding_batch_size = 128
+        config.service_timeout_seconds = 0.01  # Very short for tests
+        return config
+
+    async def test_embed_returns_empty_on_timeout(self, timeout_config, mock_voyageai):
+        """embed() returns empty list on timeout."""
+        mock_client = MagicMock()
+
+        def slow_embed(*args, **kwargs):
+            import time
+            time.sleep(10)  # Sync call that will be cancelled
+            mock_result = MagicMock()
+            mock_result.embeddings = [[0.1] * 1024]
+            return mock_result
+
+        mock_client.multimodal_embed = slow_embed
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        result = await service.embed("test")
+
+        assert result == []
+
+    async def test_embed_query_returns_empty_on_timeout(self, timeout_config, mock_voyageai):
+        """embed_query() returns empty list on timeout."""
+        mock_client = MagicMock()
+
+        def slow_embed(*args, **kwargs):
+            import time
+            time.sleep(10)
+            mock_result = MagicMock()
+            mock_result.embeddings = [[0.1] * 1024]
+            return mock_result
+
+        mock_client.multimodal_embed = slow_embed
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        result = await service.embed_query("test")
+
+        assert result == []
+
+    async def test_embed_batch_returns_empty_on_timeout(self, timeout_config, mock_voyageai):
+        """embed_batch() returns empty list on timeout."""
+        mock_client = MagicMock()
+
+        def slow_embed(*args, **kwargs):
+            import time
+            time.sleep(10)
+            mock_result = MagicMock()
+            mock_result.embeddings = [[0.1] * 1024]
+            return mock_result
+
+        mock_client.multimodal_embed = slow_embed
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        result = await service.embed_batch(["test1", "test2"])
+
+        assert result == []
+
+    async def test_multimodal_embed_returns_empty_on_timeout(self, timeout_config, mock_voyageai):
+        """multimodal_embed() returns empty list on timeout."""
+        mock_client = MagicMock()
+
+        def slow_embed(*args, **kwargs):
+            import time
+            time.sleep(10)
+            mock_result = MagicMock()
+            mock_result.embeddings = [[0.1] * 1024]
+            return mock_result
+
+        mock_client.multimodal_embed = slow_embed
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        result = await service.multimodal_embed([["test"]])
+
+        assert result == []
+
+    async def test_rerank_returns_empty_on_timeout(self, timeout_config, mock_voyageai):
+        """rerank() returns empty list on timeout."""
+        mock_client = MagicMock()
+
+        def slow_rerank(*args, **kwargs):
+            import time
+            time.sleep(10)
+            return MagicMock(results=[])
+
+        mock_client.rerank = slow_rerank
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        result = await service.rerank("query", ["doc1", "doc2"])
+
+        assert result == []
+
+    async def test_timeout_logs_warning(self, timeout_config, mock_voyageai, caplog):
+        """Timeout emits warning-level log."""
+        import logging
+        mock_client = MagicMock()
+
+        def slow_embed(*args, **kwargs):
+            import time
+            time.sleep(10)
+            return MagicMock(embeddings=[[0.1] * 1024])
+
+        mock_client.multimodal_embed = slow_embed
+        mock_voyageai.Client.return_value = mock_client
+
+        service = VoyageService(timeout_config)
+        with caplog.at_level(logging.WARNING):
+            await service.embed("test")
+
+        assert "timed out" in caplog.text
+
+    async def test_timeout_uses_config_value(self, tmp_path, mock_voyageai):
+        """Service uses service_timeout_seconds from config."""
+        from second_brain.config import BrainConfig
+        config = BrainConfig(
+            voyage_api_key="test-key",
+            service_timeout_seconds=30,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        service = VoyageService(config)
+        assert service._timeout == 30
+
+
+class TestEmbeddingServiceTimeout:
+    """Tests for EmbeddingService timeout behavior (OpenAI fallback path)."""
+
+    @pytest.fixture
+    def openai_timeout_config(self):
+        """Mock config with very short timeout for instant triggering."""
+        config = MagicMock()
+        config.voyage_api_key = None  # Force OpenAI fallback
+        config.openai_api_key = "test-openai-key"
+        config.embedding_model = "text-embedding-3-small"
+        config.embedding_dimensions = 1024
+        config.embedding_batch_size = 128
+        config.service_timeout_seconds = 0.01
+        return config
+
+    @patch("openai.OpenAI")
+    async def test_embed_returns_empty_on_timeout(self, mock_openai_cls, openai_timeout_config):
+        """embed() (OpenAI path) returns empty list on timeout."""
+        from second_brain.services.embeddings import EmbeddingService
+        mock_client = MagicMock()
+
+        def slow_create(*args, **kwargs):
+            import time
+            time.sleep(10)
+            mock_response = MagicMock()
+            mock_response.data = [MagicMock(embedding=[0.1] * 1024)]
+            return mock_response
+
+        mock_client.embeddings.create = slow_create
+        mock_openai_cls.return_value = mock_client
+
+        service = EmbeddingService(openai_timeout_config)
+        result = await service.embed("test")
+
+        assert result == []
+
+    @patch("openai.OpenAI")
+    async def test_embed_batch_returns_empty_on_timeout(self, mock_openai_cls, openai_timeout_config):
+        """embed_batch() (OpenAI path) returns empty list on timeout."""
+        from second_brain.services.embeddings import EmbeddingService
+        mock_client = MagicMock()
+
+        def slow_create(*args, **kwargs):
+            import time
+            time.sleep(10)
+            mock_response = MagicMock()
+            mock_response.data = [MagicMock(embedding=[0.1] * 1024)]
+            return mock_response
+
+        mock_client.embeddings.create = slow_create
+        mock_openai_cls.return_value = mock_client
+
+        service = EmbeddingService(openai_timeout_config)
+        result = await service.embed_batch(["test1", "test2"])
+
+        assert result == []
+
+    @patch("openai.OpenAI")
+    async def test_timeout_logs_warning(self, mock_openai_cls, openai_timeout_config, caplog):
+        """OpenAI timeout emits warning-level log."""
+        import logging
+        from second_brain.services.embeddings import EmbeddingService
+        mock_client = MagicMock()
+
+        def slow_create(*args, **kwargs):
+            import time
+            time.sleep(10)
+            return MagicMock(data=[MagicMock(embedding=[0.1] * 1024)])
+
+        mock_client.embeddings.create = slow_create
+        mock_openai_cls.return_value = mock_client
+
+        service = EmbeddingService(openai_timeout_config)
+        with caplog.at_level(logging.WARNING):
+            await service.embed("test")
+
+        assert "timed out" in caplog.text
+        assert "OpenAI" in caplog.text
+
+    @patch("openai.OpenAI")
+    async def test_timeout_uses_config_value(self, mock_openai_cls, tmp_path):
+        """EmbeddingService uses service_timeout_seconds from config."""
+        from second_brain.config import BrainConfig
+        from second_brain.services.embeddings import EmbeddingService
+        config = BrainConfig(
+            voyage_api_key=None,
+            openai_api_key="test-key",
+            service_timeout_seconds=42,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            brain_data_path=tmp_path,
+            _env_file=None,
+        )
+        service = EmbeddingService(config)
+        assert service._timeout == 42

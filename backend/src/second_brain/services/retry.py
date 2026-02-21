@@ -78,6 +78,29 @@ def create_retry_decorator(config: RetryConfig | None = None):
 _MEM0_RETRY = create_retry_decorator(MEM0_RETRY_CONFIG)
 
 
+@dataclass
+class GraphitiAdapterRetryConfig(RetryConfig):
+    """Retry config for GraphitiMemoryAdapter (matches Mem0 pattern).
+
+    Uses shorter backoff (0.5-4s vs 1-10s) since Graphiti is typically self-hosted
+    with faster recovery. No jitter since there's no thundering herd concern.
+    """
+
+    use_jitter: bool = False
+
+
+GRAPHITI_ADAPTER_RETRY_CONFIG = GraphitiAdapterRetryConfig(
+    max_attempts=3,
+    min_wait=0.5,
+    max_wait=4.0,
+    retry_on=(ConnectionError, TimeoutError, OSError),
+    use_jitter=False,
+)
+
+# GraphitiMemoryAdapter retry decorator (for async method wrapping)
+_GRAPHITI_ADAPTER_RETRY = create_retry_decorator(GRAPHITI_ADAPTER_RETRY_CONFIG)
+
+
 async def async_retry(func: Callable[..., Any], *args: Any, config: RetryConfig | None = None, **kwargs: Any) -> Any:
     """Run a sync function in a thread with retry on transient failures."""
     cfg = config or DEFAULT_RETRY

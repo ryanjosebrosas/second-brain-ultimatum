@@ -11,6 +11,7 @@ import time
 from typing import TYPE_CHECKING
 
 from second_brain.services.abstract import MemoryServiceBase
+from second_brain.services.retry import _GRAPHITI_ADAPTER_RETRY
 from second_brain.services.search_result import SearchResult
 
 if TYPE_CHECKING:
@@ -79,10 +80,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Add content as a Graphiti episode. Returns status dict."""
         self._check_idle_reconnect()
         try:
-            async with asyncio.timeout(self._timeout):
-                await self._graphiti.add_episode(
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _add():
+                return await self._graphiti.add_episode(
                     content, metadata=metadata, group_id=self.user_id
                 )
+
+            async with asyncio.timeout(self._timeout):
+                await _add()
             return {"status": "ok"}
         except asyncio.TimeoutError:
             logger.warning("GraphitiMemoryAdapter.add timed out after %ds", self._timeout)
@@ -143,10 +148,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """
         self._check_idle_reconnect()
         try:
-            async with asyncio.timeout(self._timeout):
-                relations = await self._graphiti.search(
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _search():
+                return await self._graphiti.search(
                     query, limit=limit or 10, group_id=self._effective_user_id(override_user_id)
                 )
+
+            async with asyncio.timeout(self._timeout):
+                relations = await _search()
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
@@ -197,10 +206,14 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
                     augmented_query,
                 )
         try:
-            async with asyncio.timeout(self._timeout):
-                relations = await self._graphiti.search(
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _search():
+                return await self._graphiti.search(
                     augmented_query, limit=limit, group_id=self._effective_user_id(override_user_id)
                 )
+
+            async with asyncio.timeout(self._timeout):
+                relations = await _search()
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
@@ -221,10 +234,15 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         self._check_idle_reconnect()
         try:
             combined = f"{category} {query}"
-            async with asyncio.timeout(self._timeout):
-                relations = await self._graphiti.search(
+
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _search():
+                return await self._graphiti.search(
                     combined, limit=limit, group_id=self._effective_user_id(override_user_id)
                 )
+
+            async with asyncio.timeout(self._timeout):
+                relations = await _search()
             return SearchResult(
                 memories=_relations_to_memories(relations),
                 relations=relations,
@@ -240,8 +258,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Retrieve all episodes for the current user's group."""
         self._check_idle_reconnect()
         try:
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _get():
+                return await self._graphiti.get_episodes(self.user_id)
+
             async with asyncio.timeout(self._timeout):
-                episodes = await self._graphiti.get_episodes(self.user_id)
+                episodes = await _get()
             return [
                 {
                     "id": ep.get("id", ""),
@@ -265,8 +287,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Count episodes for the current user's group."""
         self._check_idle_reconnect()
         try:
-            async with asyncio.timeout(self._timeout):
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _count():
                 return await self._graphiti.get_episode_count(self.user_id)
+
+            async with asyncio.timeout(self._timeout):
+                return await _count()
         except asyncio.TimeoutError:
             logger.warning("GraphitiMemoryAdapter.get_memory_count timed out after %ds", self._timeout)
             return 0
@@ -294,8 +320,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Delete a memory (episode) by its UUID."""
         self._check_idle_reconnect()
         try:
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _delete():
+                return await self._graphiti.remove_episode(memory_id)
+
             async with asyncio.timeout(self._timeout):
-                success = await self._graphiti.remove_episode(memory_id)
+                success = await _delete()
             if not success:
                 logger.debug("GraphitiMemoryAdapter.delete: remove_episode returned False for %s", memory_id)
         except asyncio.TimeoutError:
@@ -308,8 +338,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Retrieve a specific episode by UUID."""
         self._check_idle_reconnect()
         try:
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _get():
+                return await self._graphiti.get_episode_by_id(memory_id)
+
             async with asyncio.timeout(self._timeout):
-                ep = await self._graphiti.get_episode_by_id(memory_id)
+                ep = await _get()
             if ep is None:
                 return None
             return {
@@ -332,8 +366,12 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         """Delete all episodes for the current user's group."""
         self._check_idle_reconnect()
         try:
-            async with asyncio.timeout(self._timeout):
+            @_GRAPHITI_ADAPTER_RETRY
+            async def _delete_all():
                 return await self._graphiti.delete_group_data(self.user_id)
+
+            async with asyncio.timeout(self._timeout):
+                return await _delete_all()
         except asyncio.TimeoutError:
             logger.warning("GraphitiMemoryAdapter.delete_all timed out after %ds", self._timeout)
             return 0

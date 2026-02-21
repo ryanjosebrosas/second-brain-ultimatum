@@ -567,3 +567,166 @@ class TestGraphitiMemoryIdleReconnect:
         # No reconnect because each call updates activity timestamp
         # Only 1 GraphitiService instantiation (the initial one)
         assert mock_gs_cls.call_count == 1
+
+
+class TestGraphitiMemoryRetry:
+    """Tests for GraphitiMemoryAdapter retry behavior."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.brain_user_id = "test-user"
+        config.service_timeout_seconds = 30  # Normal timeout for retry tests
+        return config
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_retries_on_connection_error(self, mock_gs_cls, mock_config):
+        """search() retries on ConnectionError and succeeds."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search.side_effect = [
+            ConnectionError("transient"),
+            [{"source": "A", "relationship": "rel", "target": "B"}],
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.search("test query")
+
+        assert len(result.memories) == 1
+        assert mock_graphiti.search.call_count == 2
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_add_retries_on_os_error(self, mock_gs_cls, mock_config):
+        """add() retries on OSError and succeeds."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.add_episode.side_effect = [
+            OSError("network blip"),
+            None,  # Success
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.add("test content")
+
+        assert result == {"status": "ok"}
+        assert mock_graphiti.add_episode.call_count == 2
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_search_returns_empty_after_retry_exhaustion(self, mock_gs_cls, mock_config):
+        """search() returns empty after all retries exhausted."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search.side_effect = ConnectionError("persistent")
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.search("test query")
+
+        assert result.memories == []
+        assert mock_graphiti.search.call_count == 3  # max_attempts
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_no_retry_on_value_error(self, mock_gs_cls, mock_config):
+        """Non-retryable errors are not retried."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.search.side_effect = ValueError("bad query")
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.search("test query")
+
+        assert result.memories == []
+        assert mock_graphiti.search.call_count == 1  # NOT retried
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_delete_retries_on_timeout_error(self, mock_gs_cls, mock_config):
+        """delete() retries on TimeoutError."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.remove_episode.side_effect = [
+            TimeoutError("slow network"),
+            True,  # Success
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        await adapter.delete("mem-123")
+
+        assert mock_graphiti.remove_episode.call_count == 2
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_get_all_retries_on_connection_error(self, mock_gs_cls, mock_config):
+        """get_all() retries on ConnectionError and succeeds."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.get_episodes.side_effect = [
+            ConnectionError("transient"),
+            [{"id": "ep-1", "content": "test", "source": "user", "created_at": "2024-01-01"}],
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.get_all()
+
+        assert len(result) == 1
+        assert mock_graphiti.get_episodes.call_count == 2
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_get_memory_count_retries_on_os_error(self, mock_gs_cls, mock_config):
+        """get_memory_count() retries on OSError and succeeds."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.get_episode_count.side_effect = [
+            OSError("network blip"),
+            42,
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.get_memory_count()
+
+        assert result == 42
+        assert mock_graphiti.get_episode_count.call_count == 2
+
+    @patch("second_brain.services.graphiti.GraphitiService")
+    async def test_delete_all_retries_on_connection_error(self, mock_gs_cls, mock_config):
+        """delete_all() retries on ConnectionError and succeeds."""
+        mock_graphiti = AsyncMock()
+        mock_graphiti.delete_group_data.side_effect = [
+            ConnectionError("transient"),
+            5,  # Deleted count
+        ]
+        mock_gs_cls.return_value = mock_graphiti
+
+        adapter = GraphitiMemoryAdapter(mock_config)
+        result = await adapter.delete_all()
+
+        assert result == 5
+        assert mock_graphiti.delete_group_data.call_count == 2
+
+
+class TestGraphitiAdapterRetryConfig:
+    """Tests for GraphitiAdapterRetryConfig validation."""
+
+    def test_retry_config_exists(self):
+        """GraphitiAdapterRetryConfig is importable and configured."""
+        from second_brain.services.retry import GRAPHITI_ADAPTER_RETRY_CONFIG
+        assert GRAPHITI_ADAPTER_RETRY_CONFIG.max_attempts == 3
+
+    def test_retry_has_correct_exceptions(self):
+        """Retry covers expected exception types."""
+        from second_brain.services.retry import GRAPHITI_ADAPTER_RETRY_CONFIG
+        assert ConnectionError in GRAPHITI_ADAPTER_RETRY_CONFIG.retry_on
+        assert TimeoutError in GRAPHITI_ADAPTER_RETRY_CONFIG.retry_on
+        assert OSError in GRAPHITI_ADAPTER_RETRY_CONFIG.retry_on
+
+    def test_retry_has_no_jitter(self):
+        """Graphiti uses no jitter (self-hosted, no thundering herd)."""
+        from second_brain.services.retry import GRAPHITI_ADAPTER_RETRY_CONFIG
+        assert GRAPHITI_ADAPTER_RETRY_CONFIG.use_jitter is False
+
+    def test_retry_backoff_is_shorter_than_mem0(self):
+        """Graphiti uses shorter backoff than Mem0 (faster recovery)."""
+        from second_brain.services.retry import GRAPHITI_ADAPTER_RETRY_CONFIG, MEM0_RETRY_CONFIG
+        assert GRAPHITI_ADAPTER_RETRY_CONFIG.max_wait < MEM0_RETRY_CONFIG.max_wait
+
+    def test_retry_decorator_exists(self):
+        """_GRAPHITI_ADAPTER_RETRY decorator is importable."""
+        from second_brain.services.retry import _GRAPHITI_ADAPTER_RETRY
+        assert _GRAPHITI_ADAPTER_RETRY is not None
