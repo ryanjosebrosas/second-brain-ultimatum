@@ -6,7 +6,7 @@ from datetime import date
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-from second_brain.agents.utils import tool_error
+from second_brain.agents.utils import all_tools_failed, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import LearnResult
 
@@ -68,6 +68,23 @@ async def validate_learn(ctx: RunContext[BrainDeps], output: LearnResult) -> Lea
     # Backend error signaled — accept as-is
     if output.error:
         return output
+
+    # Deterministic check: if all tools returned errors, set error field and accept
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    if tool_outputs and all_tools_failed(tool_outputs):
+        # All backends failed — return with error field set (prevents retry)
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All storage backends unavailable. Pattern extraction skipped.",
+            })
+        return output
+
     # Must extract something from the input
     if not output.patterns_extracted and not output.insights and not output.experience_recorded:
         raise ModelRetry(
@@ -137,6 +154,7 @@ async def store_pattern(
     context: str = "",
     source_experience: str = "",
     applicable_content_types: list[str] | None = None,
+    voice_user_id: str = "",
 ) -> str:
     """Store a NEW pattern in the Supabase pattern registry.
     Only use for genuinely new patterns. For reinforcement, use reinforce_existing_pattern.
@@ -145,6 +163,7 @@ async def store_pattern(
         applicable_content_types: Optional list of content type slugs this pattern
             applies to (e.g., ['linkedin', 'email']). None = universal pattern.
     """
+    uid = voice_user_id if voice_user_id else None
     try:
         existing = await ctx.deps.storage_service.get_pattern_by_name(name)
         if existing:
@@ -193,6 +212,7 @@ async def store_pattern(
                     "applicable_content_types": applicable_content_types,
                 },
                 enable_graph=True,
+                override_user_id=uid,
             ))
             if ctx.deps.graphiti_service:
                 graphiti_content = (
@@ -212,6 +232,7 @@ async def store_pattern(
                         "pattern_name": name,
                         "topic": topic,
                     },
+                    group_id=uid,
                 ))
             results = await asyncio.gather(*side_effects, return_exceptions=True)
             for i, r in enumerate(results):
@@ -242,9 +263,11 @@ async def reinforce_existing_pattern(
     ctx: RunContext[BrainDeps],
     pattern_name: str,
     new_evidence: list[str] | None = None,
+    voice_user_id: str = "",
 ) -> str:
     """Reinforce an existing pattern: increment use_count, upgrade confidence, append evidence.
     Use this when is_reinforcement=True instead of store_pattern."""
+    uid = voice_user_id if voice_user_id else None
     try:
         pattern = await ctx.deps.storage_service.get_pattern_by_name(pattern_name)
         if not pattern:
@@ -305,6 +328,7 @@ async def reinforce_existing_pattern(
                 "topic": pattern.get("topic", ""),
                 "confidence": updated.get("confidence", "LOW"),
             },
+            override_user_id=uid,
         ))
         if ctx.deps.graphiti_service:
             graphiti_content = (
@@ -321,6 +345,7 @@ async def reinforce_existing_pattern(
                     "category": "pattern_reinforcement",
                     "pattern_name": pattern_name,
                 },
+                group_id=uid,
             ))
         results = await asyncio.gather(*side_effects, return_exceptions=True)
         for i, r in enumerate(results):
@@ -339,12 +364,14 @@ async def add_to_memory(
     ctx: RunContext[BrainDeps],
     content: str,
     category: str = "learning",
+    voice_user_id: str = "",
 ) -> str:
     """Store a key learning or insight in Mem0 semantic memory for future recall.
     Use for insights that don't fit a structured pattern format."""
+    uid = voice_user_id if voice_user_id else None
     try:
         metadata = {"category": category, "source": "learn_agent"}
-        await ctx.deps.memory_service.add(content, metadata=metadata)
+        await ctx.deps.memory_service.add(content, metadata=metadata, override_user_id=uid)
         return f"Added to semantic memory (category: {category})."
     except Exception as e:
         return tool_error("add_to_memory", e)
@@ -359,9 +386,11 @@ async def store_experience(
     learnings: str,
     patterns_extracted: list[str] | None = None,
     project_id: str | None = None,
+    voice_user_id: str = "",
 ) -> str:
     """Store a work experience entry in Supabase. Only call this if the input
     describes a complete work session with clear outcomes."""
+    uid = voice_user_id if voice_user_id else None
     try:
         experience_data = {
             "name": name,
@@ -387,6 +416,7 @@ async def store_experience(
                     "experience_category": category,
                 },
                 enable_graph=True,
+                override_user_id=uid,
             )
         except Exception:
             logger.debug("Failed to sync experience '%s' to Mem0 (non-critical)", name)
@@ -411,6 +441,7 @@ async def store_experience(
                         "experience_name": name,
                         "experience_category": category,
                     },
+                    group_id=uid,
                 )
             except Exception:
                 logger.debug("Failed to sync experience '%s' to Graphiti (non-critical)", name)

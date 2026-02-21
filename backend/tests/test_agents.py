@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, AsyncMock
 
 from pydantic_ai import ModelRetry
 
+from second_brain.deps import BrainDeps
 from second_brain.schemas import (
     RecallResult, AskResult, MemoryMatch, LearnResult, PatternExtract,
     CreateResult, ContentTypeConfig, DEFAULT_CONTENT_TYPES,
@@ -2755,3 +2756,200 @@ class TestCreateAgentVoiceRouting:
         instructions = create_agent._instructions
         assert "voice" in instructions.lower()
         assert "user" in instructions.lower() or "profile" in instructions.lower()
+
+
+class TestAskAgentValidatorErrorDetection:
+    """Tests for deterministic error detection in ask_agent validator."""
+
+    @pytest.fixture
+    def mock_ctx_all_errors(self):
+        """Context with all tool outputs showing errors."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock(spec=BrainDeps)
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_brain_context: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = f"{TOOL_ERROR_PREFIX} find_relevant_patterns: TimeoutError"
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.fixture
+    def mock_ctx_partial_errors(self):
+        """Context with some successful tool outputs."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock(spec=BrainDeps)
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_brain_context: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = "Found 3 relevant patterns: voice-matching, ..."
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_accepts_with_all_errors_and_sets_error_field(self, mock_ctx_all_errors):
+        """Validator accepts and sets error when all tools failed."""
+        from second_brain.agents.ask import ask_agent
+
+        output = AskResult(
+            answer="Based on my general knowledge...",
+            is_conversational=False,
+            brain_context_used=False,
+        )
+
+        validator = ask_agent._output_validators[0]
+        result = await validator.function(mock_ctx_all_errors, output)
+
+        assert result.error  # Error field should be set
+        assert "unavailable" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_continues_validation_with_partial_errors(self, mock_ctx_partial_errors):
+        """Validator continues normal validation when not all tools failed."""
+        from second_brain.agents.ask import ask_agent
+
+        output = AskResult(
+            answer="A very detailed answer that is certainly long enough to pass the minimum length check and provide value.",
+            is_conversational=False,
+            brain_context_used=True,
+        )
+
+        validator = ask_agent._output_validators[0]
+        result = await validator.function(mock_ctx_partial_errors, output)
+
+        assert not result.error  # No error field set
+        assert result.answer  # Answer preserved
+
+    @pytest.mark.asyncio
+    async def test_short_answer_still_fails_without_errors(self, mock_ctx_partial_errors):
+        """Validator still enforces minimum length when backends are up."""
+        from second_brain.agents.ask import ask_agent
+
+        output = AskResult(
+            answer="Short",
+            is_conversational=False,
+            brain_context_used=False,
+        )
+
+        validator = ask_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(mock_ctx_partial_errors, output)
+
+
+class TestLearnAgentValidatorErrorDetection:
+    """Tests for deterministic error detection in learn_agent validator."""
+
+    @pytest.fixture
+    def mock_ctx_all_errors(self):
+        """Context with all tool outputs showing errors."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock(spec=BrainDeps)
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} store_pattern: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = f"{TOOL_ERROR_PREFIX} search_existing_patterns: TimeoutError"
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.fixture
+    def mock_ctx_successful(self):
+        """Context with successful tool outputs."""
+        ctx = MagicMock()
+        ctx.deps = MagicMock(spec=BrainDeps)
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = "Pattern 'Voice-Matching' stored successfully with id=abc123"
+        msg1.parts = [part1]
+
+        ctx.messages = [msg1]
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_accepts_empty_output_when_all_backends_down(self, mock_ctx_all_errors):
+        """Validator accepts empty output when all storage backends failed."""
+        from second_brain.agents.learn import learn_agent
+
+        output = LearnResult(
+            input_summary="Test work session input",
+            patterns_extracted=[],
+            insights=[],
+            experience_recorded=False,
+            error="",
+        )
+
+        validator = learn_agent._output_validators[0]
+        result = await validator.function(mock_ctx_all_errors, output)
+
+        assert result.error  # Error field should be set
+        assert "unavailable" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_retries_empty_output_when_backends_up(self, mock_ctx_successful):
+        """Validator raises ModelRetry for empty output when backends are up."""
+        from second_brain.agents.learn import learn_agent
+
+        output = LearnResult(
+            input_summary="Test work session input",
+            patterns_extracted=[],
+            insights=[],
+            experience_recorded=False,
+            error="",
+        )
+
+        validator = learn_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(mock_ctx_successful, output)
+
+    @pytest.mark.asyncio
+    async def test_accepts_valid_output_normally(self, mock_ctx_successful):
+        """Validator accepts valid output with patterns."""
+        from second_brain.agents.learn import learn_agent
+
+        output = LearnResult(
+            input_summary="Test work session with voice matching patterns",
+            patterns_extracted=[
+                PatternExtract(
+                    name="Voice-Matching Content",
+                    topic="content-generation",
+                    confidence="LOW",
+                    pattern_text="Match the user's voice and tone when generating content",
+                    evidence=["Used in email drafting"],
+                )
+            ],
+            insights=["Key insight from analysis"],
+            experience_recorded=False,
+            error="",
+        )
+
+        validator = learn_agent._output_validators[0]
+        result = await validator.function(mock_ctx_successful, output)
+
+        assert not result.error
+        assert len(result.patterns_extracted) == 1

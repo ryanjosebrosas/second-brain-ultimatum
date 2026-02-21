@@ -5,6 +5,7 @@ import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
+    all_tools_failed,
     format_memories,
     format_relations,
     rerank_memories,
@@ -42,7 +43,10 @@ ask_agent = Agent(
         "If the task is complex, suggest using /plan instead.\n\n"
         "ERROR HANDLING: If brain context tools return 'unavailable' errors, "
         "set the error field to describe the issue and answer the question "
-        "using your general knowledge. Do not keep retrying failing tools."
+        "using your general knowledge. Do not keep retrying failing tools.\n\n"
+        "USER PROFILE ROUTING:\n"
+        "If voice_user_id is provided, pass it to search tools. This allows "
+        "scoping results to a specific user's context when needed."
     ),
 )
 
@@ -58,9 +62,27 @@ async def validate_ask(ctx: RunContext[BrainDeps], output: AskResult) -> AskResu
     # Conversational responses skip all checks
     if output.is_conversational:
         return output
+
     # Backend errors — accept whatever the agent produced
     if output.error:
         return output
+
+    # Deterministic check: if all tools returned errors, set error field and accept
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    if tool_outputs and all_tools_failed(tool_outputs):
+        # All backends failed — return with error field set (prevents retry)
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All brain context backends unavailable. Answered from general knowledge.",
+            })
+        return output
+
     # Check answer isn't a cop-out (still enforce minimum substance)
     if len(output.answer) < 50:
         raise ModelRetry(
@@ -97,16 +119,17 @@ async def load_brain_context(ctx: RunContext[BrainDeps]) -> str:
 
 @ask_agent.tool
 async def find_relevant_patterns(
-    ctx: RunContext[BrainDeps], query: str
+    ctx: RunContext[BrainDeps], query: str, voice_user_id: str = ""
 ) -> str:
     """Find patterns relevant to the current question using hybrid search."""
+    uid = voice_user_id if voice_user_id else None
     try:
         from second_brain.agents.utils import expand_query, deduplicate_results
 
         expanded = expand_query(query)
 
         # Call 1: Mem0 semantic + keyword search (keyword_search enabled at service layer)
-        result = await ctx.deps.memory_service.search(expanded)
+        result = await ctx.deps.memory_service.search(expanded, override_user_id=uid)
 
         # Call 2: Rerank Mem0 results (single rerank, not two separate ones)
         reranked_memories = await rerank_memories(ctx.deps, query, result.memories)
@@ -170,13 +193,15 @@ async def find_relevant_patterns(
 
 @ask_agent.tool
 async def find_similar_experiences(
-    ctx: RunContext[BrainDeps], query: str
+    ctx: RunContext[BrainDeps], query: str, voice_user_id: str = ""
 ) -> str:
     """Find past work similar to the current question."""
+    uid = voice_user_id if voice_user_id else None
     try:
         result = await ctx.deps.memory_service.search(
             f"past experience: {query}",
             enable_graph=True,
+            override_user_id=uid,
         )
         result.memories = await rerank_memories(ctx.deps, query, result.memories)
         experiences = await ctx.deps.storage_service.get_experiences(limit=ctx.deps.config.experience_limit)
