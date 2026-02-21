@@ -360,15 +360,17 @@ class TestMCPTools:
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
-    @patch("second_brain.mcp_server.create_agent")
+    @patch("second_brain.agents.linkedin_writer.linkedin_writer_agent")
     async def test_create_content_tool(self, mock_agent, mock_deps_fn, mock_model_fn):
         from second_brain.mcp_server import create_content
+        from second_brain.schemas import LinkedInPostResult
 
         mock_result = MagicMock()
-        mock_result.output = CreateResult(
+        mock_result.output = LinkedInPostResult(
             draft="Check out our new AI automation platform...",
-            content_type="linkedin",
-            mode="casual",
+            hook_used="Check out our new AI automation platform...",
+            hook_type="bold-statement",
+            post_structure="results-breakdown",
             voice_elements=["direct", "conversational"],
             patterns_applied=["Hook First"],
             examples_referenced=["Q3 Launch Post"],
@@ -422,15 +424,17 @@ class TestMCPTools:
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
-    @patch("second_brain.mcp_server.create_agent")
+    @patch("second_brain.agents.linkedin_writer.linkedin_writer_agent")
     async def test_create_content_simplified_prompt(self, mock_agent, mock_deps_fn, mock_model_fn):
-        """create_content passes simplified prompt to agent (no pre-loading)."""
+        """create_content routes linkedin to LinkedIn Writer with prompt."""
         from second_brain.mcp_server import create_content
+        from second_brain.schemas import LinkedInPostResult
         mock_result = MagicMock()
-        mock_result.output = CreateResult(
+        mock_result.output = LinkedInPostResult(
             draft="Test draft content",
-            content_type="linkedin",
-            mode="casual",
+            hook_used="Test hook",
+            hook_type="bold-statement",
+            post_structure="freeform",
             word_count=50,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
@@ -448,7 +452,6 @@ class TestMCPTools:
         result = await create_content(prompt="Write about AI", content_type="linkedin")
         assert "Test draft" in result
         call_args = mock_agent.run.call_args[0][0]
-        assert "LinkedIn Post" in call_args
         assert "Write about AI" in call_args
 
     @patch("second_brain.mcp_server._get_model")
@@ -461,23 +464,23 @@ class TestMCPTools:
         from second_brain.mcp_server import create_content
         mock_result = MagicMock()
         mock_result.output = CreateResult(
-            draft="Draft text here", content_type="linkedin",
+            draft="Draft text here", content_type="email",
             mode="casual", word_count=50,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
-        linkedin_config = ContentTypeConfig(
-            name="LinkedIn Post", default_mode="casual",
-            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+        email_config = ContentTypeConfig(
+            name="Email", default_mode="casual",
+            structure_hint="Subject -> Body -> CTA", example_type="email",
             max_words=300, is_builtin=True,
             length_guidance="150-300 words, punchy and scannable",
         )
         mock_registry = MagicMock()
-        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_registry.get = AsyncMock(return_value=email_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
-        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        result = await create_content(prompt="Write about AI", content_type="email")
         assert "Draft text" in result
         call_args = mock_agent.run.call_args[0][0]
         assert "150-300 words" in call_args
@@ -492,22 +495,22 @@ class TestMCPTools:
         from second_brain.mcp_server import create_content
         mock_result = MagicMock()
         mock_result.output = CreateResult(
-            draft="Draft text here", content_type="linkedin",
+            draft="Draft text here", content_type="email",
             mode="casual", word_count=50,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
-        linkedin_config = ContentTypeConfig(
-            name="LinkedIn Post", default_mode="casual",
-            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+        email_config = ContentTypeConfig(
+            name="Email", default_mode="casual",
+            structure_hint="Subject -> Body -> CTA", example_type="email",
             max_words=300, is_builtin=True,
         )
         mock_registry = MagicMock()
-        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_registry.get = AsyncMock(return_value=email_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
-        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        result = await create_content(prompt="Write about AI", content_type="email")
         assert "Draft text" in result
         call_args = mock_agent.run.call_args[0][0]
         assert "300 words" in call_args
@@ -522,22 +525,22 @@ class TestMCPTools:
         from second_brain.mcp_server import create_content
         mock_result = MagicMock()
         mock_result.output = CreateResult(
-            draft="Draft text here", content_type="linkedin",
+            draft="Draft text here", content_type="email",
             mode="casual", word_count=50,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
-        linkedin_config = ContentTypeConfig(
-            name="LinkedIn Post", default_mode="casual",
-            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+        email_config = ContentTypeConfig(
+            name="Email", default_mode="casual",
+            structure_hint="Subject -> Body -> Sign-off", example_type="email",
             max_words=300, is_builtin=True,
         )
         mock_registry = MagicMock()
-        mock_registry.get = AsyncMock(return_value=linkedin_config)
+        mock_registry.get = AsyncMock(return_value=email_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
-        result = await create_content(prompt="Write about AI", content_type="linkedin")
+        result = await create_content(prompt="Write about AI", content_type="email")
         assert "Draft text" in result
         call_args = mock_agent.run.call_args[0][0]
         # No pre-loaded voice or examples in prompt — agent fetches via its tools
@@ -782,7 +785,7 @@ class TestMCPAgentFailures:
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
-    @patch("second_brain.mcp_server.create_agent")
+    @patch("second_brain.agents.linkedin_writer.linkedin_writer_agent")
     async def test_create_agent_timeout(self, mock_agent, mock_deps_fn, mock_model_fn):
         """Create tool returns timeout message when agent hangs."""
         from second_brain.mcp_server import create_content
@@ -798,8 +801,6 @@ class TestMCPAgentFailures:
         mock_registry.get = AsyncMock(return_value=linkedin_config)
         mock_deps = _mock_deps()
         mock_deps.get_content_type_registry.return_value = mock_registry
-        mock_deps.storage_service.get_memory_content = AsyncMock(return_value=[])
-        mock_deps.storage_service.get_examples = AsyncMock(return_value=[])
         mock_deps_fn.return_value = mock_deps
         mock_model_fn.return_value = MagicMock()
 
@@ -2568,26 +2569,27 @@ class TestMultiUserVoice:
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
-    @patch("second_brain.mcp_server.create_agent")
+    @patch("second_brain.agents.linkedin_writer.linkedin_writer_agent")
     async def test_create_content_with_user_id(self, mock_agent, mock_deps_fn, mock_model_fn):
         """create_content with user_id injects 'Voice profile: <uid>' into prompt."""
         import second_brain.mcp_server as mod
         from second_brain.mcp_server import create_content
+        from second_brain.schemas import LinkedInPostResult
         mock_result = MagicMock()
-        mock_result.output = CreateResult(
-            draft="Test draft", content_type="linkedin", mode="professional", word_count=10,
+        mock_result.output = LinkedInPostResult(
+            draft="Test draft", hook_used="Hook", hook_type="bold-statement",
+            post_structure="freeform", word_count=10,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
         deps = _mock_deps()
         deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
-        mock_type_config = MagicMock()
-        mock_type_config.name = "LinkedIn Post"
-        mock_type_config.length_guidance = ""
-        mock_type_config.max_words = None
-        mock_type_config.writing_instructions = ""
-        mock_type_config.structure_hint = ""
-        mock_registry = AsyncMock()
-        mock_registry.get = AsyncMock(return_value=mock_type_config)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
         deps.get_content_type_registry = MagicMock(return_value=mock_registry)
         mock_deps_fn.return_value = deps
         mock_model_fn.return_value = MagicMock()
@@ -2624,26 +2626,27 @@ class TestMultiUserVoice:
 
     @patch("second_brain.mcp_server._get_model")
     @patch("second_brain.mcp_server._get_deps")
-    @patch("second_brain.mcp_server.create_agent")
+    @patch("second_brain.agents.linkedin_writer.linkedin_writer_agent")
     async def test_create_content_empty_user_id_uses_default(self, mock_agent, mock_deps_fn, mock_model_fn):
         """create_content with empty user_id does NOT inject voice profile line."""
         import second_brain.mcp_server as mod
         from second_brain.mcp_server import create_content
+        from second_brain.schemas import LinkedInPostResult
         mock_result = MagicMock()
-        mock_result.output = CreateResult(
-            draft="Test draft", content_type="linkedin", mode="professional", word_count=10,
+        mock_result.output = LinkedInPostResult(
+            draft="Test draft", hook_used="Hook", hook_type="bold-statement",
+            post_structure="freeform", word_count=10,
         )
         mock_agent.run = AsyncMock(return_value=mock_result)
         deps = _mock_deps()
         deps.config.allowed_user_ids_list = ["uttam", "robert", "luke", "brainforge"]
-        mock_type_config = MagicMock()
-        mock_type_config.name = "LinkedIn Post"
-        mock_type_config.length_guidance = ""
-        mock_type_config.max_words = None
-        mock_type_config.writing_instructions = ""
-        mock_type_config.structure_hint = ""
-        mock_registry = AsyncMock()
-        mock_registry.get = AsyncMock(return_value=mock_type_config)
+        linkedin_config = ContentTypeConfig(
+            name="LinkedIn Post", default_mode="casual",
+            structure_hint="Hook -> Body -> CTA", example_type="linkedin",
+            max_words=300, is_builtin=True,
+        )
+        mock_registry = MagicMock()
+        mock_registry.get = AsyncMock(return_value=linkedin_config)
         deps.get_content_type_registry = MagicMock(return_value=mock_registry)
         mock_deps_fn.return_value = deps
         mock_model_fn.return_value = MagicMock()

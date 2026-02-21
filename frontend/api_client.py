@@ -250,8 +250,14 @@ def deconstruct_content(content: str, content_type: str = "") -> dict[str, Any]:
     payload: dict[str, Any] = {"content": content}
     if content_type:
         payload["content_type"] = content_type
-    response = client.post("/templates/deconstruct", json=payload)
-    response.raise_for_status()
+    response = client.post("/templates/deconstruct", json=payload, timeout=180.0)
+    if response.status_code >= 400:
+        detail = ""
+        try:
+            detail = response.json().get("detail", "")
+        except Exception:
+            pass
+        return {"error": detail or f"Deconstruction failed (HTTP {response.status_code})"}
     return response.json()
 
 

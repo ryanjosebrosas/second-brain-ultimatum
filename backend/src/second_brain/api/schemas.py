@@ -57,6 +57,19 @@ class SpecialistRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=10000)
 
 
+class LinkedInCommentRequest(BaseModel):
+    post_content: str = Field(..., min_length=1, max_length=10000)
+    context: str = Field(default="", description="Additional context about the post author or topic")
+    user_id: str = Field(default="", description="Voice profile to use")
+
+
+class LinkedInReplyRequest(BaseModel):
+    post_content: str = Field(..., min_length=1, max_length=10000)
+    comment_to_reply: str = Field(..., min_length=1, max_length=5000)
+    context: str = Field(default="", description="Thread context or additional info")
+    user_id: str = Field(default="", description="Voice profile to use")
+
+
 class PipelineRequest(BaseModel):
     request: str = Field(..., min_length=1, max_length=10000)
     steps: str = Field(default="")

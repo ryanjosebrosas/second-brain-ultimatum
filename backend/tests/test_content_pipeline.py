@@ -188,7 +188,7 @@ class TestTemplateBuilderAgent:
         assert "search_examples" in tools
 
     def test_has_retries(self):
-        assert template_builder_agent._max_result_retries == 3
+        assert template_builder_agent._max_result_retries == 5
 
     def test_has_validator(self):
         assert len(template_builder_agent._output_validators) > 0
@@ -257,7 +257,8 @@ class TestTemplateValidator:
         assert result.name == "Email Template"
 
     @pytest.mark.asyncio
-    async def test_template_without_writeprint(self):
+    async def test_template_without_writeprint_passes(self):
+        """Writeprint is optional — validator no longer rejects empty writeprint."""
         from second_brain.schemas import DeconstructedTemplate
         output = DeconstructedTemplate(
             name="Email Template",
@@ -269,22 +270,23 @@ class TestTemplateValidator:
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
-        with pytest.raises(ModelRetry, match="writeprint"):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        assert result.writeprint == ""
 
     @pytest.mark.asyncio
-    async def test_template_without_structure_hint(self):
+    async def test_template_with_flat_structure_hint_retries(self):
+        """Non-empty structure_hint without newlines triggers retry."""
         from second_brain.schemas import DeconstructedTemplate
         output = DeconstructedTemplate(
             name="Email Template",
             content_type="email",
             body="[GREETING]\n[BODY]\n[SIGN_OFF]",
-            structure_hint="",  # missing!
+            structure_hint="flat one-liner hint",
             when_to_use="Follow-up emails",
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
-        with pytest.raises(ModelRetry):
+        with pytest.raises(ModelRetry, match="MULTI-LINE"):
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
 

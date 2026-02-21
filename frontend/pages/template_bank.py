@@ -255,7 +255,10 @@ with tab_deconstruct:
                 result = api_client.deconstruct_content(
                     source_content, content_type=ct_hint,
                 )
-                st.session_state["deconstruct_result"] = result
+                if "error" in result:
+                    st.error(f"Deconstruction failed: {result['error']}")
+                else:
+                    st.session_state["deconstruct_result"] = result
             except Exception:
                 logger.exception("Deconstruction failed")
                 st.error("Deconstruction failed. Please try again.")

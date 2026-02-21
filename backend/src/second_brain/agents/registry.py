@@ -68,5 +68,15 @@ def get_agent_registry() -> dict[str, tuple[Any, str]]:
         registry["hook_writer"] = (hook_writer_agent, "LinkedIn hook generation")
     except ImportError:
         pass
+    try:
+        from second_brain.agents.linkedin_writer import linkedin_writer_agent
+        registry["linkedin_writer"] = (linkedin_writer_agent, "LinkedIn post creation with hooks")
+    except ImportError:
+        pass
+    try:
+        from second_brain.agents.linkedin_engagement import linkedin_engagement_agent
+        registry["linkedin_engagement"] = (linkedin_engagement_agent, "LinkedIn comments and replies")
+    except ImportError:
+        pass
 
     return registry

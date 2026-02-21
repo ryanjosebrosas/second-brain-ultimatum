@@ -168,7 +168,7 @@ class TestTemplateBuilderAgent:
         assert "search_template_bank" in tools
 
     def test_has_retries(self):
-        assert template_builder_agent._max_result_retries == 3
+        assert template_builder_agent._max_result_retries == 5
 
     def test_has_validator(self):
         assert len(template_builder_agent._output_validators) > 0
@@ -217,7 +217,8 @@ class TestTemplateValidator:
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
-    async def test_missing_structure_hint(self):
+    async def test_empty_structure_hint_passes(self):
+        """Empty structure_hint is allowed — validator only rejects flat one-liners."""
         output = DeconstructedTemplate(
             name="Test", content_type="email",
             body="[GREETING]\n[BODY]\n[SIGN_OFF]",
@@ -226,8 +227,8 @@ class TestTemplateValidator:
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
-        with pytest.raises(ModelRetry):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        assert result.structure_hint == ""
 
     @pytest.mark.asyncio
     async def test_flat_structure_hint_rejected(self):
@@ -245,7 +246,8 @@ class TestTemplateValidator:
             await validators[0].validate(output, ctx, wrap_validation_errors=False)
 
     @pytest.mark.asyncio
-    async def test_missing_writeprint(self):
+    async def test_empty_writeprint_passes(self):
+        """Empty writeprint is allowed — validator no longer enforces it."""
         output = DeconstructedTemplate(
             name="Test", content_type="email",
             body="[GREETING]\n[BODY]\n[SIGN_OFF]",
@@ -255,8 +257,8 @@ class TestTemplateValidator:
         )
         ctx = MagicMock()
         validators = template_builder_agent._output_validators
-        with pytest.raises(ModelRetry, match="writeprint"):
-            await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        result = await validators[0].validate(output, ctx, wrap_validation_errors=False)
+        assert result.writeprint == ""
 
     @pytest.mark.asyncio
     async def test_valid_template_passes(self):

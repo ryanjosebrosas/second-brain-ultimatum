@@ -958,6 +958,7 @@ AgentRoute = Literal[
     "recall", "recall_deep", "ask", "learn", "create", "review",
     "clarity", "synthesizer", "template_builder",
     "coach", "pmo", "email", "specialist",
+    "linkedin_writer", "linkedin_engagement",
     "pipeline", "conversational",
 ]
 
@@ -1104,6 +1105,70 @@ class DeconstructedTemplate(BaseModel):
     customization_guide: str = Field(default="", description="What parts to customize vs keep standard")
     tags: list[str] = Field(default_factory=list, description="Suggested tags for categorization")
     estimated_time_savings: str = Field(default="", description="Time saved per use")
+
+
+class LinkedInPostResult(BaseModel):
+    """Output from the LinkedIn Writer agent."""
+
+    draft: str = Field(description="The COMPLETE LinkedIn post text — ready to copy and paste.")
+    hook_used: str = Field(description="The hook selected as the opening line")
+    hook_type: str = Field(
+        description="Hook category: bold-statement, self-deprecating, curiosity-gap, "
+        "contrarian, stat-lead, question, dialogue-scene, meta-platform"
+    )
+    post_structure: str = Field(
+        description="Post structure used: origin-story, vulnerability-confession, "
+        "results-breakdown, contrarian-advice, listicle, hot-take, or freeform"
+    )
+    content_type: str = Field(default="linkedin", description="Always 'linkedin'")
+    voice_elements: list[str] = Field(
+        default_factory=list, description="Voice/tone elements applied"
+    )
+    patterns_applied: list[str] = Field(
+        default_factory=list, description="Brain patterns applied"
+    )
+    examples_referenced: list[str] = Field(
+        default_factory=list, description="Example titles that informed the draft"
+    )
+    word_count: int = Field(default=0, description="Word count of the draft")
+    notes: str = Field(
+        default="",
+        description="Editorial notes for the human reviewer",
+    )
+    error: str = Field(
+        default="",
+        description="Error message when backend services are degraded. "
+        "When set, minimal output is expected and should not trigger retries.",
+    )
+
+
+class LinkedInEngagementResult(BaseModel):
+    """Output from the LinkedIn Engagement agent."""
+
+    response: str = Field(description="The comment or reply text — ready to post")
+    engagement_type: str = Field(
+        description="Type: 'comment' (on someone's post) or 'reply' (to a comment on your post)"
+    )
+    tone: str = Field(
+        description="Tone used: conversational, supportive, insightful, challenging, curious, humorous"
+    )
+    context_used: list[str] = Field(
+        default_factory=list,
+        description="Brain context sources used (e.g., 'expertise: AI automation', 'meeting: client call Jan 15')",
+    )
+    voice_elements: list[str] = Field(
+        default_factory=list, description="Voice elements applied"
+    )
+    word_count: int = Field(default=0, description="Word count of the response")
+    notes: str = Field(
+        default="",
+        description="Suggestions for human before posting",
+    )
+    error: str = Field(
+        default="",
+        description="Error message when backend services are degraded. "
+        "When set, minimal output is expected and should not trigger retries.",
+    )
 
 
 class HookWriterResult(BaseModel):

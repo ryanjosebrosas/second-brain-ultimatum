@@ -20,6 +20,8 @@ from second_brain.api.schemas import (
     CreateContentRequest,
     EmailRequest,
     LearnRequest,
+    LinkedInCommentRequest,
+    LinkedInReplyRequest,
     PipelineRequest,
     PrioritizeRequest,
     RecallRequest,
@@ -163,6 +165,32 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
     except Exception:
         logger.debug("Failed to pre-load examples")
 
+    timeout = deps.config.api_timeout_seconds
+
+    # Route LinkedIn content to dedicated LinkedIn Writer agent
+    if body.content_type == "linkedin":
+        from second_brain.agents.linkedin_writer import linkedin_writer_agent
+
+        writer_prompt = f"Write a LinkedIn post about: {body.prompt}"
+        if effective_uid:
+            writer_prompt += f"\nVoice profile: {effective_uid}"
+        if voice_sections:
+            writer_prompt += "\n\n## Your Voice & Tone Guide\n" + "\n\n".join(voice_sections)
+        if example_sections:
+            writer_prompt += "\n\n## Reference Examples (linkedin)\n" + "\n\n".join(example_sections)
+        if body.structure_hint:
+            writer_prompt += (
+                "\n\n## Structure Template (MANDATORY)\n"
+                f"{body.structure_hint}"
+            )
+
+        result = await _run_agent(
+            "LinkedIn Writer",
+            lambda: linkedin_writer_agent.run(writer_prompt, deps=deps, model=model),
+            timeout,
+        )
+        return result.output.model_dump()
+
     # Build enhanced prompt (mirrors mcp_server.py create_content)
     enhanced_parts = [
         f"Content type: {type_config.name} ({body.content_type})",
@@ -204,6 +232,62 @@ async def create_content(body: CreateContentRequest, deps: BrainDeps = Depends(g
     result = await _run_agent(
         "Create",
         lambda: create_agent.run(enhanced, deps=deps, model=model),
+        deps.config.api_timeout_seconds,
+    )
+    return result.output.model_dump()
+
+
+@router.post("/linkedin/comment")
+async def linkedin_comment_endpoint(body: LinkedInCommentRequest, deps: BrainDeps = Depends(get_deps), model: "Model" = Depends(get_model)) -> dict[str, Any]:
+    """Write an authentic comment on a LinkedIn post using brain context."""
+    effective_uid = body.user_id.strip().lower() if body.user_id and body.user_id.strip() else None
+    if effective_uid:
+        allowed = deps.config.allowed_user_ids_list
+        if allowed and effective_uid not in allowed:
+            raise HTTPException(400, detail=f"Unknown user_id '{effective_uid}'. Allowed: {', '.join(allowed)}")
+
+    from second_brain.agents.linkedin_engagement import linkedin_engagement_agent
+
+    prompt = f"Write a comment on this LinkedIn post:\n\n{body.post_content}"
+    prompt += "\n\nEngagement type: comment"
+    if body.context:
+        prompt += f"\n\nAdditional context: {body.context}"
+    if effective_uid:
+        prompt += f"\nVoice profile: {effective_uid}"
+
+    result = await _run_agent(
+        "LinkedIn Engagement",
+        lambda: linkedin_engagement_agent.run(prompt, deps=deps, model=model),
+        deps.config.api_timeout_seconds,
+    )
+    return result.output.model_dump()
+
+
+@router.post("/linkedin/reply")
+async def linkedin_reply_endpoint(body: LinkedInReplyRequest, deps: BrainDeps = Depends(get_deps), model: "Model" = Depends(get_model)) -> dict[str, Any]:
+    """Write an authentic reply to a comment on your LinkedIn post."""
+    effective_uid = body.user_id.strip().lower() if body.user_id and body.user_id.strip() else None
+    if effective_uid:
+        allowed = deps.config.allowed_user_ids_list
+        if allowed and effective_uid not in allowed:
+            raise HTTPException(400, detail=f"Unknown user_id '{effective_uid}'. Allowed: {', '.join(allowed)}")
+
+    from second_brain.agents.linkedin_engagement import linkedin_engagement_agent
+
+    prompt = (
+        f"Reply to this comment on your LinkedIn post.\n\n"
+        f"## Your Original Post\n{body.post_content}\n\n"
+        f"## Comment to Reply To\n{body.comment_to_reply}"
+    )
+    prompt += "\n\nEngagement type: reply"
+    if body.context:
+        prompt += f"\n\nThread context: {body.context}"
+    if effective_uid:
+        prompt += f"\nVoice profile: {effective_uid}"
+
+    result = await _run_agent(
+        "LinkedIn Engagement",
+        lambda: linkedin_engagement_agent.run(prompt, deps=deps, model=model),
         deps.config.api_timeout_seconds,
     )
     return result.output.model_dump()

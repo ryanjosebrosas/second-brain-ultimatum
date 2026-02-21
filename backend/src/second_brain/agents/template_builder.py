@@ -17,70 +17,29 @@ template_builder_agent = Agent(
     output_type=DeconstructedTemplate,
     retries=5,
     instructions=(
-        "You are a master of content analysis, frameworks, structural understanding, "
-        "and template creation. You identify and interpret implicit information with ease "
-        "and with an instinct for what makes writing pop.\n\n"
-        "Your output has three core pieces:\n"
-        "1. A WRITEPRINT (`writeprint` field) — the voice/tone/style fingerprint\n"
-        "2. A STRUCTURE (`structure_hint` field) — the visual-shape framework\n"
-        "3. A TEMPLATE BODY (`body` field) — the fill-in-the-blank blueprint\n\n"
-        "WRITEPRINT RULES (`writeprint` field):\n"
-        "- Capture: lexical choices, syntactic patterns, register, idiosyncratic elements\n"
-        "- Format: brief unambiguous description of the writer's voice, tone, and style\n"
-        "- Example: 'Motivational and conversational tone with personal narrative style. "
-        "Uses first-person perspective and simple, direct language. Incorporates personal "
-        "experiences and progress over time to inspire and educate. Presents ideas in a "
-        "simple problem-solution format. Employs repetition and parallel structure for "
-        "emphasis and clarity.'\n\n"
-        "STRUCTURE RULES (`structure_hint` field):\n"
-        "This is the VISUAL SHAPE FRAMEWORK — a multi-line blueprint showing exactly how\n"
-        "the content is laid out physically. It must look like a mini-template itself.\n\n"
-        "CRITICAL: This must be MULTI-LINE with actual line breaks, NOT a flat one-liner.\n"
-        "It shows the physical shape someone would follow to write new content.\n\n"
-        "Format rules:\n"
-        "- Start with: **{Post Type Name}**\n"
-        "- Each structural element on its OWN LINE\n"
-        "- Use {curly brace descriptors} for each section\n"
-        "- Show line breaks, spacing, and visual rhythm explicitly\n"
-        "- Note rhetorical devices inline\n\n"
-        "GOOD example (multi-line visual framework):\n"
-        "  **Blunders & Lessons Post**\n"
-        "  {self-deprecating hook confession — 1 sentence}\n"
-        "  \n"
-        "  {dismissive one-liner: 'But it's fine. It's FINE.'}\n"
-        "  \n"
-        "  {humorous time reveal with emoji — 'I've only been doing X for *checks calendar* Y'}\n"
-        "  \n"
-        "  {transition to lessons — 'So I guess this is your reminder that:'}\n"
-        "  \n"
-        "  {emoji} {lesson 1}\n"
-        "  {emoji} {lesson 2}\n"
-        "  {emoji} {lesson 3 + CTA woven in}\n"
-        "  \n"
-        "  {gratitude shoutout — 'Thanks to [person] for [attribute]'}\n"
-        "  \n"
-        "  Love\n"
-        "  {signature}\n\n"
-        "BAD example (flat one-liner — NEVER do this):\n"
-        "  Blunders & Lessons Pattern [Hook] [Follow-up] [Time reveal] [Lessons] [CTA]\n\n"
-        "TEMPLATE BODY RULES (`body` field):\n"
-        "The body is a FILL-IN-THE-BLANK version of the original content.\n"
-        "- Replace specific details with [PLACEHOLDER_NAME] markers\n"
-        "- Use UPPER_SNAKE_CASE inside brackets: [HOOK_STATEMENT], [KEY_METRIC]\n"
-        "- Be descriptive: [PERSONAL_ANECDOTE] not just [TEXT]\n"
-        "- Group related placeholders: [BENEFIT_1], [BENEFIT_2], [BENEFIT_3]\n"
-        "- PRESERVE the original's line breaks, spacing, and physical layout exactly\n"
-        "- Keep transitional phrases and structural connectors verbatim\n"
-        "- The body MUST contain at least 3 [PLACEHOLDER] markers\n\n"
-        "KEY DIFFERENCE between structure_hint and body:\n"
-        "- structure_hint = abstract framework with {curly brace descriptors} — reusable shape\n"
-        "- body = concrete fill-in-the-blank with [PLACEHOLDER] markers — closer to original\n\n"
-        "ADDITIONAL OUTPUT:\n"
-        "- `name`: memorable name reflecting the template's theme/style\n"
-        "- `content_type`: slug (linkedin, email, case-study, etc.)\n"
-        "- `when_to_use` and `when_not_to_use`: usage guidance\n"
-        "- `customization_guide`: what to customize vs keep standard\n"
-        "- `tags`: relevant categorization tags"
+        "You deconstruct the user's content into a reusable template.\n\n"
+        "BODY RULES (`body` field) — MOST IMPORTANT:\n"
+        "Take the user's content and make it REUSABLE for any topic/industry.\n"
+        "Replace with [PLACEHOLDER_NAME] markers:\n"
+        "- All topic-specific nouns (tools, platforms, products, industries)\n"
+        "- All numbers, metrics, timeframes\n"
+        "- All specific examples, filter names, features\n"
+        "- All specific outcomes and results\n"
+        "- All audience/role references specific to one niche\n\n"
+        "KEEP as literal text:\n"
+        "- Transition phrases ('But there's a better way', 'The best part?')\n"
+        "- Structural connectors ('Try these', 'Save this', 'While...still work')\n"
+        "- The formatting pattern (line breaks, arrows, emojis, spacing)\n"
+        "- Generic action words ('set up', 'check', 'combining')\n"
+        "- The rhetorical flow and rhythm\n\n"
+        "The template should work for ANY topic — someone should be able to "
+        "fill in the blanks for fitness, real estate, SaaS, cooking, anything.\n\n"
+        "STRUCTURE (`structure_hint` field):\n"
+        "- Multi-line abstract framework, each section on its own line\n"
+        "- Use {curly brace descriptors} for each section\n\n"
+        "WRITEPRINT (`writeprint`): voice/tone/style description of the content\n\n"
+        "OTHER: name, content_type, when_to_use, when_not_to_use, "
+        "customization_guide, tags"
     ),
 )
 
@@ -89,43 +48,22 @@ template_builder_agent = Agent(
 async def validate_template(
     ctx: RunContext[BrainDeps], output: DeconstructedTemplate
 ) -> DeconstructedTemplate:
-    """Validate template quality — enforce full structure."""
-    if not output.when_to_use:
-        raise ModelRetry(
-            f"Template '{output.name}' is missing 'when_to_use' guidance. "
-            "Every template MUST specify when it should be applied."
-        )
+    """Validate template quality."""
     if not output.body:
         raise ModelRetry(
-            f"Template '{output.name}' has no body. "
-            "Provide the full template structure with [PLACEHOLDER] markers."
+            "Missing body. Take the user's ACTUAL content and replace specific "
+            "details with [PLACEHOLDER] markers. Keep everything else verbatim."
         )
     placeholder_count = output.body.count("[")
-    if placeholder_count < 3:
+    if placeholder_count < 2:
         raise ModelRetry(
-            f"Template body has only {placeholder_count} placeholders. "
-            "A good template needs at least 3 [PLACEHOLDER] markers. "
-            "Replace specific details with descriptive [PLACEHOLDER_NAME] markers."
+            f"Body has only {placeholder_count} placeholders. "
+            "Replace specific details with [PLACEHOLDER_NAME] markers."
         )
-    if not output.structure_hint:
+    if output.structure_hint and "\n" not in output.structure_hint:
         raise ModelRetry(
-            "Missing structure_hint. Must be a MULTI-LINE visual framework showing "
-            "the physical shape. Each structural element on its own line with "
-            "{curly brace descriptors}. Start with **{Post Type Name}**. "
-            "NEVER a flat one-liner."
-        )
-    if "\n" not in output.structure_hint:
-        raise ModelRetry(
-            "structure_hint must be MULTI-LINE — each structural element on its own "
-            "line. You wrote a flat one-liner. Break it into lines showing the visual "
-            "shape: one {descriptor} per line with blank lines for spacing."
-        )
-    if not output.writeprint:
-        raise ModelRetry(
-            "Missing writeprint. Capture the writer's voice, tone, and style: "
-            "lexical choices, syntactic patterns, register, idiosyncratic elements. "
-            "Example: 'Conversational tone with self-deprecating humor. Uses short "
-            "punchy sentences and frequent line breaks for emphasis.'"
+            "structure_hint must be MULTI-LINE. Each section on its own line "
+            "with {curly brace descriptors}. Never a flat one-liner."
         )
     return output
 

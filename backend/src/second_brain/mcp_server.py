@@ -926,6 +926,47 @@ async def create_content(
         available = await registry.slugs()
         return f"Unknown content type '{content_type}'. Available: {', '.join(available)}"
 
+    timeout = deps.config.api_timeout_seconds
+
+    # Route LinkedIn content to dedicated LinkedIn Writer agent
+    if content_type == "linkedin":
+        from second_brain.agents.linkedin_writer import linkedin_writer_agent
+
+        writer_prompt = f"Write a LinkedIn post about: {prompt}"
+        if effective_uid:
+            writer_prompt += f"\nVoice profile: {effective_uid}"
+        if structure_hint:
+            writer_prompt += (
+                "\n\n## Structure Template (MANDATORY)\n"
+                "Follow this template structure exactly:\n\n"
+                f"{structure_hint}"
+            )
+        try:
+            async with asyncio.timeout(timeout):
+                result = await linkedin_writer_agent.run(
+                    writer_prompt, deps=deps, model=model,
+                )
+        except TimeoutError:
+            return f"LinkedIn post creation timed out after {timeout}s."
+        out = result.output
+        parts = [
+            f"# LinkedIn Post Draft\n",
+            out.draft,
+            f"\n---",
+            f"**Hook**: {out.hook_used} ({out.hook_type})",
+            f"**Structure**: {out.post_structure}",
+            f"**Words**: {out.word_count}",
+        ]
+        if out.voice_elements:
+            parts.append(f"**Voice**: {', '.join(out.voice_elements)}")
+        if out.patterns_applied:
+            parts.append(f"**Patterns**: {', '.join(out.patterns_applied)}")
+        if out.notes:
+            parts.append(f"\n**Notes**: {out.notes}")
+        if out.error:
+            parts.append(f"\n⚠️ **Degraded**: {out.error}")
+        return "\n".join(parts)
+
     # Build prompt — agent's own tools fetch voice guide and examples
     agent_prompt = f"Create {type_config.name} ({content_type}) content"
     if type_config.length_guidance:
@@ -943,7 +984,6 @@ async def create_content(
             f"{structure_hint}"
         )
 
-    timeout = deps.config.api_timeout_seconds
     try:
         async with asyncio.timeout(timeout):
             result = await create_agent.run(agent_prompt, deps=deps, model=model)
@@ -2818,6 +2858,131 @@ async def write_linkedin_hooks(
     if out.reasoning:
         parts.append(f"\n**Why these work**: {out.reasoning}")
 
+    return "\n".join(parts)
+
+
+@server.tool()
+async def linkedin_comment(
+    post_content: str, context: str = "", user_id: str = "",
+) -> str:
+    """Write an authentic comment on someone's LinkedIn post using your brain context.
+    Pulls expertise, meeting notes, and subject matter knowledge to craft a response
+    that sounds like YOU — not AI-generated.
+
+    When to use: When you want to engage with someone's LinkedIn post. The agent
+    will analyze the post and write a comment that adds genuine value.
+
+    Args:
+        post_content: The LinkedIn post you want to comment on (paste the full text)
+        context: Optional additional context (e.g., "I know this person from a conference",
+                 "We discussed this topic in our team meeting last week")
+        user_id: Voice profile to use (e.g., "uttam"). Empty = default.
+    """
+    try:
+        post_content = _validate_mcp_input(post_content, label="post_content")
+    except ValueError as e:
+        return str(e)
+    try:
+        effective_uid = _validate_user_id(user_id)
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+    model = _get_model("linkedin_engagement")
+    from second_brain.agents.linkedin_engagement import linkedin_engagement_agent
+
+    prompt = f"Write a comment on this LinkedIn post:\n\n{post_content}"
+    prompt += "\n\nEngagement type: comment"
+    if context:
+        prompt += f"\n\nAdditional context: {context}"
+    if effective_uid:
+        prompt += f"\nVoice profile: {effective_uid}"
+
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await linkedin_engagement_agent.run(
+                prompt, deps=deps, model=model,
+            )
+    except TimeoutError:
+        return f"Comment generation timed out after {timeout}s."
+    out = result.output
+
+    parts = [f"# LinkedIn Comment\n", out.response]
+    parts.append(f"\n---")
+    parts.append(f"**Tone**: {out.tone}")
+    parts.append(f"**Words**: {out.word_count}")
+    if out.context_used:
+        parts.append(f"**Context**: {', '.join(out.context_used)}")
+    if out.notes:
+        parts.append(f"\n**Notes**: {out.notes}")
+    if out.error:
+        parts.append(f"\n⚠️ **Degraded**: {out.error}")
+    return "\n".join(parts)
+
+
+@server.tool()
+async def linkedin_reply(
+    post_content: str, comment_to_reply: str, context: str = "",
+    user_id: str = "",
+) -> str:
+    """Write an authentic reply to a comment on your LinkedIn post.
+    Stays in context of the conversation and uses your brain knowledge.
+
+    When to use: When someone comments on YOUR LinkedIn post and you want to
+    reply thoughtfully without sounding generic or AI-generated.
+
+    Args:
+        post_content: Your original LinkedIn post text (for context)
+        comment_to_reply: The comment you want to reply to
+        context: Optional thread context (e.g., other comments in the thread)
+        user_id: Voice profile to use (e.g., "uttam"). Empty = default.
+    """
+    try:
+        post_content = _validate_mcp_input(post_content, label="post_content")
+        comment_to_reply = _validate_mcp_input(comment_to_reply, label="comment")
+    except ValueError as e:
+        return str(e)
+    try:
+        effective_uid = _validate_user_id(user_id)
+    except ValueError as e:
+        return str(e)
+
+    deps = _get_deps()
+    model = _get_model("linkedin_engagement")
+    from second_brain.agents.linkedin_engagement import linkedin_engagement_agent
+
+    prompt = (
+        f"Reply to this comment on your LinkedIn post.\n\n"
+        f"## Your Original Post\n{post_content}\n\n"
+        f"## Comment to Reply To\n{comment_to_reply}"
+    )
+    prompt += "\n\nEngagement type: reply"
+    if context:
+        prompt += f"\n\nThread context: {context}"
+    if effective_uid:
+        prompt += f"\nVoice profile: {effective_uid}"
+
+    timeout = deps.config.api_timeout_seconds
+    try:
+        async with asyncio.timeout(timeout):
+            result = await linkedin_engagement_agent.run(
+                prompt, deps=deps, model=model,
+            )
+    except TimeoutError:
+        return f"Reply generation timed out after {timeout}s."
+    out = result.output
+
+    parts = [f"# LinkedIn Reply\n", out.response]
+    parts.append(f"\n---")
+    parts.append(f"**Tone**: {out.tone}")
+    parts.append(f"**Words**: {out.word_count}")
+    if out.context_used:
+        parts.append(f"**Context**: {', '.join(out.context_used)}")
+    if out.notes:
+        parts.append(f"\n**Notes**: {out.notes}")
+    if out.error:
+        parts.append(f"\n⚠️ **Degraded**: {out.error}")
     return "\n".join(parts)
 
 
