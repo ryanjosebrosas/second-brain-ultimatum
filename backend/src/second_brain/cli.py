@@ -834,6 +834,80 @@ def setup():
 
 
 @cli.command()
+def setup_criteria():
+    """Configure Mem0 Criteria Retrieval for weighted memory scoring.
+
+    This sets project-level criteria that automatically apply to all searches.
+    Run once to enable, or re-run to update criteria. Use MEM0_USE_CRITERIA=false
+    to disable without removing the criteria.
+    """
+    from second_brain.services.memory import DEFAULT_RETRIEVAL_CRITERIA
+
+    deps = create_deps()  # Uses module-level import for testability
+
+    async def run():
+        if deps.config.memory_provider != "mem0":
+            click.echo("Error: Criteria Retrieval requires memory_provider='mem0'", err=True)
+            return
+
+        click.echo("Configuring Mem0 Criteria Retrieval...")
+        click.echo(f"Criteria: {[c['name'] for c in DEFAULT_RETRIEVAL_CRITERIA]}")
+
+        success = await deps.memory.setup_criteria_retrieval()
+
+        if success:
+            click.echo("✓ Criteria Retrieval configured successfully")
+            click.echo("  All searches will now use weighted scoring.")
+            click.echo("  Set MEM0_USE_CRITERIA=false to bypass globally.")
+        else:
+            click.echo("✗ Failed to configure Criteria Retrieval", err=True)
+            click.echo("  Check logs for details.", err=True)
+
+    asyncio.run(run())
+
+
+@cli.command()
+def setup_instructions():
+    """Configure Mem0 Custom Instructions for memory extraction.
+
+    This sets project-level instructions that control what facts are extracted
+    when memories are added. Run once to enable, or re-run to update.
+
+    Custom instructions shape INGESTION (what gets stored), not retrieval.
+    """
+    from second_brain.services.memory import DEFAULT_CUSTOM_INSTRUCTIONS
+
+    deps = create_deps()
+
+    async def run():
+        if deps.config.memory_provider != "mem0":
+            click.echo("Error: Custom Instructions requires memory_provider='mem0'", err=True)
+            return
+
+        click.echo("Configuring Mem0 Custom Instructions...")
+        click.echo("")
+        click.echo("Extraction priorities:")
+        click.echo("  1. Patterns and Approaches")
+        click.echo("  2. Decisions and Rationale")
+        click.echo("  3. Voice and Style")
+        click.echo("  4. Lessons Learned")
+        click.echo("  5. Goals and Commitments")
+        click.echo("")
+
+        success = await deps.memory.setup_custom_instructions()
+
+        if success:
+            click.echo("✓ Custom Instructions configured successfully")
+            click.echo("  Future add() calls will use these extraction rules.")
+            click.echo("  Note: Existing memories are not affected.")
+        else:
+            click.echo("✗ Failed to configure Custom Instructions", err=True)
+            click.echo("  Check logs for details.", err=True)
+
+    asyncio.run(run())
+
+
+@cli.command()
 def patterns():
     """View the pattern registry -- all patterns with confidence and status."""
     deps = create_deps()

@@ -62,6 +62,8 @@ class TestMemoryServiceRetry:
         config.graph_provider = "none"
         config.mem0_keyword_search = False
         config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
         return config
 
     @patch("mem0.MemoryClient")
@@ -167,6 +169,32 @@ class TestMemoryServiceRetry:
 
         assert mock_client.update.call_count == 2
 
+    @patch("mem0.MemoryClient")
+    async def test_update_memory_passes_correct_args(self, mock_client_cls, mock_config):
+        """update_memory() passes memory_id, content, and metadata to client."""
+        mock_client = mock_client_cls.return_value
+        mock_client.update.return_value = {"status": "updated"}
+
+        svc = MemoryService(mock_config)
+        await svc.update_memory("mem-123", content="new content", metadata={"key": "val"})
+
+        mock_client.update.assert_called_once()
+        call_kwargs = mock_client.update.call_args.kwargs
+        assert call_kwargs["memory_id"] == "mem-123"
+        assert call_kwargs["text"] == "new content"
+        assert call_kwargs["metadata"] == {"key": "val"}
+
+    @patch("mem0.MemoryClient")
+    async def test_delete_passes_correct_args(self, mock_client_cls, mock_config):
+        """delete() passes memory_id to client.delete()."""
+        mock_client = mock_client_cls.return_value
+        mock_client.delete.return_value = None
+
+        svc = MemoryService(mock_config)
+        await svc.delete("mem-456")
+
+        mock_client.delete.assert_called_once_with("mem-456")
+
 
 class TestMemoryServiceGracefulDegradation:
     """Test graceful degradation — errors return empty, not raise."""
@@ -181,6 +209,8 @@ class TestMemoryServiceGracefulDegradation:
         config.graph_provider = "none"
         config.mem0_keyword_search = False
         config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
         return config
 
     @patch("mem0.MemoryClient")
@@ -240,6 +270,20 @@ class TestMemoryServiceGracefulDegradation:
 
         assert result == {}
 
+    @patch("mem0.MemoryClient")
+    async def test_delete_all_returns_count(self, mock_client_cls, mock_config):
+        """delete_all() returns count of deleted memories."""
+        mock_client = mock_client_cls.return_value
+        # get_all returns memories to delete
+        mock_client.get_all.return_value = [{"id": "m1"}, {"id": "m2"}, {"id": "m3"}]
+        mock_client.delete.return_value = None
+
+        svc = MemoryService(mock_config)
+        count = await svc.delete_all()
+
+        assert count == 3
+        assert mock_client.delete.call_count == 3
+
 
 class TestMemoryServiceIdleReconnect:
     """Test idle reconnect logic."""
@@ -254,6 +298,8 @@ class TestMemoryServiceIdleReconnect:
         config.graph_provider = "none"
         config.mem0_keyword_search = False
         config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
         return config
 
     @patch("time.monotonic")
@@ -288,6 +334,8 @@ class TestMemoryServiceMultimodal:
         config.graph_provider = "none"
         config.mem0_keyword_search = False
         config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
         return config
 
     @patch("mem0.MemoryClient")
@@ -363,3 +411,445 @@ class TestMemoryServiceRetryConfig:
         """Verify retry attempts is 3."""
         from second_brain.services.retry import MEM0_RETRY_CONFIG
         assert MEM0_RETRY_CONFIG.max_attempts == 3
+
+
+class TestMemoryServiceClose:
+    """Test close() method — resource cleanup."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_close_calls_client_close(self, mock_client_cls, mock_config):
+        """close() calls client.close() when available."""
+        mock_client = mock_client_cls.return_value
+        mock_client.close = MagicMock()  # sync close method
+
+        svc = MemoryService(mock_config)
+        await svc.close()
+
+        mock_client.close.assert_called_once()
+
+    @patch("mem0.MemoryClient")
+    async def test_close_handles_missing_close_method(self, mock_client_cls, mock_config):
+        """close() gracefully handles client without close method."""
+        mock_client = mock_client_cls.return_value
+        # Remove close attribute
+        del mock_client.close
+
+        svc = MemoryService(mock_config)
+        # Should not raise
+        await svc.close()
+
+        assert svc._client is None
+
+    @patch("mem0.MemoryClient")
+    async def test_close_nullifies_client(self, mock_client_cls, mock_config):
+        """close() sets _client to None."""
+        mock_client = mock_client_cls.return_value
+        mock_client.close = MagicMock()
+
+        svc = MemoryService(mock_config)
+        assert svc._client is not None
+
+        await svc.close()
+
+        assert svc._client is None
+
+    @patch("mem0.MemoryClient")
+    async def test_close_handles_exception_gracefully(self, mock_client_cls, mock_config):
+        """close() doesn't propagate exceptions from client.close()."""
+        mock_client = mock_client_cls.return_value
+        mock_client.close = MagicMock(side_effect=RuntimeError("close failed"))
+
+        svc = MemoryService(mock_config)
+        # Should not raise despite client.close() failing
+        await svc.close()
+
+        assert svc._client is None
+
+
+class TestMemoryServiceFilterMemories:
+    """Tests for filter_memories parameter in search methods."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
+        return config
+
+    # ============================================================
+    # Tests for MemoryService.search() — filter_memories
+    # ============================================================
+
+    @patch("mem0.MemoryClient")
+    async def test_search_passes_filter_memories_when_config_enabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search() passes filter_memories=True when config is enabled."""
+        mock_config.mem0_filter_memories = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("filter_memories") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_omits_filter_memories_when_config_disabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search() does NOT pass filter_memories when config is disabled."""
+        mock_config.mem0_filter_memories = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "filter_memories" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_per_call_filter_memories_overrides_config(
+        self, mock_client_cls, mock_config
+    ):
+        """search() per-call filter_memories=True overrides config=False."""
+        mock_config.mem0_filter_memories = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query", filter_memories=True)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("filter_memories") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_per_call_filter_memories_false_overrides_config_true(
+        self, mock_client_cls, mock_config
+    ):
+        """search() per-call filter_memories=False overrides config=True."""
+        mock_config.mem0_filter_memories = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query", filter_memories=False)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "filter_memories" not in call_kwargs
+
+    # ============================================================
+    # Tests for MemoryService.search_with_filters() — filter_memories
+    # ============================================================
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_passes_filter_memories_when_config_enabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() passes filter_memories=True when config is enabled."""
+        mock_config.mem0_filter_memories = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query", metadata_filters={"category": "test"})
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("filter_memories") is True
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_omits_filter_memories_when_config_disabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() does NOT pass filter_memories when config is disabled."""
+        mock_config.mem0_filter_memories = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "filter_memories" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_per_call_override(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() per-call filter_memories=True overrides config=False."""
+        mock_config.mem0_filter_memories = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query", filter_memories=True)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("filter_memories") is True
+
+
+class TestSetupCriteriaRetrieval:
+    """Tests for MemoryService.setup_criteria_retrieval()."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_criteria_retrieval_with_default_criteria(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_criteria_retrieval() calls project.update with default criteria."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        from second_brain.services.memory import DEFAULT_RETRIEVAL_CRITERIA
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_criteria_retrieval()
+
+        assert result is True
+        mock_client.project.update.assert_called_once_with(
+            retrieval_criteria=DEFAULT_RETRIEVAL_CRITERIA
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_criteria_retrieval_with_custom_criteria(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_criteria_retrieval() accepts custom criteria."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        custom_criteria = [{"name": "test", "description": "Test", "weight": 1}]
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_criteria_retrieval(criteria=custom_criteria)
+
+        assert result is True
+        mock_client.project.update.assert_called_once_with(
+            retrieval_criteria=custom_criteria
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_criteria_retrieval_handles_error(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_criteria_retrieval() returns False on error."""
+        mock_client = MagicMock()
+        mock_client.project.update.side_effect = Exception("API error")
+        mock_client_cls.return_value = mock_client
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_criteria_retrieval()
+
+        assert result is False
+
+
+class TestUseCriteriaBypass:
+    """Tests for use_criteria parameter in search methods."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_search_passes_use_criteria_false_when_config_disabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search() passes use_criteria=False when config is disabled."""
+        mock_config.mem0_use_criteria = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("use_criteria") is False
+
+    @patch("mem0.MemoryClient")
+    async def test_search_omits_use_criteria_when_config_enabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search() does NOT pass use_criteria when config is enabled (criteria auto-activate)."""
+        mock_config.mem0_use_criteria = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "use_criteria" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_per_call_use_criteria_false_overrides_config(
+        self, mock_client_cls, mock_config
+    ):
+        """search() per-call use_criteria=False overrides config=True."""
+        mock_config.mem0_use_criteria = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search("test query", use_criteria=False)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("use_criteria") is False
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_use_criteria_bypass(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() passes use_criteria=False when disabled."""
+        mock_config.mem0_use_criteria = False
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("use_criteria") is False
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_omits_use_criteria_when_config_enabled(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() does NOT pass use_criteria when config is enabled."""
+        mock_config.mem0_use_criteria = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query")
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert "use_criteria" not in call_kwargs
+
+    @patch("mem0.MemoryClient")
+    async def test_search_with_filters_per_call_use_criteria_false_overrides_config(
+        self, mock_client_cls, mock_config
+    ):
+        """search_with_filters() per-call use_criteria=False overrides config=True."""
+        mock_config.mem0_use_criteria = True
+        mock_client = mock_client_cls.return_value
+        mock_client.search.return_value = {"results": [], "relations": []}
+
+        svc = MemoryService(mock_config)
+        await svc.search_with_filters("test query", use_criteria=False)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs.get("use_criteria") is False
+
+
+class TestSetupCustomInstructions:
+    """Tests for MemoryService.setup_custom_instructions()."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock(spec=BrainConfig)
+        config.mem0_api_key = "test-key"
+        config.brain_user_id = "test-user"
+        config.memory_search_limit = 10
+        config.service_timeout_seconds = 30.0
+        config.graph_provider = "none"
+        config.mem0_keyword_search = False
+        config.mem0_rerank = False
+        config.mem0_filter_memories = False
+        config.mem0_use_criteria = True
+        return config
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_custom_instructions_with_default(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_custom_instructions() calls project.update with default instructions."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        from second_brain.services.memory import DEFAULT_CUSTOM_INSTRUCTIONS
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_custom_instructions()
+
+        assert result is True
+        mock_client.project.update.assert_called_once_with(
+            custom_instructions=DEFAULT_CUSTOM_INSTRUCTIONS
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_custom_instructions_with_custom(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_custom_instructions() accepts custom instructions."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        custom = "Only store technical patterns."
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_custom_instructions(instructions=custom)
+
+        assert result is True
+        mock_client.project.update.assert_called_once_with(
+            custom_instructions=custom
+        )
+
+    @patch("mem0.MemoryClient")
+    async def test_setup_custom_instructions_handles_error(
+        self, mock_client_cls, mock_config
+    ):
+        """setup_custom_instructions() returns False on error."""
+        mock_client = MagicMock()
+        mock_client.project.update.side_effect = Exception("API error")
+        mock_client_cls.return_value = mock_client
+
+        svc = MemoryService(mock_config)
+        result = await svc.setup_custom_instructions()
+
+        assert result is False

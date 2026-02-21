@@ -19,6 +19,51 @@ _V2_BUILTIN_KEYS = frozenset({
     "memory_ids", "keywords", "AND", "OR", "NOT",
 })
 
+# Default criteria for Mem0 Criteria Retrieval (project-level)
+# Weighted scoring: actionable patterns (3), recent relevance (2), confidence (1)
+DEFAULT_RETRIEVAL_CRITERIA = [
+    {
+        "name": "actionable",
+        "description": "Prioritize memories containing patterns, decisions, reusable approaches, how-tos, or explicit recommendations that can be directly applied",
+        "weight": 3,
+    },
+    {
+        "name": "recent_relevance",
+        "description": "Prioritize memories about current goals, active projects, recent commitments, or ongoing work over historical or completed topics",
+        "weight": 2,
+    },
+    {
+        "name": "confidence",
+        "description": "Prioritize memories that are well-evidenced, specific, or based on verified outcomes over speculative or uncertain content",
+        "weight": 1,
+    },
+]
+
+# Default custom instructions for Mem0 memory extraction (project-level)
+# Controls what facts are extracted during add() calls
+DEFAULT_CUSTOM_INSTRUCTIONS = """Your Task: Extract valuable knowledge from conversations for a Second Brain system.
+
+Information to Extract:
+1. Patterns and Approaches - Reusable methods, workflows, problem-solving strategies, code patterns
+2. Decisions and Rationale - Choices made and WHY, trade-offs considered, lessons from outcomes
+3. Voice and Style - Writing preferences, tone markers, communication patterns, example phrases
+4. Lessons Learned - What worked, what didn't, insights gained from experience
+5. Goals and Commitments - Current objectives, active projects, accountability items
+
+Guidelines:
+- Synthesize insights; don't store raw data without interpretation
+- Capture the "why" behind decisions, not just the "what"
+- Prioritize actionable knowledge over observations
+- Include context that makes the memory useful later
+
+Exclude:
+- Temporary status updates ("working on X now", "will do Y later")
+- Raw data dumps without synthesis
+- Greetings, small talk, and conversational filler
+- Sensitive data: passwords, API keys, personal identifiers
+- Speculation marked as uncertain ("might", "maybe", "I think")
+"""
+
 
 def _wrap_metadata_filter(condition: dict) -> dict:
     """Wrap custom metadata keys for Mem0 v2 API.
@@ -211,9 +256,71 @@ class MemoryService(MemoryServiceBase):
         except Exception as e:
             logger.error("Failed to enable project-level graph: %s", e)
 
+    async def setup_criteria_retrieval(
+        self,
+        criteria: list[dict] | None = None,
+    ) -> bool:
+        """Configure Mem0 project-level Criteria Retrieval for weighted scoring.
+
+        Once set, all searches automatically apply criteria-based re-ranking.
+        Use `use_criteria=False` in search methods to bypass for specific calls.
+
+        Args:
+            criteria: List of criteria dicts with 'name', 'description', 'weight' keys.
+                     If None, uses DEFAULT_RETRIEVAL_CRITERIA.
+
+        Returns:
+            True if setup succeeded, False otherwise.
+        """
+        criteria = criteria or DEFAULT_RETRIEVAL_CRITERIA
+        try:
+            await asyncio.to_thread(
+                lambda: self._client.project.update(retrieval_criteria=criteria)
+            )
+            logger.info(
+                "Configured Mem0 Criteria Retrieval with %d criteria: %s",
+                len(criteria),
+                [c["name"] for c in criteria],
+            )
+            return True
+        except Exception as e:
+            logger.error("Failed to setup Criteria Retrieval: %s", e)
+            return False
+
+    async def setup_custom_instructions(
+        self,
+        instructions: str | None = None,
+    ) -> bool:
+        """Configure Mem0 project-level Custom Instructions for memory extraction.
+
+        Custom instructions control what facts are extracted during add() calls.
+        They act as ingestion-time filters, shaping what gets stored.
+
+        Args:
+            instructions: Natural language instructions string.
+                         If None, uses DEFAULT_CUSTOM_INSTRUCTIONS.
+
+        Returns:
+            True if setup succeeded, False otherwise.
+        """
+        instructions = instructions or DEFAULT_CUSTOM_INSTRUCTIONS
+        try:
+            await asyncio.to_thread(
+                lambda: self._client.project.update(custom_instructions=instructions)
+            )
+            # Log first 100 chars as preview
+            preview = instructions[:100].replace('\n', ' ') + "..."
+            logger.info("Configured Mem0 Custom Instructions: %s", preview)
+            return True
+        except Exception as e:
+            logger.error("Failed to setup Custom Instructions: %s", e)
+            return False
+
     async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None,
-                     override_user_id: str | None = None) -> SearchResult:
+                     override_user_id: str | None = None,
+                     filter_memories: bool | None = None,
+                     use_criteria: bool | None = None) -> SearchResult:
         """Semantic search across memories."""
         self._check_idle_reconnect()
         limit = limit if limit is not None else self.config.memory_search_limit
@@ -226,6 +333,15 @@ class MemoryService(MemoryServiceBase):
             kwargs["keyword_search"] = True
         if self.config.mem0_rerank:
             kwargs["rerank"] = True
+        # Determine filter_memories: per-call override > config default
+        use_filter = filter_memories if filter_memories is not None else self.config.mem0_filter_memories
+        if use_filter:
+            kwargs["filter_memories"] = True
+        # Determine use_criteria: per-call override > config default
+        # Note: criteria auto-activate once set; we only pass use_criteria=False to disable
+        should_use_criteria = use_criteria if use_criteria is not None else self.config.mem0_use_criteria
+        if not should_use_criteria:
+            kwargs["use_criteria"] = False
         try:
             logger.debug("Mem0 search kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
 
@@ -254,6 +370,8 @@ class MemoryService(MemoryServiceBase):
         limit: int | None = None,
         enable_graph: bool | None = None,
         override_user_id: str | None = None,
+        filter_memories: bool | None = None,
+        use_criteria: bool | None = None,
     ) -> SearchResult:
         """Semantic search with metadata filtering.
 
@@ -294,6 +412,14 @@ class MemoryService(MemoryServiceBase):
             kwargs["keyword_search"] = True
         if self.config.mem0_rerank:
             kwargs["rerank"] = True
+        # Determine filter_memories: per-call override > config default
+        use_filter = filter_memories if filter_memories is not None else self.config.mem0_filter_memories
+        if use_filter:
+            kwargs["filter_memories"] = True
+        # Determine use_criteria: per-call override > config default
+        should_use_criteria = use_criteria if use_criteria is not None else self.config.mem0_use_criteria
+        if not should_use_criteria:
+            kwargs["use_criteria"] = False
 
         try:
             logger.debug("Mem0 search_with_filters kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
@@ -478,6 +604,11 @@ class MemoryService(MemoryServiceBase):
 
     async def close(self) -> None:
         """Release Mem0 client resources."""
-        if hasattr(self._client, "close"):
-            await asyncio.to_thread(self._client.close)
-        self._client = None
+        try:
+            if hasattr(self._client, "close"):
+                await asyncio.to_thread(self._client.close)
+        except Exception as e:
+            logger.warning("Mem0 close failed: %s", type(e).__name__)
+            logger.debug("Mem0 close error detail: %s", e)
+        finally:
+            self._client = None

@@ -104,6 +104,18 @@ class TestGraphitiMemoryAdapter:
             "query", limit=5, group_id="test-user"
         )
 
+    async def test_search_accepts_filter_memories_param(self, adapter):
+        """GraphitiMemoryAdapter.search() accepts filter_memories but ignores it."""
+        # Should not raise, even though Graphiti doesn't support filter_memories
+        result = await adapter.search("test", filter_memories=True)
+        assert isinstance(result, SearchResult)
+
+    async def test_search_with_filters_accepts_filter_memories_param(self, adapter):
+        """GraphitiMemoryAdapter.search_with_filters() accepts filter_memories but ignores it."""
+        # Should not raise, even though Graphiti doesn't support filter_memories
+        result = await adapter.search_with_filters("test", filter_memories=True)
+        assert isinstance(result, SearchResult)
+
     async def test_search_with_filters_appends_filter_terms(self, adapter, mock_graphiti):
         """search_with_filters() prepends metadata filter values to query string."""
         await adapter.search_with_filters("react hooks", {"category": "pattern"}, limit=10)
@@ -307,3 +319,38 @@ class TestGraphitiMemoryAdapter:
         mock_graphiti.search.side_effect = RuntimeError("network error")
         result = await adapter.search_by_category("patterns", "react")
         assert isinstance(result, SearchResult)
+
+    # --- Criteria Retrieval (Mem0-specific, no-op) ---
+
+    async def test_setup_criteria_retrieval_is_noop(self, adapter):
+        """setup_criteria_retrieval() returns True (Mem0-specific, no-op for Graphiti)."""
+        result = await adapter.setup_criteria_retrieval()
+        assert result is True
+
+    async def test_setup_criteria_retrieval_accepts_criteria_param(self, adapter):
+        """setup_criteria_retrieval() accepts criteria param without error."""
+        custom_criteria = [{"name": "test", "description": "Test", "weight": 1}]
+        result = await adapter.setup_criteria_retrieval(criteria=custom_criteria)
+        assert result is True
+
+    async def test_search_accepts_use_criteria_param(self, adapter):
+        """search() accepts use_criteria param without error."""
+        result = await adapter.search("test", use_criteria=False)
+        assert isinstance(result, SearchResult)
+
+    async def test_search_with_filters_accepts_use_criteria_param(self, adapter):
+        """search_with_filters() accepts use_criteria param without error."""
+        result = await adapter.search_with_filters("test", use_criteria=False)
+        assert isinstance(result, SearchResult)
+
+    # --- Custom Instructions (Mem0-specific, no-op) ---
+
+    async def test_setup_custom_instructions_is_noop(self, adapter):
+        """setup_custom_instructions() returns True (Mem0-specific, no-op for Graphiti)."""
+        result = await adapter.setup_custom_instructions()
+        assert result is True
+
+    async def test_setup_custom_instructions_with_custom_is_noop(self, adapter):
+        """setup_custom_instructions() accepts custom instructions (no-op)."""
+        result = await adapter.setup_custom_instructions(instructions="Custom rules")
+        assert result is True

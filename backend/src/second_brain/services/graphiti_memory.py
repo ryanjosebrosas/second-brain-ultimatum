@@ -106,6 +106,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         limit: int | None = None,
         enable_graph: bool | None = None,
         override_user_id: str | None = None,
+        filter_memories: bool | None = None,
+        use_criteria: bool | None = None,
     ) -> SearchResult:
         """Semantic search via GraphitiService with user-scoped group_id.
 
@@ -130,6 +132,8 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
         limit: int = 10,
         enable_graph: bool | None = None,
         override_user_id: str | None = None,
+        filter_memories: bool | None = None,
+        use_criteria: bool | None = None,
     ) -> SearchResult:
         """Search with metadata filters approximated via query augmentation.
 
@@ -274,6 +278,20 @@ class GraphitiMemoryAdapter(MemoryServiceBase):
     async def enable_project_graph(self) -> None:
         """Mem0-specific. No-op for Graphiti backend."""
         return None
+
+    async def setup_criteria_retrieval(
+        self,
+        criteria: list[dict] | None = None,
+    ) -> bool:
+        """Mem0-specific. No-op for Graphiti backend."""
+        return True  # Graphiti doesn't support criteria retrieval
+
+    async def setup_custom_instructions(
+        self,
+        instructions: str | None = None,
+    ) -> bool:
+        """Mem0-specific. No-op for Graphiti backend."""
+        return True  # Graphiti doesn't support custom instructions
 
     async def close(self) -> None:
         """Close underlying Graphiti client if possible."""

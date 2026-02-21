@@ -172,7 +172,9 @@ class MemoryServiceBase(ABC):
     @abstractmethod
     async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None,
-                     override_user_id: str | None = None) -> "SearchResult":
+                     override_user_id: str | None = None,
+                     filter_memories: bool | None = None,
+                     use_criteria: bool | None = None) -> "SearchResult":
         """Semantic search. override_user_id scopes to a different user's memories."""
 
     @abstractmethod
@@ -183,6 +185,8 @@ class MemoryServiceBase(ABC):
         limit: int = 10,
         enable_graph: bool | None = None,
         override_user_id: str | None = None,
+        filter_memories: bool | None = None,
+        use_criteria: bool | None = None,
     ) -> "SearchResult":
         """Search with metadata filters. override_user_id scopes to a different user."""
 
@@ -224,6 +228,20 @@ class MemoryServiceBase(ABC):
         """Enable project graph (Mem0-specific). No-op for other backends."""
 
     @abstractmethod
+    async def setup_criteria_retrieval(
+        self,
+        criteria: list[dict] | None = None,
+    ) -> bool:
+        """Configure Criteria Retrieval (Mem0-specific). No-op for other backends."""
+
+    @abstractmethod
+    async def setup_custom_instructions(
+        self,
+        instructions: str | None = None,
+    ) -> bool:
+        """Configure Custom Instructions (Mem0-specific). No-op for other backends."""
+
+    @abstractmethod
     async def close(self) -> None:
         """Close any open connections."""
 
@@ -240,12 +258,14 @@ class StubMemoryService(MemoryServiceBase):
     async def add_multimodal(self, content_blocks, metadata=None, enable_graph=None):
         return {}
 
-    async def search(self, query, limit=None, enable_graph=None, override_user_id=None):
+    async def search(self, query, limit=None, enable_graph=None, override_user_id=None,
+                     filter_memories=None, use_criteria=None):
         from second_brain.services.search_result import SearchResult
         return SearchResult()
 
     async def search_with_filters(self, query, metadata_filters=None, limit=10,
-                                  enable_graph=None, override_user_id=None):
+                                  enable_graph=None, override_user_id=None,
+                                  filter_memories=None, use_criteria=None):
         from second_brain.services.search_result import SearchResult
         return SearchResult()
 
@@ -273,6 +293,12 @@ class StubMemoryService(MemoryServiceBase):
 
     async def enable_project_graph(self):
         return None
+
+    async def setup_criteria_retrieval(self, criteria=None):
+        return True  # Stub always "succeeds"
+
+    async def setup_custom_instructions(self, instructions=None):
+        return True  # Stub always "succeeds"
 
     async def close(self):
         return None

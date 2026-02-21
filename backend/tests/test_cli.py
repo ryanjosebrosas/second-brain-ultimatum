@@ -33,6 +33,9 @@ def mock_create_deps():
         deps.storage_service.upsert_content_type = AsyncMock(return_value={"slug": "test"})
         deps.storage_service.delete_content_type = AsyncMock(return_value=True)
         deps.storage_service.get_content_types = AsyncMock(return_value=[])
+        # Memory service mock (for setup-criteria command)
+        deps.memory = MagicMock()
+        deps.memory.setup_criteria_retrieval = AsyncMock(return_value=True)
         # ContentTypeRegistry mock
         registry = MagicMock()
         registry.get = AsyncMock(return_value=None)
@@ -869,6 +872,50 @@ class TestProjectCLI:
         result = runner.invoke(cli, ["patterns"])
         assert result.exit_code == 0
         assert "Pattern Registry" in result.output
+
+    def test_setup_criteria_command_success(self, runner, mock_create_deps):
+        """setup-criteria command configures criteria retrieval."""
+        mock_create_deps.config.memory_provider = "mem0"
+        mock_create_deps.memory.setup_criteria_retrieval = AsyncMock(return_value=True)
+        result = runner.invoke(cli, ["setup-criteria"])
+        assert result.exit_code == 0
+        assert "configured successfully" in result.output
+        mock_create_deps.memory.setup_criteria_retrieval.assert_called_once()
+
+    def test_setup_criteria_command_wrong_provider(self, runner, mock_create_deps):
+        """setup-criteria command fails for non-mem0 provider."""
+        mock_create_deps.config.memory_provider = "graphiti"
+        result = runner.invoke(cli, ["setup-criteria"])
+        assert "requires memory_provider='mem0'" in result.output
+
+    def test_setup_criteria_command_failure(self, runner, mock_create_deps):
+        """setup-criteria command reports failure when setup fails."""
+        mock_create_deps.config.memory_provider = "mem0"
+        mock_create_deps.memory.setup_criteria_retrieval = AsyncMock(return_value=False)
+        result = runner.invoke(cli, ["setup-criteria"])
+        assert "Failed to configure" in result.output
+
+    def test_setup_instructions_command_success(self, runner, mock_create_deps):
+        """setup-instructions command configures custom instructions."""
+        mock_create_deps.config.memory_provider = "mem0"
+        mock_create_deps.memory.setup_custom_instructions = AsyncMock(return_value=True)
+        result = runner.invoke(cli, ["setup-instructions"])
+        assert result.exit_code == 0
+        assert "configured successfully" in result.output
+        mock_create_deps.memory.setup_custom_instructions.assert_called_once()
+
+    def test_setup_instructions_command_wrong_provider(self, runner, mock_create_deps):
+        """setup-instructions command fails for non-mem0 provider."""
+        mock_create_deps.config.memory_provider = "graphiti"
+        result = runner.invoke(cli, ["setup-instructions"])
+        assert "requires memory_provider='mem0'" in result.output
+
+    def test_setup_instructions_command_failure(self, runner, mock_create_deps):
+        """setup-instructions command reports failure when setup fails."""
+        mock_create_deps.config.memory_provider = "mem0"
+        mock_create_deps.memory.setup_custom_instructions = AsyncMock(return_value=False)
+        result = runner.invoke(cli, ["setup-instructions"])
+        assert "Failed to configure" in result.output
 
 
 class TestMigrateCommand:
