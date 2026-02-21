@@ -401,3 +401,92 @@ class TestLinkedInEngagementResultSchema:
         )
         assert len(result.context_used) == 2
         assert result.word_count == 10
+
+
+class TestLinkedInEngagementValidatorErrorDetection:
+    """Tests for deterministic error detection in linkedin_engagement_agent validator."""
+
+    @pytest.fixture
+    def mock_ctx_all_errors(self):
+        """Context with all tool outputs showing errors."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = f"{TOOL_ERROR_PREFIX} load_expertise_context: TimeoutError"
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.fixture
+    def mock_ctx_partial_errors(self):
+        """Context with some successful tool outputs."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = "Expertise context: AI/ML specialist, 10 years experience..."
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_accepts_with_all_errors_and_sets_error_field(self, mock_ctx_all_errors):
+        """Validator accepts and sets error when all tools failed."""
+        output = LinkedInEngagementResult(
+            response="That's an interesting perspective on AI automation.",
+            engagement_type="comment",
+            tone="conversational",
+        )
+
+        validator = linkedin_engagement_agent._output_validators[0]
+        result = await validator.function(mock_ctx_all_errors, output)
+
+        assert result.error
+        assert "unavailable" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_continues_validation_with_partial_errors(self, mock_ctx_partial_errors):
+        """Validator continues normal validation when not all tools failed."""
+        output = LinkedInEngagementResult(
+            response="Great insight on the automation front.",
+            engagement_type="comment",
+            tone="conversational",
+        )
+
+        validator = linkedin_engagement_agent._output_validators[0]
+        result = await validator.function(mock_ctx_partial_errors, output)
+
+        assert not result.error
+        assert result.response
+
+    @pytest.mark.asyncio
+    async def test_short_response_still_fails_without_all_errors(self, mock_ctx_partial_errors):
+        """Validator still enforces minimum length when backends are partially up."""
+        output = LinkedInEngagementResult(
+            response="Yes",
+            engagement_type="comment",
+            tone="brief",
+        )
+
+        validator = linkedin_engagement_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(mock_ctx_partial_errors, output)

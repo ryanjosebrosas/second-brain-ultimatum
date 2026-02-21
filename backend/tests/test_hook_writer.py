@@ -306,3 +306,92 @@ class TestCreateContentRequestStructureHint:
         long_body = "[PLACEHOLDER]\n" * 200
         req = CreateContentRequest(prompt="test", structure_hint=long_body)
         assert len(req.structure_hint) > 2000
+
+
+class TestHookWriterValidatorErrorDetection:
+    """Tests for deterministic error detection in hook_writer_agent validator."""
+
+    @pytest.fixture
+    def mock_ctx_all_errors(self):
+        """Context with all tool outputs showing errors."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = f"{TOOL_ERROR_PREFIX} search_hook_examples: TimeoutError"
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.fixture
+    def mock_ctx_partial_errors(self):
+        """Context with some successful tool outputs."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = "Found 5 hook examples: curiosity, controversy..."
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_accepts_with_all_errors_and_sets_error_field(self, mock_ctx_all_errors):
+        """Validator accepts and sets error when all tools failed."""
+        output = HookWriterResult(
+            hooks=["Hook one here", "Hook two here", "Hook three here"],
+            hook_type="curiosity",
+            topic_angle="AI productivity",
+        )
+
+        validator = hook_writer_agent._output_validators[0]
+        result = await validator.function(mock_ctx_all_errors, output)
+
+        assert result.error
+        assert "unavailable" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_continues_validation_with_partial_errors(self, mock_ctx_partial_errors):
+        """Validator continues normal validation when not all tools failed."""
+        output = HookWriterResult(
+            hooks=["First hook line", "Second hook line", "Third hook line"],
+            hook_type="curiosity",
+            topic_angle="AI productivity",
+        )
+
+        validator = hook_writer_agent._output_validators[0]
+        result = await validator.function(mock_ctx_partial_errors, output)
+
+        assert not result.error
+        assert len(result.hooks) >= 3
+
+    @pytest.mark.asyncio
+    async def test_insufficient_hooks_still_fails_without_all_errors(self, mock_ctx_partial_errors):
+        """Validator still enforces minimum hook count when backends are partially up."""
+        output = HookWriterResult(
+            hooks=["Only one hook"],
+            hook_type="curiosity",
+            topic_angle="AI productivity",
+        )
+
+        validator = hook_writer_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(mock_ctx_partial_errors, output)

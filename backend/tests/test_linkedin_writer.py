@@ -391,3 +391,98 @@ class TestLinkedInPostResultSchema:
         )
         assert len(result.voice_elements) == 2
         assert result.word_count == 150
+
+
+class TestLinkedInWriterValidatorErrorDetection:
+    """Tests for deterministic error detection in linkedin_writer_agent validator."""
+
+    @pytest.fixture
+    def mock_ctx_all_errors(self):
+        """Context with all tool outputs showing errors."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = f"{TOOL_ERROR_PREFIX} generate_hooks: TimeoutError"
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.fixture
+    def mock_ctx_partial_errors(self):
+        """Context with some successful tool outputs."""
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+
+        ctx = MagicMock()
+        ctx.deps = MagicMock()
+
+        msg1 = MagicMock()
+        part1 = MagicMock()
+        part1.content = f"{TOOL_ERROR_PREFIX} load_voice_guide: ConnectionError"
+        msg1.parts = [part1]
+
+        msg2 = MagicMock()
+        part2 = MagicMock()
+        part2.content = "Generated 5 hooks: The truth about AI..."
+        msg2.parts = [part2]
+
+        ctx.messages = [msg1, msg2]
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_accepts_with_all_errors_and_sets_error_field(self, mock_ctx_all_errors):
+        """Validator accepts and sets error when all tools failed."""
+        output = LinkedInPostResult(
+            draft="A LinkedIn post written without brain context but still meeting minimum word count requirements for the validator to accept.",
+            hook_used="Opening hook line",
+            hook_type="bold-statement",
+            post_structure="freeform",
+            hashtags=["#AI", "#productivity"],
+        )
+
+        validator = linkedin_writer_agent._output_validators[0]
+        result = await validator.function(mock_ctx_all_errors, output)
+
+        assert result.error
+        assert "unavailable" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_continues_validation_with_partial_errors(self, mock_ctx_partial_errors):
+        """Validator continues normal validation when not all tools failed."""
+        output = LinkedInPostResult(
+            draft="A well-crafted LinkedIn post that exceeds the minimum word count requirement and provides real value to readers with concrete actionable examples and insights that clearly demonstrate expertise in the field.",
+            hook_used="The opening hook",
+            hook_type="bold-statement",
+            post_structure="freeform",
+            hashtags=["#AI"],
+        )
+
+        validator = linkedin_writer_agent._output_validators[0]
+        result = await validator.function(mock_ctx_partial_errors, output)
+
+        assert not result.error
+        assert result.draft
+
+    @pytest.mark.asyncio
+    async def test_short_draft_still_fails_without_all_errors(self, mock_ctx_partial_errors):
+        """Validator still enforces minimum length when backends are partially up."""
+        output = LinkedInPostResult(
+            draft="Too short",
+            hook_used="Hook",
+            hook_type="bold-statement",
+            post_structure="freeform",
+            hashtags=[],
+        )
+
+        validator = linkedin_writer_agent._output_validators[0]
+        with pytest.raises(ModelRetry):
+            await validator.function(mock_ctx_partial_errors, output)

@@ -4,7 +4,7 @@ import logging
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-from second_brain.agents.utils import load_voice_context, tool_error
+from second_brain.agents.utils import all_tools_failed, load_voice_context, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import HookWriterResult
 
@@ -64,6 +64,22 @@ async def validate_hooks(
     """Validate hook quality and quantity."""
     if output.error:
         return output
+
+    # Deterministic check: if all tools returned errors, set error field and accept
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All brain context backends unavailable. Hooks written without voice context.",
+            })
+        return output
+
     if not output.hooks or len(output.hooks) < 3:
         raise ModelRetry(
             "Generate at least 3 hook variations. You provided "

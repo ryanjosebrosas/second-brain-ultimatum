@@ -5,6 +5,7 @@ import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
+    all_tools_failed,
     format_memories,
     format_relations,
     load_voice_context,
@@ -81,6 +82,21 @@ async def validate_engagement(
 ) -> LinkedInEngagementResult:
     """Validate engagement output for authenticity."""
     if output.error:
+        return output
+
+    # Deterministic check: if all tools returned errors, set error field and accept
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All brain context backends unavailable. Response written without brain context.",
+            })
         return output
 
     word_count = len(output.response.split())
