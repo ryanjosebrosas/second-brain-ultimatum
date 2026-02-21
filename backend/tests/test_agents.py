@@ -53,6 +53,10 @@ class TestSchemas:
         assert result.next_action == ""
 
 
+# NOTE: Recall agent tests are being consolidated to test_recall_agent.py
+# These tests remain here for now but may be migrated in a future cleanup.
+
+
 class TestRecallAgent:
     def test_agent_exists(self):
         from second_brain.agents.recall import recall_agent

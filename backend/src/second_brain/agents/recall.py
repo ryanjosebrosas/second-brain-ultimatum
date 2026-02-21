@@ -7,6 +7,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 
 from second_brain.agents.utils import (
     TOOL_ERROR_PREFIX,
+    all_tools_failed,
     deduplicate_results,
     expand_query,
     format_memories,
@@ -52,13 +53,32 @@ recall_agent = Agent(
 async def validate_recall(ctx: RunContext[BrainDeps], output: RecallResult) -> RecallResult:
     """Validate recall output — accept empty results gracefully.
 
-    The agent instructions already encourage trying multiple strategies.
-    We only retry if the agent didn't even attempt to search (no search_sources).
+    Uses deterministic error detection: checks if ALL tool outputs
+    contain TOOL_ERROR_PREFIX, rather than relying on LLM setting the error field.
     This prevents death spirals when all backends are down.
     """
-    # Backend error signaled — accept as-is
+    # Backend error signaled by agent — accept as-is
     if output.error:
         return output
+
+    # Deterministic check: if all tools returned errors, set error field and accept
+    # ctx.messages contains the conversation including tool results
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    if tool_outputs and all_tools_failed(tool_outputs):
+        # All backends failed — return with error field set (prevents retry)
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All search backends unavailable. Memory search skipped.",
+                "search_sources": ["error:all_backends_failed"],
+            })
+        return output
+
     # Agent searched but found nothing — that's a valid result
     if not output.matches and not output.patterns and not output.relations:
         if output.search_sources:

@@ -913,3 +913,39 @@ def tool_error(tool_name: str, error: Exception) -> str:
     logger.warning("%s failed: %s", tool_name, type(error).__name__)
     logger.debug("%s error detail: %s", tool_name, error)
     return f"{TOOL_ERROR_PREFIX} {tool_name} unavailable: {type(error).__name__}"
+
+
+def all_tools_failed(tool_outputs: list[str]) -> bool:
+    """Check if ALL tool outputs indicate backend failure.
+
+    Used by output validators to deterministically detect infrastructure
+    failures without relying on LLM instruction-following.
+
+    Args:
+        tool_outputs: List of string outputs from agent tools.
+
+    Returns:
+        True if ALL outputs start with TOOL_ERROR_PREFIX, False otherwise.
+        Returns False if list is empty (no tools called yet).
+    """
+    if not tool_outputs:
+        return False
+    return all(
+        isinstance(out, str) and out.startswith(TOOL_ERROR_PREFIX)
+        for out in tool_outputs
+    )
+
+
+def any_tool_failed(tool_outputs: list[str]) -> bool:
+    """Check if ANY tool output indicates backend failure.
+
+    Args:
+        tool_outputs: List of string outputs from agent tools.
+
+    Returns:
+        True if ANY output starts with TOOL_ERROR_PREFIX.
+    """
+    return any(
+        isinstance(out, str) and out.startswith(TOOL_ERROR_PREFIX)
+        for out in tool_outputs
+    )

@@ -12,6 +12,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    wait_random_exponential,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,51 @@ class RetryConfig:
 
 
 DEFAULT_RETRY = RetryConfig()
+
+
+@dataclass
+class Mem0RetryConfig(RetryConfig):
+    """Retry config with jitter for Mem0 cloud API."""
+
+    # Override wait strategy to use jitter (avoids thundering herd)
+    use_jitter: bool = True
+
+
+MEM0_RETRY_CONFIG = Mem0RetryConfig(
+    max_attempts=3,
+    min_wait=1.0,
+    max_wait=10.0,
+    retry_on=(ConnectionError, TimeoutError, OSError),
+    use_jitter=True,
+)
+
+
+def create_retry_decorator(config: RetryConfig | None = None):
+    """Create a tenacity retry decorator from config.
+
+    Args:
+        config: Retry configuration. Defaults to DEFAULT_RETRY.
+
+    Returns:
+        A tenacity retry decorator with before_sleep_log for observability.
+    """
+    cfg = config or DEFAULT_RETRY
+    wait_strategy = (
+        wait_random_exponential(multiplier=1, max=cfg.max_wait)
+        if getattr(cfg, "use_jitter", False)
+        else wait_exponential(multiplier=1, min=cfg.min_wait, max=cfg.max_wait)
+    )
+    return retry(
+        stop=stop_after_attempt(cfg.max_attempts),
+        wait=wait_strategy,
+        retry=retry_if_exception_type(cfg.retry_on),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+
+
+# Mem0-specific retry decorator with jitter and observable logging
+_MEM0_RETRY = create_retry_decorator(MEM0_RETRY_CONFIG)
 
 
 async def async_retry(func: Callable[..., Any], *args: Any, config: RetryConfig | None = None, **kwargs: Any) -> Any:

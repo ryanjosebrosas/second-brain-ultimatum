@@ -4,22 +4,12 @@ import asyncio
 import logging
 import time
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
 from second_brain.config import BrainConfig
+from second_brain.services.retry import _MEM0_RETRY
 from second_brain.services.abstract import MemoryServiceBase
 from second_brain.services.search_result import SearchResult
 
 logger = logging.getLogger(__name__)
-
-# Retry config for Mem0 cloud calls — transient errors only
-_MEM0_RETRY = retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
-    retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
-    reraise=True,
-)
-
 
 # Mem0 v2 API built-in filter keys — anything else is custom metadata
 _V2_BUILTIN_KEYS = frozenset({
@@ -116,6 +106,7 @@ class MemoryService(MemoryServiceBase):
             metadata: Required metadata dict (category, etc.). Must be <2KB.
             enable_graph: Override graph setting. None = use config default.
         """
+        self._check_idle_reconnect()
         messages = [{"role": "user", "content": content}]
         kwargs: dict = {
             "user_id": self.user_id,
@@ -125,7 +116,12 @@ class MemoryService(MemoryServiceBase):
         if use_graph:
             kwargs["enable_graph"] = True
         try:
-            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
+            @_MEM0_RETRY
+            def _add():
+                return self._client.add(messages, **kwargs)
+
+            async with asyncio.timeout(self._timeout):
+                result = await asyncio.to_thread(_add)
             return result
         except Exception as e:
             logger.warning("Mem0 add_with_metadata failed: %s", type(e).__name__)
@@ -155,6 +151,7 @@ class MemoryService(MemoryServiceBase):
         Returns:
             Result dict from Mem0 (may be empty on failure).
         """
+        self._check_idle_reconnect()
         messages = []
         for block in content_blocks:
             block_type = block.get("type", "")
@@ -179,7 +176,12 @@ class MemoryService(MemoryServiceBase):
             kwargs["enable_graph"] = True
 
         try:
-            result = await asyncio.to_thread(self._client.add, messages, **kwargs)
+            @_MEM0_RETRY
+            def _add():
+                return self._client.add(messages, **kwargs)
+
+            async with asyncio.timeout(self._timeout):
+                result = await asyncio.to_thread(_add)
             return result
         except Exception as e:
             logger.warning("Mem0 add_multimodal failed: %s", type(e).__name__)
@@ -207,7 +209,7 @@ class MemoryService(MemoryServiceBase):
             await asyncio.to_thread(lambda: self._client.project.update(enable_graph=True))
             logger.info("Enabled graph memory at Mem0 project level")
         except Exception as e:
-            logger.error(f"Failed to enable project-level graph: {e}")
+            logger.error("Failed to enable project-level graph: %s", e)
 
     async def search(self, query: str, limit: int | None = None,
                      enable_graph: bool | None = None,
@@ -346,6 +348,7 @@ class MemoryService(MemoryServiceBase):
             content: New content text (None = keep existing).
             metadata: New metadata dict (None = keep existing).
         """
+        self._check_idle_reconnect()
         try:
             kwargs: dict = {}
             if content is not None:
@@ -353,19 +356,30 @@ class MemoryService(MemoryServiceBase):
             if metadata is not None:
                 kwargs["metadata"] = metadata
             if kwargs:
-                await asyncio.to_thread(
-                    self._client.update, memory_id=memory_id, **kwargs
-                )
+                @_MEM0_RETRY
+                def _update():
+                    return self._client.update(memory_id=memory_id, **kwargs)
+
+                async with asyncio.timeout(self._timeout):
+                    await asyncio.to_thread(_update)
         except Exception as e:
             logger.warning("Mem0 update_memory failed: %s", type(e).__name__)
             logger.debug("Mem0 update_memory error detail: %s", e)
 
     async def get_all(self) -> list[dict]:
         """Get all memories for the user."""
+        self._check_idle_reconnect()
         try:
             kwargs: dict = {"user_id": self.user_id}
             logger.debug("Mem0 get_all kwargs: %s", {k: v for k, v in kwargs.items() if k != "filters"})
-            results = await asyncio.to_thread(self._client.get_all, **kwargs)
+
+            @_MEM0_RETRY
+            def _get_all():
+                return self._client.get_all(**kwargs)
+
+            async with asyncio.timeout(self._timeout):
+                results = await asyncio.to_thread(_get_all)
+
             if isinstance(results, dict):
                 return results.get("results", [])
             return results
@@ -386,8 +400,14 @@ class MemoryService(MemoryServiceBase):
 
     async def delete(self, memory_id: str) -> None:
         """Delete a specific memory."""
+        self._check_idle_reconnect()
         try:
-            await asyncio.to_thread(self._client.delete, memory_id)
+            @_MEM0_RETRY
+            def _delete():
+                return self._client.delete(memory_id)
+
+            async with asyncio.timeout(self._timeout):
+                await asyncio.to_thread(_delete)
         except Exception as e:
             logger.warning("Mem0 delete failed: %s", type(e).__name__)
             logger.debug("Mem0 delete error detail: %s", e)

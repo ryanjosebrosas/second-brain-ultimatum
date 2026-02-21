@@ -97,6 +97,10 @@ class TestStorageServiceRetrieval:
         assert "experiences" in valid_tables
 
 
+# NOTE: MemoryService tests are being consolidated to test_memory_service.py
+# These tests remain here for now but may be migrated in a future cleanup.
+
+
 class TestMemoryServiceRetrieval:
     """Tests for enhanced memory search parameters."""
 
