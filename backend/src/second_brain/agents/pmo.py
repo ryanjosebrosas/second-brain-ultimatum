@@ -6,7 +6,7 @@ Alignment 15%, Momentum 10%) to help users decide what to work on.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
-from second_brain.agents.utils import tool_error
+from second_brain.agents.utils import all_tools_failed, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import PMOResult
 
@@ -41,20 +41,46 @@ pmo_agent = Agent(
 
 @pmo_agent.output_validator
 async def validate_pmo(ctx: RunContext[BrainDeps], output: PMOResult) -> PMOResult:
+    """Validate PMO output with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All PMO backends unavailable. Task prioritization skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if not output.scored_tasks:
         raise ModelRetry(
             "You must score at least one task. Load the user's tasks and "
-            "apply the scoring algorithm to each."
+            "apply the scoring algorithm to each. "
+            "If tools failed, set the error field instead of retrying."
         )
     if not output.coaching_message:
         raise ModelRetry(
             "Provide a conversational coaching_message. Don't just list scores — "
-            "explain trade-offs, suggest sequence, and address human factors."
+            "explain trade-offs, suggest sequence, and address human factors. "
+            "If tools failed, set the error field instead of retrying."
         )
     # Auto-categorize
-    output.today_focus = [t.task_name for t in output.scored_tasks if t.total_score >= 75]
-    output.this_week = [t.task_name for t in output.scored_tasks if 60 <= t.total_score < 75]
-    output.quick_wins = [t.task_name for t in output.scored_tasks if t.effort <= 3]
+    output = output.model_copy(update={
+        "today_focus": [t.task_name for t in output.scored_tasks if t.total_score >= 75],
+        "this_week": [t.task_name for t in output.scored_tasks if 60 <= t.total_score < 75],
+        "quick_wins": [t.task_name for t in output.scored_tasks if t.effort <= 3],
+    })
     return output
 
 

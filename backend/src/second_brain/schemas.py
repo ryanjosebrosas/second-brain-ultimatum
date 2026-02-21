@@ -309,6 +309,11 @@ class DimensionScore(BaseModel):
     strengths: list[str] = Field(default_factory=list, description="What's done well")
     suggestions: list[str] = Field(default_factory=list, description="Improvement suggestions")
     issues: list[str] = Field(default_factory=list, description="Must-fix problems")
+    error: str = Field(
+        default="",
+        description="Error message when review backends are degraded or unavailable. "
+        "When set, minimal scoring is expected and should not trigger retries.",
+    )
 
 
 class ReviewResult(BaseModel):
@@ -981,6 +986,11 @@ class RoutingDecision(BaseModel):
         default="medium",
         description="Estimated query complexity: simple (fact lookup), medium (topic recall), complex (synthesis across sources)",
     )
+    error: str = Field(
+        default="",
+        description="Error message when routing context backends are degraded or unavailable. "
+        "When set, routing defaults to 'ask' agent and should not trigger retries.",
+    )
 
 
 # --- Content Pipeline Agents ---
@@ -1006,6 +1016,11 @@ class ClarityResult(BaseModel):
     )
     summary: str = Field(default="", description="2-3 sentence readability assessment")
     critical_count: int = Field(default=0, description="Number of CRITICAL findings")
+    error: str = Field(
+        default="",
+        description="Error message when clarity analysis backends are degraded or unavailable. "
+        "When set, empty findings are expected and should not trigger retries.",
+    )
 
 
 class SynthesizerTheme(BaseModel):
@@ -1037,6 +1052,11 @@ class SynthesizerResult(BaseModel):
     parallel_opportunities: list[str] = Field(
         default_factory=list,
         description="Themes that can be worked on simultaneously",
+    )
+    error: str = Field(
+        default="",
+        description="Error message when synthesis backends are degraded or unavailable. "
+        "When set, minimal themes are expected and should not trigger retries.",
     )
 
 
@@ -1105,6 +1125,11 @@ class DeconstructedTemplate(BaseModel):
     customization_guide: str = Field(default="", description="What parts to customize vs keep standard")
     tags: list[str] = Field(default_factory=list, description="Suggested tags for categorization")
     estimated_time_savings: str = Field(default="", description="Time saved per use")
+    error: str = Field(
+        default="",
+        description="Error message when template analysis backends are degraded or unavailable. "
+        "When set, minimal template structure is expected and should not trigger retries.",
+    )
 
 
 class LinkedInPostResult(BaseModel):
@@ -1237,6 +1262,11 @@ class CoachSession(BaseModel):
         default=1,
         description="Therapeutic depth level used (1=surface, 2=pattern, 3=core, 4=identity)",
     )
+    error: str = Field(
+        default="",
+        description="Error message when coaching backends are degraded or unavailable. "
+        "When set, minimal coaching output is expected and should not trigger retries.",
+    )
 
 
 class PriorityScore(BaseModel):
@@ -1265,6 +1295,11 @@ class PMOResult(BaseModel):
     )
     coaching_message: str = Field(default="", description="Conversational coaching guidance")
     capacity_hours: float = Field(default=8.0, description="Available focused hours estimated")
+    error: str = Field(
+        default="",
+        description="Error message when PMO backends are degraded or unavailable. "
+        "When set, empty task list is expected and should not trigger retries.",
+    )
 
 
 class EmailAction(BaseModel):
@@ -1280,6 +1315,11 @@ class EmailAction(BaseModel):
     template_used: str = Field(default="", description="Template name if one was used")
     status: str = Field(default="draft", description="sent/draft/searched/organized")
     notes: str = Field(default="", description="Notes for user review before sending")
+    error: str = Field(
+        default="",
+        description="Error message when email backends are degraded or unavailable. "
+        "When set, minimal email action is expected and should not trigger retries.",
+    )
 
 
 class SpecialistAnswer(BaseModel):
@@ -1291,6 +1331,11 @@ class SpecialistAnswer(BaseModel):
     )
     sources: list[str] = Field(default_factory=list, description="File paths or URLs cited")
     related_topics: list[str] = Field(default_factory=list, description="Related topics to explore")
+    error: str = Field(
+        default="",
+        description="Error message when specialist knowledge backends are degraded or unavailable. "
+        "When set, general knowledge answer is expected and should not trigger retries.",
+    )
 
 
 # --- Brain Growth Milestone Definitions ---

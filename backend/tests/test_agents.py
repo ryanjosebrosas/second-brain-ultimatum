@@ -2953,3 +2953,427 @@ class TestLearnAgentValidatorErrorDetection:
 
         assert not result.error
         assert len(result.patterns_extracted) == 1
+
+
+class TestReviewValidatorResilience:
+    """Tests for review validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal output should NOT trigger ModelRetry."""
+        from second_brain.agents.review import review_agent
+        from second_brain.schemas import DimensionScore
+        output = DimensionScore(
+            dimension="test",
+            score=5,
+            status="warning",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = review_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.review import review_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import DimensionScore
+        output = DimensionScore(
+            dimension="test",
+            score=5,
+            status="warning",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_voice_reference: ConnectionError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = review_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_dimension_score_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import DimensionScore
+        result = DimensionScore(dimension="test", score=5, status="pass")
+        assert result.error == ""
+
+
+class TestChiefOfStaffValidatorResilience:
+    """Tests for chief_of_staff validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal routing should NOT trigger ModelRetry."""
+        from second_brain.agents.chief_of_staff import chief_of_staff
+        from second_brain.schemas import RoutingDecision
+        output = RoutingDecision(
+            target_agent="ask",
+            reasoning="fallback",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = chief_of_staff._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_defaults_to_ask(self):
+        """When all tools fail, validator should default to ask agent."""
+        from second_brain.agents.chief_of_staff import chief_of_staff
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import RoutingDecision
+        output = RoutingDecision(
+            target_agent="pipeline",
+            reasoning="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_brain_overview: TimeoutError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = chief_of_staff._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.target_agent == "ask"
+        assert "unavailable" in result.error.lower()
+
+    def test_routing_decision_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import RoutingDecision
+        result = RoutingDecision(target_agent="ask", reasoning="test")
+        assert result.error == ""
+
+
+class TestClarityValidatorResilience:
+    """Tests for clarity validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, empty findings should NOT trigger ModelRetry."""
+        from second_brain.agents.clarity import clarity_agent
+        from second_brain.schemas import ClarityResult
+        output = ClarityResult(
+            findings=[],
+            overall_readability="LOW",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = clarity_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.clarity import clarity_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import ClarityResult
+        output = ClarityResult(
+            findings=[],
+            overall_readability="MEDIUM",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_audience_context: ConnectionError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = clarity_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_clarity_result_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import ClarityResult
+        result = ClarityResult()
+        assert result.error == ""
+
+
+class TestCoachValidatorResilience:
+    """Tests for coach validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal session should NOT trigger ModelRetry."""
+        from second_brain.agents.coach import coach_agent
+        from second_brain.schemas import CoachSession
+        output = CoachSession(
+            session_type="morning",
+            next_action="",
+            priorities=[],
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = coach_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.coach import coach_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import CoachSession
+        output = CoachSession(
+            session_type="check_in",
+            next_action="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_goals_context: TimeoutError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = coach_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_coach_session_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import CoachSession
+        result = CoachSession(session_type="check_in")
+        assert result.error == ""
+
+
+class TestEmailAgentValidatorResilience:
+    """Tests for email_agent validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal email should NOT trigger ModelRetry."""
+        from second_brain.agents.email_agent import email_agent
+        from second_brain.schemas import EmailAction
+        output = EmailAction(
+            action_type="draft",
+            subject="",
+            body="",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = email_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.email_agent import email_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import EmailAction
+        output = EmailAction(
+            action_type="draft",
+            subject="",
+            body="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_email_voice: ConnectionError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = email_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_email_action_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import EmailAction
+        result = EmailAction(action_type="search")
+        assert result.error == ""
+
+
+class TestPMOValidatorResilience:
+    """Tests for pmo validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, empty tasks should NOT trigger ModelRetry."""
+        from second_brain.agents.pmo import pmo_agent
+        from second_brain.schemas import PMOResult
+        output = PMOResult(
+            scored_tasks=[],
+            coaching_message="",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = pmo_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.pmo import pmo_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import PMOResult
+        output = PMOResult(
+            scored_tasks=[],
+            coaching_message="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_strategic_context: TimeoutError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = pmo_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_pmo_result_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import PMOResult
+        result = PMOResult()
+        assert result.error == ""
+
+
+class TestSpecialistValidatorResilience:
+    """Tests for specialist validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal answer should NOT trigger ModelRetry."""
+        from second_brain.agents.specialist import specialist_agent
+        from second_brain.schemas import SpecialistAnswer
+        output = SpecialistAnswer(
+            answer="Short answer",
+            confidence_level="UNCERTAIN",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = specialist_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_uncertain(self):
+        """When all tools fail, validator should set UNCERTAIN confidence."""
+        from second_brain.agents.specialist import specialist_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import SpecialistAnswer
+        output = SpecialistAnswer(
+            answer="Test answer",
+            confidence_level="VERIFIED",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} search_codebase_knowledge: ConnectionError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = specialist_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.confidence_level == "UNCERTAIN"
+        assert "unavailable" in result.error.lower()
+
+    def test_specialist_answer_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import SpecialistAnswer
+        result = SpecialistAnswer(answer="test", confidence_level="LIKELY")
+        assert result.error == ""
+
+
+class TestSynthesizerValidatorResilience:
+    """Tests for synthesizer validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal themes should NOT trigger ModelRetry."""
+        from second_brain.agents.synthesizer import synthesizer_agent
+        from second_brain.schemas import SynthesizerResult
+        output = SynthesizerResult(
+            themes=[],
+            summary="",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = synthesizer_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.synthesizer import synthesizer_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import SynthesizerResult
+        output = SynthesizerResult(
+            themes=[],
+            summary="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} load_past_reviews: TimeoutError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = synthesizer_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_synthesizer_result_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import SynthesizerResult
+        result = SynthesizerResult()
+        assert result.error == ""
+
+
+class TestTemplateBuilderValidatorResilience:
+    """Tests for template_builder validator graceful degradation on infrastructure errors."""
+
+    @pytest.mark.asyncio
+    async def test_error_field_bypasses_retry(self):
+        """When error is set, minimal template should NOT trigger ModelRetry."""
+        from second_brain.agents.template_builder import template_builder_agent
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="test",
+            content_type="email",
+            body="",
+            structure_hint="",
+            when_to_use="",
+            error="Backend unavailable",
+        )
+        ctx = MagicMock()
+        validator = template_builder_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert result.error == "Backend unavailable"
+
+    @pytest.mark.asyncio
+    async def test_deterministic_detection_sets_error(self):
+        """When all tools fail, validator should set error field."""
+        from second_brain.agents.template_builder import template_builder_agent
+        from second_brain.agents.utils import TOOL_ERROR_PREFIX
+        from second_brain.schemas import DeconstructedTemplate
+        output = DeconstructedTemplate(
+            name="test",
+            content_type="email",
+            body="",
+            structure_hint="",
+            when_to_use="",
+        )
+        ctx = MagicMock()
+        msg = MagicMock()
+        part = MagicMock()
+        part.content = f"{TOOL_ERROR_PREFIX} search_existing_patterns: ConnectionError"
+        msg.parts = [part]
+        ctx.messages = [msg]
+        validator = template_builder_agent._output_validators[0]
+        result = await validator.function(ctx, output)
+        assert "unavailable" in result.error.lower()
+
+    def test_deconstructed_template_error_field_default(self):
+        """Error field should default to empty string."""
+        from second_brain.schemas import DeconstructedTemplate
+        result = DeconstructedTemplate(
+            name="test",
+            content_type="email",
+            body="test body",
+            structure_hint="line1\nline2",
+            when_to_use="test",
+        )
+        assert result.error == ""

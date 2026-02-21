@@ -3,7 +3,7 @@
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.tools import ToolDefinition
-from second_brain.agents.utils import load_voice_context, tool_error
+from second_brain.agents.utils import all_tools_failed, load_voice_context, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import EmailAction
 
@@ -34,12 +34,41 @@ email_agent = Agent(
 
 @email_agent.output_validator
 async def validate_email(ctx: RunContext[BrainDeps], output: EmailAction) -> EmailAction:
+    """Validate email action with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All email backends unavailable. Email action skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if output.action_type in ("send", "draft") and not output.subject:
-        raise ModelRetry("Emails must have a subject line.")
+        raise ModelRetry(
+            "Emails must have a subject line. "
+            "If tools failed, set the error field instead of retrying."
+        )
     if output.action_type in ("send", "draft") and len(output.body) < 20:
-        raise ModelRetry("Email body is too short. Write a complete email.")
-    if output.action_type == "send" and output.status != "draft":
-        output.status = "draft"  # Force draft status — user must approve
+        raise ModelRetry(
+            "Email body is too short. Write a complete email. "
+            "If tools failed, set the error field instead of retrying."
+        )
+    # Force draft status for send actions (safety)
+    if output.action_type == "send":
+        output = output.model_copy(update={"status": "draft"})
     return output
 
 

@@ -9,7 +9,7 @@ import logging
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-from second_brain.agents.utils import classify_query_complexity, format_memories, tool_error
+from second_brain.agents.utils import all_tools_failed, classify_query_complexity, format_memories, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import RoutingDecision
 
@@ -69,16 +69,41 @@ chief_of_staff = Agent(
 async def validate_routing(
     ctx: RunContext[BrainDeps], output: RoutingDecision
 ) -> RoutingDecision:
-    """Validate routing decision."""
+    """Validate routing decision with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and default to 'ask' agent
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All routing context backends unavailable. Defaulting to ask agent.",
+                "target_agent": "ask",
+                "reasoning": "Backend failure — routing to general Q&A agent as fallback.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if output.target_agent == "pipeline" and not output.pipeline_steps:
         raise ModelRetry(
             "You selected 'pipeline' mode but didn't specify pipeline_steps. "
-            "List the ordered sequence of agents to chain."
+            "List the ordered sequence of agents to chain. "
+            "If tools failed, set the error field instead of retrying."
         )
     if not output.reasoning:
         raise ModelRetry(
             "You must provide reasoning for your routing decision. "
-            "Explain WHY this agent is the best choice for the user's request."
+            "Explain WHY this agent is the best choice for the user's request. "
+            "If tools failed, set the error field instead of retrying."
         )
     return output
 

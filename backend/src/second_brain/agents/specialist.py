@@ -6,7 +6,7 @@ second brain system architecture with mandatory source attribution.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
-from second_brain.agents.utils import format_pattern_registry, tool_error
+from second_brain.agents.utils import all_tools_failed, format_pattern_registry, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import SpecialistAnswer
 
@@ -39,13 +39,40 @@ specialist_agent = Agent(
 
 @specialist_agent.output_validator
 async def validate_specialist(ctx: RunContext[BrainDeps], output: SpecialistAnswer) -> SpecialistAnswer:
+    """Validate specialist answer with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return with general knowledge flag
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All specialist knowledge backends unavailable. Answered from general knowledge.",
+                "confidence_level": "UNCERTAIN",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if output.confidence_level == "VERIFIED" and not output.sources:
         raise ModelRetry(
             "You marked confidence as VERIFIED but cited no sources. "
-            "Either add source citations or downgrade to LIKELY/UNCERTAIN."
+            "Either add source citations or downgrade to LIKELY/UNCERTAIN. "
+            "If tools failed, set the error field instead of retrying."
         )
     if len(output.answer) < 30:
-        raise ModelRetry("Answer is too brief. Provide a complete, detailed response.")
+        raise ModelRetry(
+            "Answer is too brief. Provide a complete, detailed response. "
+            "If tools failed, set the error field instead of retrying."
+        )
     return output
 
 

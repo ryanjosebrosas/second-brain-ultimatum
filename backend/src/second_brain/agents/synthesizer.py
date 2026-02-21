@@ -6,7 +6,7 @@ actions with priority, effort estimates, dependencies, and ownership.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
-from second_brain.agents.utils import tool_error
+from second_brain.agents.utils import all_tools_failed, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import SynthesizerResult
 
@@ -45,27 +45,52 @@ synthesizer_agent = Agent(
 async def validate_synthesis(
     ctx: RunContext[BrainDeps], output: SynthesizerResult
 ) -> SynthesizerResult:
-    """Validate synthesis quality."""
+    """Validate synthesis output with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All synthesis backends unavailable. Synthesis skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if len(output.themes) < 2:
         raise ModelRetry(
             "Too few themes. Review findings should consolidate into 4-8 themes. "
-            "Group related findings together rather than having one mega-theme."
+            "Group related findings together rather than having one mega-theme. "
+            "If tools failed, set the error field instead of retrying."
         )
     if len(output.themes) > 12:
         raise ModelRetry(
             f"Too many themes ({len(output.themes)}). Consolidate further — "
             "the goal is 6-8 actionable themes, not a long list. "
-            "Merge themes that address the same root issue."
+            "If tools failed, set the error field instead of retrying."
         )
     for theme in output.themes:
         if not theme.action:
             raise ModelRetry(
                 f"Theme '{theme.title}' has no action steps. "
-                "Every theme MUST have specific, concrete implementation steps."
+                "Every theme MUST have specific, concrete implementation steps. "
+                "If tools failed, set the error field instead of retrying."
             )
     # Auto-compute totals
-    output.total_themes_output = len(output.themes)
-    output.implementation_hours = sum(t.effort_minutes for t in output.themes) / 60.0
+    output = output.model_copy(update={
+        "total_themes_output": len(output.themes),
+        "implementation_hours": sum(t.effort_minutes for t in output.themes) / 60.0,
+    })
     return output
 
 

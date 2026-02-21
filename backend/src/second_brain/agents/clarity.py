@@ -6,7 +6,7 @@ Produces severity-ranked findings with specific improvement suggestions.
 
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
-from second_brain.agents.utils import load_voice_context, tool_error
+from second_brain.agents.utils import all_tools_failed, load_voice_context, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import ClarityResult
 
@@ -43,20 +43,45 @@ clarity_agent = Agent(
 
 @clarity_agent.output_validator
 async def validate_clarity(ctx: RunContext[BrainDeps], output: ClarityResult) -> ClarityResult:
-    """Validate clarity analysis quality."""
+    """Validate clarity analysis with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All clarity analysis backends unavailable. Analysis skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if not output.findings and output.overall_readability != "HIGH":
         raise ModelRetry(
             "You rated readability as non-HIGH but found no specific issues. "
-            "Either upgrade the readability rating or identify specific findings."
+            "Either upgrade the readability rating or identify specific findings. "
+            "If tools failed, set the error field instead of retrying."
         )
     for finding in output.findings:
         if not finding.suggestion:
             raise ModelRetry(
                 f"Finding at '{finding.location}' has no suggestion. "
-                "Every finding MUST include a specific improvement suggestion."
+                "Every finding MUST include a specific improvement suggestion. "
+                "If tools failed, set the error field instead of retrying."
             )
     # Auto-compute critical count
-    output.critical_count = sum(1 for f in output.findings if f.severity == "CRITICAL")
+    output = output.model_copy(update={
+        "critical_count": sum(1 for f in output.findings if f.severity == "CRITICAL")
+    })
     return output
 
 

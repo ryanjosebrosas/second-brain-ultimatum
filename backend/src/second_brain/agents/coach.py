@@ -8,7 +8,7 @@ Uses CalendarService and TaskManagementService when available.
 import logging
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.tools import ToolDefinition
-from second_brain.agents.utils import format_memories, tool_error
+from second_brain.agents.utils import all_tools_failed, format_memories, tool_error
 from second_brain.deps import BrainDeps
 from second_brain.schemas import CoachSession
 
@@ -49,15 +49,39 @@ coach_agent = Agent(
 
 @coach_agent.output_validator
 async def validate_session(ctx: RunContext[BrainDeps], output: CoachSession) -> CoachSession:
+    """Validate coaching session with deterministic error detection."""
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All coaching backends unavailable. Session skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if not output.next_action:
         raise ModelRetry(
             "Every coaching session MUST end with a specific next_action. "
-            "What should the user do RIGHT NOW? Be specific."
+            "What should the user do RIGHT NOW? Be specific. "
+            "If tools failed, set the error field instead of retrying."
         )
     if output.session_type == "morning" and not output.priorities:
         raise ModelRetry(
             "Morning sessions MUST produce prioritized tasks. "
-            "Create at least 1-3 priorities with rationale."
+            "Create at least 1-3 priorities with rationale. "
+            "If tools failed, set the error field instead of retrying."
         )
     return output
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pydantic_ai.models import Model
 
 from second_brain.agents.utils import (
+    all_tools_failed,
     format_relations,
     load_voice_context,
     search_with_graph_fallback,
@@ -46,12 +47,37 @@ review_agent = Agent(
 
 @review_agent.output_validator
 async def validate_review(ctx: RunContext[BrainDeps], output: DimensionScore) -> DimensionScore:
-    """Validate review score consistency."""
-    # Score must be in valid range
+    """Validate review output with deterministic error detection.
+
+    Uses deterministic error detection: checks if ALL tool outputs
+    contain TOOL_ERROR_PREFIX, rather than relying on LLM setting the error field.
+    This prevents death spirals when all backends are down.
+    """
+    # Early return if error already set
+    if output.error:
+        return output
+
+    # Deterministic check: extract tool outputs from ctx.messages
+    tool_outputs = []
+    for msg in ctx.messages:
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if hasattr(part, "content") and isinstance(part.content, str):
+                    tool_outputs.append(part.content)
+
+    # If all tools failed, set error and return (prevents retry)
+    if tool_outputs and all_tools_failed(tool_outputs):
+        if not output.error:
+            output = output.model_copy(update={
+                "error": "All review backends unavailable. Review skipped.",
+            })
+        return output
+
+    # Normal validation (only if no error)
     if output.score < 1 or output.score > 10:
         raise ModelRetry(
-            f"Score {output.score} is out of range. Scores must be 1-10. "
-            "Re-evaluate and provide a valid score."
+            f"Score {output.score} is out of range. Use 1-10 scale. "
+            "If tools failed, set the error field instead of retrying."
         )
 
     # Status must match score
@@ -60,17 +86,14 @@ async def validate_review(ctx: RunContext[BrainDeps], output: DimensionScore) ->
         raise ModelRetry(
             f"Status '{output.status}' doesn't match score {output.score}. "
             f"Expected status '{expected_status}' (pass=7+, warning=5-6, issue=1-4). "
-            "Adjust either the score or the status."
+            "If tools failed, set the error field instead of retrying."
         )
 
-    # Must provide at least one strength or issue
     if not output.strengths and not output.issues:
         raise ModelRetry(
-            "You must provide at least one strength or one issue. "
-            "Every review dimension has SOMETHING to note — cite specific "
-            "phrases or sections from the content."
+            "You must identify at least one strength or issue. "
+            "If tools failed, set the error field instead of retrying."
         )
-
     return output
 
 
