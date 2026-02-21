@@ -1833,11 +1833,13 @@ async def create_project(
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
         project_data = {"name": name, "category": category, "lifecycle_stage": "planning"}
         if description:
             project_data["description"] = description
-        result = await deps.storage_service.create_project(project_data)
+        async with asyncio.timeout(timeout):
+            result = await deps.storage_service.create_project(project_data)
         if result:
             return (
                 f"Project created: {result.get('name', name)} "
@@ -1846,6 +1848,8 @@ async def create_project(
                 f"Next: Add plan artifact or advance to executing"
             )
         return "Failed to create project."
+    except TimeoutError:
+        return f"Project creation timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to create project: %s", e)
         return "Failed to create project. Check server logs for details."
@@ -1868,8 +1872,10 @@ async def project_status(project_id: str) -> str:
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        proj = await deps.storage_service.get_project(project_id)
+        async with asyncio.timeout(timeout):
+            proj = await deps.storage_service.get_project(project_id)
         if not proj:
             return f"Project not found: {project_id}"
         parts = [
@@ -1885,6 +1891,8 @@ async def project_status(project_id: str) -> str:
             for a in artifacts:
                 parts.append(f"  - {a['artifact_type']}: {a.get('title', 'untitled')}")
         return "\n".join(parts)
+    except TimeoutError:
+        return f"Project status check timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to get project status: %s", e)
         return "Failed to get project status. Check server logs for details."
@@ -1909,26 +1917,30 @@ async def advance_project(project_id: str, target_stage: str | None = None) -> s
     except ValueError as e:
         return str(e)
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     stage_order = ["planning", "executing", "reviewing", "learning", "complete"]
     try:
-        proj = await deps.storage_service.get_project(project_id)
-        if not proj:
-            return f"Project not found: {project_id}"
-        current = proj.get("lifecycle_stage", "planning")
-        if target_stage:
-            if target_stage not in stage_order:
-                return f"Invalid stage: {target_stage}. Must be one of: {stage_order}"
-            next_stage = target_stage
-        else:
-            try:
-                idx = stage_order.index(current)
-                next_stage = stage_order[idx + 1] if idx + 1 < len(stage_order) else current
-            except ValueError:
-                return f"Cannot auto-advance from stage: {current}"
-        result = await deps.storage_service.update_project_stage(project_id, next_stage)
+        async with asyncio.timeout(timeout):
+            proj = await deps.storage_service.get_project(project_id)
+            if not proj:
+                return f"Project not found: {project_id}"
+            current = proj.get("lifecycle_stage", "planning")
+            if target_stage:
+                if target_stage not in stage_order:
+                    return f"Invalid stage: {target_stage}. Must be one of: {stage_order}"
+                next_stage = target_stage
+            else:
+                try:
+                    idx = stage_order.index(current)
+                    next_stage = stage_order[idx + 1] if idx + 1 < len(stage_order) else current
+                except ValueError:
+                    return f"Cannot auto-advance from stage: {current}"
+            result = await deps.storage_service.update_project_stage(project_id, next_stage)
         if result:
             return f"Project '{proj['name']}' advanced: {current} -> {next_stage}"
         return "Failed to advance project."
+    except TimeoutError:
+        return f"Project advance timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to advance project: %s", e)
         return "Failed to advance project. Check server logs for details."
@@ -1953,12 +1965,14 @@ async def list_projects(
         limit: Maximum projects to return (default: 20)
     """
     deps = _get_deps()
+    timeout = deps.config.api_timeout_seconds
     try:
-        projects = await deps.storage_service.list_projects(
-            lifecycle_stage=lifecycle_stage,
-            category=category,
-            limit=limit,
-        )
+        async with asyncio.timeout(timeout):
+            projects = await deps.storage_service.list_projects(
+                lifecycle_stage=lifecycle_stage,
+                category=category,
+                limit=limit,
+            )
         if not projects:
             return "No projects found. Create one with create_project."
         parts = [f"# Projects ({len(projects)})\n"]
@@ -1972,6 +1986,8 @@ async def list_projects(
                 parts.append(p["description"][:120])
             parts.append("")
         return "\n".join(parts)
+    except TimeoutError:
+        return f"Project listing timed out after {timeout}s."
     except Exception as e:
         logger.error("Failed to list projects: %s", e)
         return "Failed to list projects. Check server logs for details."
